@@ -1,0 +1,7 @@
+.env
+CLAUDE.md
+CLAUDE_CODE_SETUP.md
+.mcp.json
+.iris-agentic-dev.toml
+.claude/
+docs/architecture.md
