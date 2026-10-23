@@ -35,6 +35,9 @@ Property CompletionTokens As %Integer(%JSONINCLUDE = "OUTPUTONLY");
 
 Property CostUsd As %Numeric(%JSONINCLUDE = "OUTPUTONLY", SCALE = 6);
 
+/// ID of the saved %AI.Agent.Session that produced this decision (for replay).
+Property AgentSessionId As %String(%JSONINCLUDE = "OUTPUTONLY", MAXLEN = 50);
+
 /// Parse the agent's final text into a Decision.
 /// Accepts the JSON object alone or wrapped in prose or a ```json fence.
 /// On failure pDecision is "" and the status says what is wrong (bad JSON, missing field,
@@ -199,6 +202,9 @@ Storage Default
 </Value>
 <Value name="12">
 <Value>CostUsd</Value>
+</Value>
+<Value name="13">
+<Value>AgentSessionId</Value>
 </Value>
 </Data>
 <DefaultData>DecisionDefaultData</DefaultData>
