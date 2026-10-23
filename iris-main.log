@@ -57,3 +57,250 @@ Starting IRIS
 18:11:13 2026-10-22 [INFO] ...merged /home/irisowner/dev/merge.cpf
 18:11:13 2026-10-22 [INFO] Copying /home/irisowner/dev/merge.cpf to /usr/irissys/^home^irisowner^dev^merge.cpf.last_merge...
 18:11:13 2026-10-22 [INFO] ...copied /home/irisowner/dev/merge.cpf to /usr/irissys/^home^irisowner^dev^merge.cpf.last_merge
+13:23:03 2026-10-23 [INFO] Writing status to file: /home/irisowner/irissys/iscagent.status
+Reading configuration from file: /home/irisowner/irissys/iscagent.conf
+ISCAgent[22]: Starting
+ISCAgent[26]: Starting ApplicationServer on *:2188
+
+13:23:03 2026-10-23 [INFO] Starting InterSystems IRIS instance IRIS...
+13:23:10 2026-10-23 [INFO] 
+Now attempting WIJ compare, /usr/irissys/mgr/IRIS.WIJ
+log: 10/23/26-13:23:04:152 (441) 0 [Generic.Event] Allocated 104MB shared memory
+
+Allocated 104MB shared memory
+16MB global buffers, 35MB routine buffers
+log: 10/23/26-13:23:04:152 (441) 0 [Generic.Event] 16MB global buffers, 35MB routine buffers, 16MB journal buffers, 2MB buffer descriptors, 16MB heap, 1MB ECP, 16MB miscellaneous
+
+log: 10/23/26-13:23:04:155 (441) 0 [Crypto.IntelSandyBridgeAESNI] Intel Sandy Bridge or AMD x8 AES-NI instructions detected.
+
+log: 10/23/26-13:23:04:155 (441) 0 [SIMD] SIMD optimization level: arch=x86-64-v3
+
+log: 10/23/26-13:23:04:164 (441) 0 [Database.MountedRW] Mounted database /usr/irissys/mgr/ (SFN 0) read-write.
+
+log: 10/23/26-13:23:04:184 (441) 1 [Utility.Event] Error opening CPF file to get IRISTEMP and IRISLOCALDATA directories, using defaults
+
+log: 10/23/26-13:23:04:200 (441) 1 [Utility.Event] Error opening CPF file to get IRISTEMP and IRISLOCALDATA directories, using defaults...(repeated 1 times)
+
+log: 10/23/26-13:23:04:200 (441) 0 [Database.MountedRO] Mounted database /usr/irissys/mgr/irislib/ (SFN 1) read-only. Database label is marked read-only. 
+
+log: 10/23/26-13:23:04:211 (441) 0 [Database.MountedRW] Mounted database /usr/irissys/mgr/irissecurity/ (SFN 2) read-write.
+
+log: 10/23/26-13:23:04:217 (441) 0 [Utility.Event] Loading Locale enuw (English, United States, Unicode) from objects
+
+log: 10/23/26-13:23:04:243 (441) 0 [Database.MountedRW] Mounted database /usr/irissys/mgr/irislocaldata/ (SFN 3) read-write.
+
+log: 10/23/26-13:23:04:264 (441) 0 [Utility.Event] CPF merge file /home/irisowner/dev/merge.cpf unchanged; skipping
+
+
+Now attempting WIJ compare, /usr/irissys/mgr/IRIS.WIJ
+Starting Control Process
+Global buffer setting requires attention.  Auto-selected 25% of total memory.
+Allocated 2693MB shared memory
+1958MB global buffers, 195MB routine buffers
+This copy of InterSystems IRIS has been licensed for use exclusively by:
+InterSystems IRIS Community
+Copyright (c) 1986-2026 by InterSystems Corporation
+Any other use is a violation of your license agreement
+
+2 alert(s) during startup. See messages.log for details.
+Merging IRIS, please wait...
+Starting IRIS
+
+
+13:23:10 2026-10-23 [INFO] ...started InterSystems IRIS instance IRIS
+14:01:20 2026-10-23 [INFO] Shutting down InterSystems IRIS instance IRIS...
+14:01:25 2026-10-23 [INFO] ...shut down InterSystems IRIS instance IRIS
+14:02:02 2026-10-23 [INFO] Writing status to file: /home/irisowner/irissys/iscagent.status
+Reading configuration from file: /home/irisowner/irissys/iscagent.conf
+ISCAgent[22]: Starting
+ISCAgent[32]: Starting ApplicationServer on *:2188
+
+14:02:02 2026-10-23 [INFO] Starting InterSystems IRIS instance IRIS...
+14:02:09 2026-10-23 [INFO] log: 10/23/26-14:02:04:725 (446) 0 [Generic.Event] Allocated 104MB shared memory
+
+Allocated 104MB shared memory
+16MB global buffers, 35MB routine buffers
+log: 10/23/26-14:02:04:725 (446) 0 [Generic.Event] 16MB global buffers, 35MB routine buffers, 16MB journal buffers, 2MB buffer descriptors, 16MB heap, 1MB ECP, 16MB miscellaneous
+
+log: 10/23/26-14:02:04:728 (446) 0 [Crypto.IntelSandyBridgeAESNI] Intel Sandy Bridge or AMD x8 AES-NI instructions detected.
+
+log: 10/23/26-14:02:04:728 (446) 0 [SIMD] SIMD optimization level: arch=x86-64-v3
+
+log: 10/23/26-14:02:04:759 (446) 0 [Database.MountedRW] Mounted database /usr/irissys/mgr/ (SFN 0) read-write.
+
+log: 10/23/26-14:02:04:782 (446) 1 [Utility.Event] Error opening CPF file to get IRISTEMP and IRISLOCALDATA directories, using defaults
+
+log: 10/23/26-14:02:04:798 (446) 1 [Utility.Event] Error opening CPF file to get IRISTEMP and IRISLOCALDATA directories, using defaults...(repeated 1 times)
+
+log: 10/23/26-14:02:04:798 (446) 0 [Database.MountedRO] Mounted database /usr/irissys/mgr/irislib/ (SFN 1) read-only. Database label is marked read-only. 
+
+log: 10/23/26-14:02:04:816 (446) 0 [Database.MountedRW] Mounted database /usr/irissys/mgr/irissecurity/ (SFN 2) read-write.
+
+log: 10/23/26-14:02:04:827 (446) 0 [Utility.Event] Loading Locale enuw (English, United States, Unicode) from objects
+
+log: 10/23/26-14:02:04:889 (446) 0 [Database.MountedRW] Mounted database /usr/irissys/mgr/irislocaldata/ (SFN 3) read-write.
+
+log: 10/23/26-14:02:04:935 (446) 0 [Utility.Event] CPF merge file /home/irisowner/dev/merge.cpf unchanged; skipping
+
+Starting Control Process
+Global buffer setting requires attention.  Auto-selected 25% of total memory.
+Allocated 2693MB shared memory
+1958MB global buffers, 195MB routine buffers
+This copy of InterSystems IRIS has been licensed for use exclusively by:
+InterSystems IRIS Community
+Copyright (c) 1986-2026 by InterSystems Corporation
+Any other use is a violation of your license agreement
+
+1 alert(s) during startup. See messages.log for details.
+Merging IRIS, please wait...
+Starting IRIS
+
+
+14:02:09 2026-10-23 [INFO] ...started InterSystems IRIS instance IRIS
+14:05:05 2026-10-23 [INFO] Shutting down InterSystems IRIS instance IRIS...
+14:05:06 2026-10-23 [INFO] ...shut down InterSystems IRIS instance IRIS
+14:57:39 2026-10-23 [INFO] Writing status to file: /home/irisowner/irissys/iscagent.status
+Reading configuration from file: /home/irisowner/irissys/iscagent.conf
+ISCAgent[23]: Starting
+ISCAgent[27]: Starting ApplicationServer on *:2188
+
+14:57:39 2026-10-23 [INFO] Starting InterSystems IRIS instance IRIS...
+14:57:43 2026-10-23 [INFO] log: 10/23/26-14:57:40:025 (441) 0 [Generic.Event] Allocated 104MB shared memory
+
+Allocated 104MB shared memory
+16MB global buffers, 35MB routine buffers
+log: 10/23/26-14:57:40:025 (441) 0 [Generic.Event] 16MB global buffers, 35MB routine buffers, 16MB journal buffers, 2MB buffer descriptors, 16MB heap, 1MB ECP, 16MB miscellaneous
+
+log: 10/23/26-14:57:40:028 (441) 0 [Crypto.IntelSandyBridgeAESNI] Intel Sandy Bridge or AMD x8 AES-NI instructions detected.
+
+log: 10/23/26-14:57:40:028 (441) 0 [SIMD] SIMD optimization level: arch=x86-64-v3
+
+log: 10/23/26-14:57:40:064 (441) 0 [Database.MountedRW] Mounted database /usr/irissys/mgr/ (SFN 0) read-write.
+
+log: 10/23/26-14:57:40:085 (441) 1 [Utility.Event] Error opening CPF file to get IRISTEMP and IRISLOCALDATA directories, using defaults
+
+log: 10/23/26-14:57:40:100 (441) 1 [Utility.Event] Error opening CPF file to get IRISTEMP and IRISLOCALDATA directories, using defaults...(repeated 1 times)
+
+log: 10/23/26-14:57:40:100 (441) 0 [Database.MountedRO] Mounted database /usr/irissys/mgr/irislib/ (SFN 1) read-only. Database label is marked read-only. 
+
+log: 10/23/26-14:57:40:114 (441) 0 [Database.MountedRW] Mounted database /usr/irissys/mgr/irissecurity/ (SFN 2) read-write.
+
+log: 10/23/26-14:57:40:124 (441) 0 [Utility.Event] Loading Locale enuw (English, United States, Unicode) from objects
+
+log: 10/23/26-14:57:40:154 (441) 0 [Database.MountedRW] Mounted database /usr/irissys/mgr/irislocaldata/ (SFN 3) read-write.
+
+log: 10/23/26-14:57:40:200 (441) 0 [Utility.Event] CPF merge file /home/irisowner/dev/merge.cpf unchanged; skipping
+
+Starting Control Process
+Global buffer setting requires attention.  Auto-selected 25% of total memory.
+Allocated 2693MB shared memory
+1958MB global buffers, 195MB routine buffers
+This copy of InterSystems IRIS has been licensed for use exclusively by:
+InterSystems IRIS Community
+Copyright (c) 1986-2026 by InterSystems Corporation
+Any other use is a violation of your license agreement
+
+1 alert(s) during startup. See messages.log for details.
+Merging IRIS, please wait...
+Starting IRIS
+
+
+14:57:43 2026-10-23 [INFO] ...started InterSystems IRIS instance IRIS
+14:57:48 2026-10-23 [INFO] Shutting down InterSystems IRIS instance IRIS...
+14:57:49 2026-10-23 [INFO] ...shut down InterSystems IRIS instance IRIS
+15:08:56 2026-10-23 [INFO] Writing status to file: /home/irisowner/irissys/iscagent.status
+Reading configuration from file: /home/irisowner/irissys/iscagent.conf
+ISCAgent[22]: Starting
+ISCAgent[26]: Starting ApplicationServer on *:2188
+
+15:08:56 2026-10-23 [INFO] Starting InterSystems IRIS instance IRIS...
+15:09:01 2026-10-23 [INFO] log: 10/23/26-15:08:57:893 (440) 0 [Generic.Event] Allocated 104MB shared memory
+
+Allocated 104MB shared memory
+16MB global buffers, 35MB routine buffers
+log: 10/23/26-15:08:57:893 (440) 0 [Generic.Event] 16MB global buffers, 35MB routine buffers, 16MB journal buffers, 2MB buffer descriptors, 16MB heap, 1MB ECP, 16MB miscellaneous
+
+log: 10/23/26-15:08:57:897 (440) 0 [Crypto.IntelSandyBridgeAESNI] Intel Sandy Bridge or AMD x8 AES-NI instructions detected.
+
+log: 10/23/26-15:08:57:898 (440) 0 [SIMD] SIMD optimization level: arch=x86-64-v3
+
+log: 10/23/26-15:08:57:907 (440) 0 [Database.MountedRW] Mounted database /usr/irissys/mgr/ (SFN 0) read-write.
+
+log: 10/23/26-15:08:57:940 (440) 1 [Utility.Event] Error opening CPF file to get IRISTEMP and IRISLOCALDATA directories, using defaults
+
+log: 10/23/26-15:08:57:976 (440) 1 [Utility.Event] Error opening CPF file to get IRISTEMP and IRISLOCALDATA directories, using defaults...(repeated 1 times)
+
+log: 10/23/26-15:08:57:976 (440) 0 [Database.MountedRO] Mounted database /usr/irissys/mgr/irislib/ (SFN 1) read-only. Database label is marked read-only. 
+
+log: 10/23/26-15:08:57:996 (440) 0 [Database.MountedRW] Mounted database /usr/irissys/mgr/irissecurity/ (SFN 2) read-write.
+
+log: 10/23/26-15:08:58:009 (440) 0 [Utility.Event] Loading Locale enuw (English, United States, Unicode) from objects
+
+log: 10/23/26-15:08:58:082 (440) 0 [Database.MountedRW] Mounted database /usr/irissys/mgr/irislocaldata/ (SFN 3) read-write.
+
+log: 10/23/26-15:08:58:120 (440) 0 [Utility.Event] CPF merge file /home/irisowner/dev/merge.cpf unchanged; skipping
+
+Starting Control Process
+Global buffer setting requires attention.  Auto-selected 25% of total memory.
+Allocated 2693MB shared memory
+1958MB global buffers, 195MB routine buffers
+This copy of InterSystems IRIS has been licensed for use exclusively by:
+InterSystems IRIS Community
+Copyright (c) 1986-2026 by InterSystems Corporation
+Any other use is a violation of your license agreement
+
+1 alert(s) during startup. See messages.log for details.
+Merging IRIS, please wait...
+Starting IRIS
+
+
+15:09:01 2026-10-23 [INFO] ...started InterSystems IRIS instance IRIS
+15:10:18 2026-10-23 [INFO] Shutting down InterSystems IRIS instance IRIS...
+15:10:18 2026-10-23 [INFO] ...shut down InterSystems IRIS instance IRIS
+18:48:37 2026-10-23 [INFO] Writing status to file: /home/irisowner/irissys/iscagent.status
+Reading configuration from file: /home/irisowner/irissys/iscagent.conf
+ISCAgent[22]: Starting
+ISCAgent[38]: Starting ApplicationServer on *:2188
+
+18:48:37 2026-10-23 [INFO] Starting InterSystems IRIS instance IRIS...
+18:48:40 2026-10-23 [INFO] log: 10/23/26-18:48:38:256 (452) 0 [Generic.Event] Allocated 104MB shared memory
+
+Allocated 104MB shared memory
+16MB global buffers, 35MB routine buffers
+log: 10/23/26-18:48:38:256 (452) 0 [Generic.Event] 16MB global buffers, 35MB routine buffers, 16MB journal buffers, 2MB buffer descriptors, 16MB heap, 1MB ECP, 16MB miscellaneous
+
+log: 10/23/26-18:48:38:257 (452) 0 [Crypto.IntelSandyBridgeAESNI] Intel Sandy Bridge or AMD x8 AES-NI instructions detected.
+
+log: 10/23/26-18:48:38:257 (452) 0 [SIMD] SIMD optimization level: arch=x86-64-v3
+
+log: 10/23/26-18:48:38:269 (452) 0 [Database.MountedRW] Mounted database /usr/irissys/mgr/ (SFN 0) read-write.
+
+log: 10/23/26-18:48:38:288 (452) 1 [Utility.Event] Error opening CPF file to get IRISTEMP and IRISLOCALDATA directories, using defaults
+
+log: 10/23/26-18:48:38:308 (452) 1 [Utility.Event] Error opening CPF file to get IRISTEMP and IRISLOCALDATA directories, using defaults...(repeated 1 times)
+
+log: 10/23/26-18:48:38:308 (452) 0 [Database.MountedRO] Mounted database /usr/irissys/mgr/irislib/ (SFN 1) read-only. Database label is marked read-only. 
+
+log: 10/23/26-18:48:38:327 (452) 0 [Database.MountedRW] Mounted database /usr/irissys/mgr/irissecurity/ (SFN 2) read-write.
+
+log: 10/23/26-18:48:38:339 (452) 0 [Utility.Event] Loading Locale enuw (English, United States, Unicode) from objects
+
+log: 10/23/26-18:48:38:381 (452) 0 [Database.MountedRW] Mounted database /usr/irissys/mgr/irislocaldata/ (SFN 3) read-write.
+
+log: 10/23/26-18:48:38:414 (452) 0 [Utility.Event] CPF merge file /home/irisowner/dev/merge.cpf unchanged; skipping
+
+Starting Control Process
+Global buffer setting requires attention.  Auto-selected 25% of total memory.
+Allocated 2693MB shared memory
+1958MB global buffers, 195MB routine buffers
+This copy of InterSystems IRIS has been licensed for use exclusively by:
+InterSystems IRIS Community
+Copyright (c) 1986-2026 by InterSystems Corporation
+Any other use is a violation of your license agreement
+
+1 alert(s) during startup. See messages.log for details.
+Merging IRIS, please wait...
+Starting IRIS
+
+
+18:48:41 2026-10-23 [INFO] ...started InterSystems IRIS instance IRIS

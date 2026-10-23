@@ -7,6 +7,7 @@
       <Description>AI Hub Development Template</Description>
       <Packaging>module</Packaging>
       <SourcesRoot>src</SourcesRoot>
+      <Resource Name="AgenticProd.PKG"/>
       <Resource Name="Sample.PKG"/>
       <Invoke Method="Populate" Class="Sample.Person"/>
       <Invoke Method="Run" Class="Sample.MCPSetup"/>
