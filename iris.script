@@ -26,10 +26,9 @@
     // Create /_vscode web app to support intersystems-community.testingmanager VS Code extension
     zpm "install vscode-per-namespace-settings"
 
-    // Configure %UnitTest in IRISAPP to suit the VS Code extension
-    set ^UnitTestRoot="/usr/irissys/.vscode/IRISAPP/UnitTestRoot"
-    // The template does not create this folder; without it %UnitTest finds no tests
-    do ##class(%File).CreateDirectoryChain(^UnitTestRoot)
+    // RunTest walks folders under the root even with /noload, so point it at the mounted
+    // src tree, whose folders match the AgenticProd.Test.* packages (mounted at run time, not build)
+    set ^UnitTestRoot="/home/irisowner/dev/src"
 
     // Create a demo table
     set createStatement = ##class(%SQL.Statement).%New()
