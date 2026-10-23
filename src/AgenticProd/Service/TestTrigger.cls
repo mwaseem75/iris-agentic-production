@@ -28,7 +28,8 @@ ClassMethod Send(Output pSessionId As %Integer, Output pDecision As AgenticProd.
 	Try {
 		$$$ThrowOnError(##class(Ens.Director).CreateBusinessService("TestTrigger", .tService))
 		Set tRequest = ##class(AgenticProd.Msg.TriageRequest).%New()
-		// Synthetic header ID: the phase 1 GetErrorEvents tool is a stub and ignores it.
+		// Synthetic header ID, normally absent: the tools answer "No message header", which is
+		// enough to exercise the operation. Replaced by real failed messages in 3.8.
 		Set tRequest.HeaderId = 900001
 		Set tRequest.Source = "LAB_SIM"
 		Set tRequest.Format = "HL7v2"
