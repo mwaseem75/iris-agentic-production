@@ -30,4 +30,52 @@ Method TestEscalateDecisionIsValid()
 	Do $$$AssertEquals(tDecision.ErrorClass, "UNMAPPED_CODE", "keeps the router's first guess")
 }
 
+Method TestTokensUsedTodayCountsUsageRows()
+{
+	Set tBefore = ##class(AgenticProd.Operation.Agent).TokensUsedToday()
+	Do $$$AssertStatusOK(..AddUsage(100, 50))
+	Do $$$AssertEquals(##class(AgenticProd.Operation.Agent).TokensUsedToday(), tBefore + 150, "today's prompt + completion tokens")
+}
+
+/// Over budget the operation must answer ESCALATE before it builds the agent, so no LLM call.
+Method TestOverBudgetEscalatesWithoutAgent()
+{
+	Do $$$AssertStatusOK(..AddUsage(10, 0))
+	Set tOp = ##class(AgenticProd.Operation.Agent).%New("TestAgentOp")
+	Set tOp.DailyTokenBudget = 1
+	Set tRequest = ##class(AgenticProd.Msg.TriageRequest).%New()
+	Set tRequest.HeaderId = -9102
+	Set tRequest.ErrorClass = "UNMAPPED_CODE"
+	Set tUsageRows = ..CountUsage()
+	Do $$$AssertStatusOK(tOp.Triage(tRequest, .tDecision))
+	Do $$$AssertEquals(tDecision.Decision, "ESCALATE")
+	Do $$$AssertEquals(tDecision.ErrorClass, "UNMAPPED_CODE")
+	Do $$$AssertTrue(tDecision.Reason [ "budget", "reason names the budget")
+	Do $$$AssertEquals(tDecision.AgentSessionId, "", "no agent session created")
+	Do $$$AssertEquals(..CountUsage(), tUsageRows, "no Usage row for a skipped run")
+}
+
+Method AddUsage(pPrompt As %Integer, pCompletion As %Integer) As %Status
+{
+	Set tRow = ##class(AgenticProd.Data.Usage).%New()
+	Set tRow.HeaderId = -9102
+	Set tRow.Model = "test"
+	Set tRow.PromptTokens = pPrompt
+	Set tRow.CompletionTokens = pCompletion
+	Quit tRow.%Save()
+}
+
+Method CountUsage() As %Integer
+{
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT COUNT(*) AS N FROM AgenticProd_Data.Usage")
+	Do tRS.%Next()
+	Quit tRS.N
+}
+
+Method OnAfterAllTests() As %Status
+{
+	Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM AgenticProd_Data.Usage WHERE HeaderId = -9102")
+	Quit $$$OK
+}
+
 }

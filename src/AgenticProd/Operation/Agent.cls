@@ -15,20 +15,41 @@ Property Model As %String(MAXLEN = 100) [ InitialExpression = "gpt-5-nano" ];
 /// Upper bound on agent loop iterations (tool rounds) per message.
 Property MaxIterations As %Integer(MAXVAL = 20, MINVAL = 1) [ InitialExpression = 3 ];
 
-Parameter SETTINGS = "Model:Agent,MaxIterations:Agent";
+/// Prompt + completion tokens allowed per UTC day across all agent runs (from Data.Usage).
+/// When used up, messages get ESCALATE without an LLM call. 0 = no limit.
+Property DailyTokenBudget As %Integer(MINVAL = 0) [ InitialExpression = 200000 ];
+
+Parameter SETTINGS = "Model:Agent,MaxIterations:Agent,DailyTokenBudget:Agent";
 
 /// Ask the agent for a decision. If its reply breaks the decision contract, send it the
 /// error once; if the second reply also fails, return an ESCALATE decision.
+/// Writes one Data.Usage row per agent run; budget-skipped messages write none.
 Method Triage(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As AgenticProd.Msg.Decision) As %Status
 {
 	Set tSC = $$$OK
 	Set tSession = ""
+	Set tStart = $ZHOROLOG
 	Try {
+		// Never drop the message: over budget it still goes to Triage, as ESCALATE
+		Set tUsed = ..TokensUsedToday()
+		If ..DailyTokenBudget, tUsed >= ..DailyTokenBudget {
+			$$$LOGWARNING("Daily token budget used up ("_tUsed_" of "_..DailyTokenBudget_"), escalating header "_pRequest.HeaderId_" without an LLM call")
+			Set pResponse = ..EscalateDecision(pRequest, "Daily token budget used up ("_tUsed_" of "_..DailyTokenBudget_" tokens); agent not called")
+			Quit
+		}
+
 		Set tAgent = ##class(AgenticProd.Agent.TriageAgent).%New()
 		Set tAgent.Model = ..Model
 		Set tAgent.MaxIterations = ..MaxIterations
 		$$$ThrowOnError(tAgent.%Init())
 		Set tSession = tAgent.CreateSession({"cache":{"enabled":1,"cache_system_prompt":1,"cache_tool_definitions":1}})
+		// Saved early so ToolCall rows carry the session ID
+		$$$ThrowOnError(tSession.%Save())
+		Set tAudit = ##class(AgenticProd.Policy.Audit).%New()
+		Set tAudit.HeaderId = pRequest.HeaderId
+		Set tAudit.AgentSessionId = tSession.%Id()
+		$$$ThrowOnError(tAgent.ToolManager.SetAuthPolicy(##class(AgenticProd.Policy.ReadOnly).%New()))
+		$$$ThrowOnError(tAgent.ToolManager.SetAuditPolicy(tAudit))
 
 		$$$TRACE("Agent call: model="_..Model_" maxIterations="_..MaxIterations_" headerId="_pRequest.HeaderId)
 		Set tReply = tAgent.Chat(tSession, ..BuildTask(pRequest))
@@ -51,6 +72,15 @@ Method Triage(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As Age
 		Set pResponse.PromptTokens = tStats."total_prompt_tokens"
 		Set pResponse.CompletionTokens = tStats."total_completion_tokens"
 		Set pResponse.AgentSessionId = tSession.%Id()
+		Set tUsage = ##class(AgenticProd.Data.Usage).FromStats(tStats, ##class(AgenticProd.Agent.TriageAgent).#PROVIDER, ..Model)
+		Set tUsage.HeaderId = pRequest.HeaderId
+		Set tUsage.SessionId = pRequest.SessionId
+		Set tUsage.AgentSessionId = pResponse.AgentSessionId
+		Set tUsage.TotalMs = ($ZHOROLOG - tStart) * 1000 \ 1
+		Set tUsage.Decision = pResponse.Decision
+		Set tUsage.Confidence = pResponse.Confidence
+		$$$ThrowOnError(tUsage.%Save())
+		Set pResponse.CostUsd = tUsage.CostUsd
 		$$$TRACE("Agent decision="_pResponse.Decision_" session="_pResponse.AgentSessionId_" tokens="_pResponse.PromptTokens_"+"_pResponse.CompletionTokens_" toolCalls="_tStats."total_tool_calls"_" llmMs="_tStats."total_llm_duration_ms")
 	} Catch ex {
 		Set tSC = ex.AsStatus()
@@ -74,6 +104,16 @@ ClassMethod BuildTask(pRequest As AgenticProd.Msg.TriageRequest) As %String
 		_"<untrusted_data source=""error_text"">"_tNL
 		_pRequest.ErrorText_tNL
 		_"</untrusted_data>"
+}
+
+/// Prompt + completion tokens recorded in Data.Usage since 00:00 UTC today.
+/// CreatedAt is UTC ($ZTIMESTAMP), so the budget day is a UTC day.
+ClassMethod TokensUsedToday() As %Integer
+{
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT SUM(PromptTokens) + SUM(CompletionTokens) AS Used FROM AgenticProd_Data.Usage WHERE CreatedAt >= ?", $ZDATE($PIECE($ZTIMESTAMP, ","), 3)_" 00:00:00")
+	If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message))
+	Do tRS.%Next()
+	Quit +tRS.Used
 }
 
 /// ESCALATE decision used when the agent gives no valid answer.
