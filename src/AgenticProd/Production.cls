@@ -14,6 +14,8 @@ XData ProductionDefinition
   <Item Name="TriageAgent" Category="Agent" ClassName="AgenticProd.Operation.Agent" PoolSize="1" Enabled="true" Foreground="false" LogTraceEvents="true" Comment="AI Hub triage agent (read-only)">
     <Setting Target="Host" Name="Model">gpt-5-nano</Setting>
     <Setting Target="Host" Name="MaxIterations">3</Setting>
+    <Setting Target="Host" Name="DailyTokenBudget">200000</Setting>
+    <Setting Target="Host" Name="RunAsUser">agentic_agent</Setting>
   </Item>
 </Production>
 }

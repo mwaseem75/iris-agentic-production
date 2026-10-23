@@ -19,7 +19,26 @@ Property MaxIterations As %Integer(MAXVAL = 20, MINVAL = 1) [ InitialExpression 
 /// When used up, messages get ESCALATE without an LLM call. 0 = no limit.
 Property DailyTokenBudget As %Integer(MINVAL = 0) [ InitialExpression = 200000 ];
 
-Parameter SETTINGS = "Model:Agent,MaxIterations:Agent,DailyTokenBudget:Agent";
+/// IRIS user this job switches to at start (role from AgenticProd.Setup.AgentSecurity).
+/// Empty keeps the production's own user (_Ensemble, %All); only for diagnosis.
+Property RunAsUser As %String(MAXLEN = 128) [ InitialExpression = "agentic_agent" ];
+
+Parameter SETTINGS = "Model:Agent,MaxIterations:Agent,DailyTokenBudget:Agent,RunAsUser:Agent";
+
+/// Fail closed: if the switch fails the item does not start, rather than run the agent with %All.
+/// The switch lasts for the job's life, so this item must keep its own pool (no shared jobs).
+Method OnInit() As %Status
+{
+	If ..RunAsUser = "" {
+		$$$LOGWARNING("RunAsUser is empty: agent job keeps "_$USERNAME_" ("_$ROLES_")")
+		Quit $$$OK
+	}
+	If '$SYSTEM.Security.Login(..RunAsUser) {
+		Quit $$$ERROR($$$GeneralError, "Agent job could not switch to IRIS user "_..RunAsUser_"; run AgenticProd.Setup.AgentSecurity()")
+	}
+	$$$LOGINFO("Agent job runs as "_$USERNAME_" roles="_$ROLES)
+	Quit $$$OK
+}
 
 /// Ask the agent for a decision. If its reply breaks the decision contract, send it the
 /// error once; if the second reply also fails, return an ESCALATE decision.
