@@ -117,6 +117,7 @@ Method AutoFixRefusal(pRequest As AgenticProd.Msg.TriageRequest, pDecision As Ag
 	Set tSC = $CLASSMETHOD(tChecker, "CheckFix", tBody, tFix, .tResult, .tCopy)
 	Quit:$$$ISERR(tSC) "re-check of the fix did not run: "_$SYSTEM.Status.GetErrorText(tSC)
 	Quit:tResult.result="REFUSED" "fix touches a protected identity field: "_tResult.errors.%Get(0)
+	Quit:tResult.result="PASS_NEEDS_REVIEW" "fix validates but is not auto-fixable: "_$EXTRACT(tResult.errors.%ToJSON(), 1, 500)
 	Quit:tResult.result'="PASS" "Triage re-check of the fix did not pass: "_$EXTRACT(tResult.errors.%ToJSON(), 1, 500)
 	Set tSC = tCopy.%Save()
 	Quit:$$$ISERR(tSC) "cannot save the fixed message: "_$SYSTEM.Status.GetErrorText(tSC)

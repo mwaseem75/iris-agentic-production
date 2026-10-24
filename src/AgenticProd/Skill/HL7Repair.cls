@@ -35,6 +35,11 @@ Use these steps for a failed HL7 v2 message, after `get_error_events`.
   `validate_fix` again.
 - FAIL: read the remaining errors, adjust the fix and validate again, or choose another
   decision with `"validated": false`.
+- PASS_NEEDS_REVIEW: the message would validate, but the fix changes meaning (a code, result
+  value, unit, flag or status). Never `AUTO_FIX`: answer `ESCALATE` with the fix and
+  `"validated": false` so the reviewer sees it, or `MAP_CODE` when the change is a local code
+  to LOINC mapping. AUTO_FIX only covers a timestamp reformatted to the same instant, OBX-2
+  NM to SN keeping comparator and number, and an empty OBX-11 copied from its OBR-25.
 - REFUSED: the fix touches patient identity (PID-3, PID-5, PID-7). Answer
   `error_class` `IDENTITY_ISSUE`, `decision` `ESCALATE`, `fix` `[]`.
 - Segments out of order or missing required segments: `STRUCTURE_ERROR` with `REJECT`.

@@ -17,6 +17,9 @@ Parameter VALIDATION = "dm-z";
 
 Parameter MAXFIXSTEPS = 20;
 
+/// TS fields a fix may reformat (same instant only, see SameInstant).
+Parameter TSFIELDS = ",MSH-7,OBR-7,OBR-22,OBX-14,";
+
 XData Definition [ MimeType = application/xml ]
 {
 <ToolSet Name="TriageHL7">
@@ -28,7 +31,7 @@ XData Definition [ MimeType = application/xml ]
     <Description>Search the interface spec for the LAB_SIM sender and NPHIES_SIM receiver: timestamp format, required fields, code tables (0123 result status, 0085 observation status), units and numeric results. topic is a keyword such as "TS", "0123", "PID-3", "SN" or "units". Returns the matching spec sections, or the whole spec if nothing matches.</Description>
   </Tool>
   <Tool Name="validate_fix" Method="ValidateFix">
-    <Description>Test a proposed fix before you answer AUTO_FIX. fixJSON is a JSON array of steps [{"path":"OBX(1):14","from":"old value","to":"new value"}]; path is SEGMENT(occurrence):field, optionally .component or .component.subcomponent. The fix is applied to a copy in memory and the copy is validated; nothing is saved. Returns result PASS, FAIL (with the remaining errors) or REFUSED. Fixes to PID-3, PID-5 or PID-7 are always REFUSED: treat those as IDENTITY_ISSUE and ESCALATE. Set "validated":true in your decision only after a PASS for that exact fix.</Description>
+    <Description>Test a proposed fix before you answer AUTO_FIX. fixJSON is a JSON array of steps [{"path":"OBX(1):14","from":"old value","to":"new value"}]; path is SEGMENT(occurrence):field, optionally .component or .component.subcomponent. The fix is applied to a copy in memory and the copy is validated; nothing is saved. Returns result PASS, FAIL (with the remaining errors), PASS_NEEDS_REVIEW or REFUSED. Only meaning-preserving changes can PASS: a timestamp reformatted to the same instant, OBX-2 NM to SN with OBX-5 keeping comparator and number (e.g. "&lt;0.5" to "&lt;^0.5"), or an empty OBX-11 set to its order's OBR-25. PASS_NEEDS_REVIEW means the message would validate but the fix changes meaning (codes, values, units, flags, statuses): answer ESCALATE, or MAP_CODE for a code, never AUTO_FIX. Fixes to PID-3, PID-5 or PID-7 are always REFUSED: treat those as IDENTITY_ISSUE and ESCALATE. Set "validated":true in your decision only after a PASS for that exact fix.</Description>
   </Tool>
 </ToolSet>
 }
@@ -130,7 +133,8 @@ Method ValidateFix(headerId As %Integer, fixJSON As %String) As %String
 }
 
 /// Core of validate_fix, also used by Process.Triage to re-check a fix before applying it.
-/// pResult.result is PASS, FAIL or REFUSED. pMsg is never modified or saved.
+/// pResult.result is PASS, FAIL, REFUSED or PASS_NEEDS_REVIEW (validates, but a step is not on
+/// the AUTO_FIX whitelist in ReviewReasons). pMsg is never modified or saved.
 /// pCopy is the fixed, unsaved copy; only use it on PASS.
 ClassMethod CheckFix(pMsg As EnsLib.HL7.Message, pFix As %DynamicArray, Output pResult As %DynamicObject, Output pCopy As EnsLib.HL7.Message) As %Status
 {
@@ -182,16 +186,98 @@ ClassMethod CheckFix(pMsg As EnsLib.HL7.Message, pFix As %DynamicArray, Output p
 			}
 			$$$ThrowOnError(tCopy.SetValueAt(tStep.%Get("to"), tVPath))
 			Set pResult.applied = pResult.applied + 1
+			Set tSteps(tKey) = $LISTBUILD(tName, tOcc, tField, tSub, tCurrent, tStep.%Get("to"), tIndex)
 		}
 		Quit:pResult.errors.%Size()
 
 		Do ..ValidationErrors(tCopy, .tErrors)
 		Set pResult.errors = tErrors
-		If tErrors.%Size() = 0 Set pResult.result = "PASS"
+		Quit:tErrors.%Size()
+		// Validating proves the message is accepted, not that its meaning is unchanged (hard rule 5)
+		Do ..ReviewReasons(pMsg, .tSteps, pResult.errors)
+		Set pResult.result = $SELECT(pResult.errors.%Size(): "PASS_NEEDS_REVIEW", 1: "PASS")
 	} Catch ex {
 		Set tSC = ex.AsStatus()
 	}
 	Quit tSC
+}
+
+/// Push a reason for every step that is not a meaning-preserving change. Whitelist: a TS field
+/// reformatted to the same instant, OBX-2 NM to SN paired with OBX-5 keeping comparator and
+/// number, an empty OBX-11 set to its order's OBR-25. pSteps(key) = $LB(segment, occurrence,
+/// field, subpath, value before the fix, new value, segment index); values are from pMsg.
+ClassMethod ReviewReasons(pMsg As EnsLib.HL7.Message, ByRef pSteps, pReasons As %DynamicArray) [ Internal ]
+{
+	// NM->SN is only safe as a pair, so find the pairs first
+	Set k = ""
+	For {
+		Set k = $ORDER(pSteps(k), 1, tStep)  Quit:k=""
+		Set $LISTBUILD(tName, tOcc, tField, tSub, tFrom, tTo) = tStep
+		Continue:(tName'="OBX")||(tSub'="")
+		If (tField = 2) && (tFrom = "NM") && (tTo = "SN") Set tToSN(tOcc) = 1
+		If (tField = 5) && ..SameComparatorNumber(tFrom, tTo) Set tSNValue(tOcc) = 1
+	}
+	Set k = ""
+	For {
+		Set k = $ORDER(pSteps(k), 1, tStep)  Quit:k=""
+		Set $LISTBUILD(tName, tOcc, tField, tSub, tFrom, tTo, tIndex) = tStep
+		Set tWhy = ""
+		If tSub '= "" {
+			Set tWhy = "a component change is not on the AUTO_FIX whitelist"
+		} ElseIf ..#TSFIELDS [ (","_tName_"-"_tField_",") {
+			If '..SameInstant(tFrom, tTo) Set tWhy = "'"_tFrom_"' to '"_tTo_"' is not a proven reformat of the same instant (only YYYY-MM-DD HH:MM[:SS], or DD/MM/YYYY HH:MM with day > 12)"
+		} ElseIf (tName = "OBX") && (tField = 2) {
+			If '$DATA(tToSN(tOcc)) || '$DATA(tSNValue(tOcc)) Set tWhy = "only NM to SN, together with an OBX-5 step that keeps comparator and number, is on the AUTO_FIX whitelist"
+		} ElseIf (tName = "OBX") && (tField = 5) {
+			If '$DATA(tToSN(tOcc)) || '$DATA(tSNValue(tOcc)) Set tWhy = "a result value change is not on the AUTO_FIX whitelist (only '<0.5' to '<^0.5' with OBX-2 NM to SN)"
+		} ElseIf (tName = "OBX") && (tField = 11) {
+			Set tOrderStatus = ..OrderStatus(pMsg, tIndex)
+			If (tFrom '= "") || (tTo = "") || (tTo '= tOrderStatus) Set tWhy = "OBX-11 may only be filled when empty, with its order's OBR-25 ('"_tOrderStatus_"')"
+		} Else {
+			Set tWhy = "codes, result values, units, flags and statuses are not on the AUTO_FIX whitelist"
+		}
+		Do:tWhy'="" pReasons.%Push(tName_"("_tOcc_"):"_tField_tSub_": "_tWhy_". Needs a person: ESCALATE (or MAP_CODE for a code), not AUTO_FIX.")
+	}
+}
+
+/// True if pFrom is a supported human layout of exactly the instant in pTo (YYYYMMDDHHMM[SS]).
+ClassMethod SameInstant(pFrom As %String, pTo As %String) As %Boolean [ Internal ]
+{
+	Quit:'$MATCH(pTo, "\d{12}(\d{2})?") 0
+	If $MATCH(pFrom, "\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?") {
+		Set tDate = $TRANSLATE($EXTRACT(pFrom, 1, 10), "-"), tTime = $TRANSLATE($EXTRACT(pFrom, 12, *), ":")
+	} ElseIf $MATCH(pFrom, "\d{2}/\d{2}/\d{4} \d{2}:\d{2}") && ($EXTRACT(pFrom, 1, 2) > 12) {
+		// Day > 12 cannot be a month, so DD/MM is not a guess; 05/10/2026 stays ambiguous
+		Set tDate = $EXTRACT(pFrom, 7, 10)_$EXTRACT(pFrom, 4, 5)_$EXTRACT(pFrom, 1, 2), tTime = $TRANSLATE($EXTRACT(pFrom, 12, 16), ":")
+	} Else {
+		Quit 0
+	}
+	Quit:'..IsDate(tDate)||($EXTRACT(tTime, 1, 2) > 23)||($EXTRACT(tTime, 3, 4) > 59)||(+$EXTRACT(tTime, 5, 6) > 59) 0
+	// Missing seconds are :00, so 202610231015 and 20261023101500 are the same instant
+	Quit $EXTRACT(tDate_tTime_"00", 1, 14) = $EXTRACT(pTo_"00", 1, 14)
+}
+
+/// True if pTo is pFrom's comparator and number as SN, e.g. "<0.5" to "<^0.5".
+ClassMethod SameComparatorNumber(pFrom As %String, pTo As %String) As %Boolean [ Internal ]
+{
+	Set tCmp = ""
+	// Two-character comparators first, or ">=5" would read as ">" and "=5"
+	For tTry = ">=", "<=", "<>", ">", "<", "=" {
+		If $EXTRACT(pFrom, 1, $LENGTH(tTry)) = tTry Set tCmp = tTry  Quit
+	}
+	Quit:tCmp="" 0
+	Set tNum = $EXTRACT(pFrom, $LENGTH(tCmp) + 1, *)
+	Quit ..IsNumber(tNum) && (pTo = (tCmp_"^"_tNum))
+}
+
+/// OBR-25 of the order that segment pIndex belongs to (the nearest OBR before it).
+ClassMethod OrderStatus(pMsg As EnsLib.HL7.Message, pIndex As %Integer) As %String [ Internal ]
+{
+	For i = pIndex:-1:1 {
+		Set tSeg = pMsg.GetSegmentAt(i)
+		If $IsObject(tSeg), tSeg.Name = "OBR" Return tSeg.GetValueAt(25)
+	}
+	Quit ""
 }
 
 /// IRIS structural validation plus NPHIES_SIM profile rules, as a list of error strings.

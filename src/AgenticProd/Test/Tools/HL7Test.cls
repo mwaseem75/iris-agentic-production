@@ -59,6 +59,29 @@ Method TestValidateFixStaleFromFails()
 	Do $$$AssertEquals(tResult.result, "FAIL")
 }
 
+/// Case 07 validates once OBX-6 is filled, but a unit is not a meaning-preserving change.
+Method TestValidateFixNeedsReview07()
+{
+	Do $$$AssertStatusOK(..LoadCase("07", .tHeaderId))
+	Set tResult = ..Validate(tHeaderId, "[{""path"":""OBX(1):6"",""from"":"""",""to"":""mmol/L""}]")
+	Do $$$AssertEquals(tResult.result, "PASS_NEEDS_REVIEW", tResult.errors.%ToJSON())
+	Do $$$AssertTrue(tResult.errors.%Get(0) [ "OBX(1):6", "names the field")
+}
+
+Method TestSameInstant()
+{
+	Set tTools = "AgenticProd.Tools.HL7"
+	Do $$$AssertTrue($CLASSMETHOD(tTools, "SameInstant", "2026-10-23 10:15", "20261023101500"))
+	Do $$$AssertTrue($CLASSMETHOD(tTools, "SameInstant", "2026-10-23 10:15:30", "20261023101530"))
+	Do $$$AssertTrue($CLASSMETHOD(tTools, "SameInstant", "23/10/2026 08:30", "202610230830"))
+	Do $$$AssertNotTrue($CLASSMETHOD(tTools, "SameInstant", "05/10/2026 08:30", "202610050830"), "day <= 12 is ambiguous")
+	Do $$$AssertNotTrue($CLASSMETHOD(tTools, "SameInstant", "2026-10-23 10:15", "202610231016"), "different minute")
+	Do $$$AssertNotTrue($CLASSMETHOD(tTools, "SameInstant", "2026-10-23 10:15", "202610231015+0300"), "time zone added")
+	Do $$$AssertNotTrue($CLASSMETHOD(tTools, "SameInstant", "2026/10/23 10:15", "202610231015"), "unsupported layout")
+	Do $$$AssertTrue($CLASSMETHOD(tTools, "SameComparatorNumber", ">=10", ">=^10"))
+	Do $$$AssertNotTrue($CLASSMETHOD(tTools, "SameComparatorNumber", "<0.5", "<^0.6"))
+}
+
 Method TestGetSegmentMasksPid()
 {
 	Do $$$AssertStatusOK(..LoadCase("05", .tHeaderId))

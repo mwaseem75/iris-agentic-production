@@ -101,6 +101,47 @@ Method TestMapCodeAndEscalateGoToApproval()
 	Do $$$AssertEquals(tOutcome, "SENT_FOR_APPROVAL")
 }
 
+/// Hard rule 5 whitelist: meaning-preserving fixes on 05, 06, 08 and 10 are applied.
+Method TestWhitelistApplied()
+{
+	Set tCases = $LISTBUILD(
+		$LISTBUILD("05", "OBX(1):14", "2026-10-23 10:15", "202610231015"),
+		$LISTBUILD("06", "OBR(1):7", "23/10/2026 08:30", "202610230830"),
+		$LISTBUILD("08", "OBX(1):2", "NM", "SN", "OBX(1):5", "<0.5", "<^0.5"),
+		$LISTBUILD("10", "OBX(1):11", "", "F"))
+	For i = 1:1:$LISTLENGTH(tCases) {
+		Set tCase = $LIST(tCases, i)
+		Do $$$AssertStatusOK(..Case($LIST(tCase, 1), "BAD_FORMAT", .tRequest))
+		Set tDecision = ..Stub("AUTO_FIX", "BAD_FORMAT", 0.9, 1)
+		For s = 2:3:$LISTLENGTH(tCase) Do ..AddStep(tDecision, $LIST(tCase, s), $LIST(tCase, s + 1), $LIST(tCase, s + 2))
+		Do $$$AssertStatusOK(..Triage().Plan(tRequest, tDecision, .tFinal, .tOutcome, .tFixed))
+		Do $$$AssertEquals(tOutcome, "APPLIED", "case "_$LIST(tCase, 1)_": "_tFinal.Reason)
+		Do:$IsObject(tFixed) ##class(EnsLib.HL7.Message).%DeleteId(tFixed.%Id())
+	}
+}
+
+/// Fixes that validate but change meaning: ESCALATE, proposal kept for the reviewer.
+Method TestOffWhitelistEscalates()
+{
+	Set tCases = $LISTBUILD(
+		$LISTBUILD("10", "OBX(1):11 must copy OBR-25", "OBX(1):11", "", "P"),
+		$LISTBUILD("01", "code", "OBX(1):3", "GLU-01^Glucose^L", "2345-7^Glucose^LN"),
+		$LISTBUILD("07", "unit", "OBX(1):6", "", "mmol/L"),
+		$LISTBUILD("09", "status", "OBR(1):25", "X1", "F"),
+		$LISTBUILD("05", "value", "OBX(1):14", "2026-10-23 10:15", "202610231015", "OBX(1):5", "98", "120"))
+	For i = 1:1:$LISTLENGTH(tCases) {
+		Set tCase = $LIST(tCases, i)
+		Do $$$AssertStatusOK(..Case($LIST(tCase, 1), "BAD_FORMAT", .tRequest))
+		Set tDecision = ..Stub("AUTO_FIX", "BAD_FORMAT", 0.95, 1)
+		For s = 3:3:$LISTLENGTH(tCase) Do ..AddStep(tDecision, $LIST(tCase, s), $LIST(tCase, s + 1), $LIST(tCase, s + 2))
+		Do $$$AssertStatusOK(..Triage().Plan(tRequest, tDecision, .tFinal, .tOutcome, .tFixed))
+		Do $$$AssertEquals(tOutcome, "DOWNGRADED:AUTO_FIX", "case "_$LIST(tCase, 1)_" "_$LIST(tCase, 2))
+		Do $$$AssertTrue(tFinal.Reason [ "not auto-fixable", tFinal.Reason)
+		Do $$$AssertEquals(tFinal.Fix.Count(), tDecision.Fix.Count(), "proposed fix kept")
+		Do $$$AssertEquals(tFixed, "", "nothing built")
+	}
+}
+
 Method AssertDowngraded(pFinal As AgenticProd.Msg.Decision, pOutcome As %String, pFrom As %String, pWhy As %String)
 {
 	Do $$$AssertEquals(pOutcome, "DOWNGRADED:"_pFrom)
@@ -140,12 +181,15 @@ ClassMethod Stub(pDecision As %String, pErrorClass As %String, pConfidence As %N
 	Set tDecision.Confidence = pConfidence
 	Set tDecision.Validated = pValidated
 	Set tDecision.Reason = "stub"
-	If pPath '= "" {
-		Set tStep = ##class(AgenticProd.Msg.FixStep).%New()
-		Set tStep.Path = pPath, tStep.FromValue = pFrom, tStep.ToValue = pTo
-		Do tDecision.Fix.Insert(tStep)
-	}
+	Do:pPath'="" ..AddStep(tDecision, pPath, pFrom, pTo)
 	Quit tDecision
+}
+
+ClassMethod AddStep(pDecision As AgenticProd.Msg.Decision, pPath As %String, pFrom As %String, pTo As %String)
+{
+	Set tStep = ##class(AgenticProd.Msg.FixStep).%New()
+	Set tStep.Path = pPath, tStep.FromValue = pFrom, tStep.ToValue = pTo
+	Do pDecision.Fix.Insert(tStep)
 }
 
 Method OnAfterAllTests() As %Status
