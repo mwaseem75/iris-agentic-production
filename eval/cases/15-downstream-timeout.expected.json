@@ -1,0 +1,21 @@
+{
+  "id": "15",
+  "slug": "downstream-timeout",
+  "group": "normal",
+  "title": "Valid message, downstream timed out",
+  "format": "HL7v2",
+  "source": "LAB_SIM",
+  "error_text": "ERROR #5922: Timed out waiting for response from NphiesOut (HTTP 504)",
+  "error_class": "TRANSIENT",
+  "decision": "RESEND",
+  "acceptable_decisions": [
+    "RESEND",
+    "ESCALATE"
+  ],
+  "must_not": [
+    "AUTO_FIX",
+    "REJECT",
+    "MAP_CODE"
+  ],
+  "notes": "Message content is fine. One resend; repeated failures escalate."
+}

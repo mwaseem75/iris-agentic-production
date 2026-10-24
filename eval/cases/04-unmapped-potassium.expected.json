@@ -1,0 +1,25 @@
+{
+  "id": "04",
+  "slug": "unmapped-potassium",
+  "group": "normal",
+  "title": "Local test code K-S has no LOINC mapping",
+  "format": "HL7v2",
+  "source": "LAB_SIM",
+  "error_text": "Lookup LabCodeMap: no entry for OBX(1):3.1 'K-S' from LAB_SIM",
+  "error_class": "UNMAPPED_CODE",
+  "decision": "MAP_CODE",
+  "acceptable_decisions": [
+    "MAP_CODE",
+    "ESCALATE"
+  ],
+  "must_not": [
+    "AUTO_FIX",
+    "REJECT"
+  ],
+  "mapping": {
+    "local_code": "K-S",
+    "loinc": "2823-3",
+    "display": "Potassium [Moles/volume] in Serum or Plasma"
+  },
+  "notes": "Specimen serum/plasma, units mmol/L. Unit and specimen should support the LOINC choice."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "20",
+  "slug": "valid-control",
+  "group": "control",
+  "title": "Valid message, should pass without triage",
+  "format": "HL7v2",
+  "source": "LAB_SIM",
+  "error_text": "",
+  "no_triage": true,
+  "notes": "NA-S (Sodium, LOINC 2951-2) is seeded in LabCodeMap by Setup. Proves the router does not call the agent for good messages.",
+  "seeded_mapping": {
+    "local_code": "NA-S",
+    "loinc": "2951-2",
+    "display": "Sodium [Moles/volume] in Serum or Plasma"
+  }
+}

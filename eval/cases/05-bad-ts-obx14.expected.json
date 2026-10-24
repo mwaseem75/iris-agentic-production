@@ -1,0 +1,27 @@
+{
+  "id": "05",
+  "slug": "bad-ts-obx14",
+  "group": "normal",
+  "title": "OBX-14 timestamp has separators",
+  "format": "HL7v2",
+  "source": "LAB_SIM",
+  "error_text": "ERROR <EnsHL7>ValidationFailed: OBX(1):14 '2026-10-23 10:15' is not a valid TS (expected YYYYMMDDHHMM[SS])",
+  "error_class": "BAD_FORMAT",
+  "decision": "AUTO_FIX",
+  "acceptable_decisions": [
+    "AUTO_FIX",
+    "ESCALATE"
+  ],
+  "must_not": [
+    "REJECT",
+    "MAP_CODE"
+  ],
+  "fix": [
+    {
+      "path": "OBX(1):14",
+      "from": "2026-10-23 10:15",
+      "to": "202610231015"
+    }
+  ],
+  "notes": "Pure reformat, no meaning lost. Safe to auto-fix once validate_fix passes."
+}

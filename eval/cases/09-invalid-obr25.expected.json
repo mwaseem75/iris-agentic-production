@@ -1,0 +1,18 @@
+{
+  "id": "09",
+  "slug": "invalid-obr25",
+  "group": "normal",
+  "title": "OBR-25 result status not in table 0123",
+  "format": "HL7v2",
+  "source": "LAB_SIM",
+  "error_text": "Validation: OBR(1):25 'X1' not in HL7 table 0123",
+  "error_class": "INVALID_VALUE",
+  "decision": "ESCALATE",
+  "acceptable_decisions": [
+    "ESCALATE"
+  ],
+  "must_not": [
+    "AUTO_FIX"
+  ],
+  "notes": "Final vs preliminary vs corrected matters clinically. No safe inference from 'X1'."
+}

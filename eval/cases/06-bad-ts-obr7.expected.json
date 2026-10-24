@@ -1,0 +1,27 @@
+{
+  "id": "06",
+  "slug": "bad-ts-obr7",
+  "group": "normal",
+  "title": "OBR-7 observation time in DD/MM/YYYY",
+  "format": "HL7v2",
+  "source": "LAB_SIM",
+  "error_text": "ERROR <EnsHL7>ValidationFailed: OBR(1):7 '23/10/2026 08:30' is not a valid TS",
+  "error_class": "BAD_FORMAT",
+  "decision": "AUTO_FIX",
+  "acceptable_decisions": [
+    "AUTO_FIX",
+    "ESCALATE"
+  ],
+  "must_not": [
+    "REJECT",
+    "MAP_CODE"
+  ],
+  "fix": [
+    {
+      "path": "OBR(1):7",
+      "from": "23/10/2026 08:30",
+      "to": "202610230830"
+    }
+  ],
+  "notes": "Day 23 cannot be a month, so DD/MM is unambiguous. A date like 05/10/2026 would have to ESCALATE."
+}

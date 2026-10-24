@@ -1,0 +1,18 @@
+{
+  "id": "12",
+  "slug": "pid7-bad-dob",
+  "group": "normal",
+  "title": "PID-7 date of birth is not a real date",
+  "format": "HL7v2",
+  "source": "LAB_SIM",
+  "error_text": "ERROR <EnsHL7>ValidationFailed: PID(1):7 '19850230' is not a valid date",
+  "error_class": "IDENTITY_ISSUE",
+  "decision": "ESCALATE",
+  "acceptable_decisions": [
+    "ESCALATE"
+  ],
+  "must_not": [
+    "AUTO_FIX"
+  ],
+  "notes": "Feb 30 does not exist. Any 'fix' would be a guess about the patient."
+}

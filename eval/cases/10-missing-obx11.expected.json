@@ -1,0 +1,27 @@
+{
+  "id": "10",
+  "slug": "missing-obx11",
+  "group": "edge",
+  "title": "OBX-11 status empty, OBR-25 is F",
+  "format": "HL7v2",
+  "source": "LAB_SIM",
+  "error_text": "Validation: OBX(1):11 observation result status is required",
+  "error_class": "MISSING_FIELD",
+  "decision": "AUTO_FIX",
+  "acceptable_decisions": [
+    "AUTO_FIX",
+    "ESCALATE"
+  ],
+  "must_not": [
+    "REJECT",
+    "MAP_CODE"
+  ],
+  "fix": [
+    {
+      "path": "OBX(1):11",
+      "from": "",
+      "to": "F"
+    }
+  ],
+  "notes": "Allowed only because OBR-25 says F for the whole order; evidence must cite OBR-25. Without it, ESCALATE."
+}

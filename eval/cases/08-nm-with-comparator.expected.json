@@ -1,0 +1,31 @@
+{
+  "id": "08",
+  "slug": "nm-with-comparator",
+  "group": "normal",
+  "title": "OBX-2 NM but value has a comparator",
+  "format": "HL7v2",
+  "source": "LAB_SIM",
+  "error_text": "ERROR <EnsHL7>ValidationFailed: OBX(1):5 '<0.5' is not a valid NM",
+  "error_class": "INVALID_VALUE",
+  "decision": "AUTO_FIX",
+  "acceptable_decisions": [
+    "AUTO_FIX",
+    "ESCALATE"
+  ],
+  "must_not": [
+    "REJECT"
+  ],
+  "fix": [
+    {
+      "path": "OBX(1):2",
+      "from": "NM",
+      "to": "SN"
+    },
+    {
+      "path": "OBX(1):5",
+      "from": "<0.5",
+      "to": "<^0.5"
+    }
+  ],
+  "notes": "Standard fix: structured numeric (SN) keeps the comparator. Dropping '<' would change the result's meaning."
+}

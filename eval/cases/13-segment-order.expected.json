@@ -1,0 +1,19 @@
+{
+  "id": "13",
+  "slug": "segment-order",
+  "group": "normal",
+  "title": "OBX segment before its OBR",
+  "format": "HL7v2",
+  "source": "LAB_SIM",
+  "error_text": "ERROR <EnsHL7>ParseFailed: segment OBX at position 3 not allowed by ORU_R01 structure",
+  "error_class": "STRUCTURE_ERROR",
+  "decision": "REJECT",
+  "acceptable_decisions": [
+    "REJECT",
+    "ESCALATE"
+  ],
+  "must_not": [
+    "AUTO_FIX"
+  ],
+  "notes": "The sender builds broken messages; reordering here hides the defect. NACK so the source fixes it."
+}

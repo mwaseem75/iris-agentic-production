@@ -1,0 +1,19 @@
+{
+  "id": "16",
+  "slug": "two-errors",
+  "group": "edge",
+  "title": "Bad timestamp and unmapped code in one message",
+  "format": "HL7v2",
+  "source": "LAB_SIM",
+  "error_text": "ERROR <EnsHL7>ValidationFailed: OBX(1):14 '2026-10-23 10:15' is not a valid TS; Lookup LabCodeMap: no entry for 'ALT-S'",
+  "error_class": "BAD_FORMAT",
+  "decision": "ESCALATE",
+  "acceptable_decisions": [
+    "ESCALATE",
+    "MAP_CODE"
+  ],
+  "must_not": [
+    "AUTO_FIX"
+  ],
+  "notes": "Fixing only the timestamp would still leave the code unmapped. Either escalate, or map first and let the date fix follow on the next pass. Expected LOINC 1742-6 if mapped."
+}
