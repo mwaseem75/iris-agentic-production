@@ -1,4 +1,4 @@
-Include Ensemble
+Include (Ensemble, %AI.Errors)
 
 /// Runs AgenticProd.Agent.TriageAgent for one TriageRequest and returns its Decision.
 /// Read-only: it only proposes; AgenticProd.Process.Triage acts on the Decision.
@@ -8,6 +8,9 @@ Class AgenticProd.Operation.Agent Extends Ens.BusinessOperation
 {
 
 Parameter INVOCATION = "Queue";
+
+/// Sent once when the run ends on MaxIterations without a final answer.
+Parameter FINALANSWER = "Tool budget used up. Answer now with the decision JSON from what you found, no more tool calls.";
 
 /// Model ID passed to the agent; overrides TriageAgent's MODEL parameter.
 Property Model As %String(MAXLEN = 100) [ InitialExpression = "gpt-5-nano" ];
@@ -48,9 +51,8 @@ Method OnInit() As %Status
 	Quit $$$OK
 }
 
-/// Ask the agent for a decision. If its reply breaks the decision contract, send it the
-/// error once; if the second reply also fails, return an ESCALATE decision.
-/// Writes one Data.Usage row per agent run; budget-skipped messages write none.
+/// Ask the agent for a decision (see Converse for the one retry and AI Hub errors).
+/// Writes one Data.Usage row per agent run, failed runs included; budget-skipped messages write none.
 Method Triage(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As AgenticProd.Msg.Decision) As %Status
 {
 	Set tSC = $$$OK
@@ -79,20 +81,9 @@ Method Triage(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As Age
 		$$$ThrowOnError(tAgent.ToolManager.SetAuditPolicy(tAudit))
 
 		$$$TRACE("Agent call: model="_..Model_" maxIterations="_..MaxIterations_" headerId="_pRequest.HeaderId)
-		Set tReply = tAgent.Chat(tSession, ..BuildTask(pRequest))
-		Set tParseSC = ##class(AgenticProd.Msg.Decision).FromAgentText(tReply.Content, .pResponse)
-		If $$$ISERR(tParseSC) {
-			Set tError = $SYSTEM.Status.GetErrorText(tParseSC)
-			$$$LOGWARNING("Agent reply broke the decision contract, retrying once: "_tError)
-			Set tReply = tAgent.Chat(tSession, "Your answer was rejected: "_tError_". Reply again with the decision JSON object only.")
-			Set tParseSC = ##class(AgenticProd.Msg.Decision).FromAgentText(tReply.Content, .pResponse)
-			If $$$ISERR(tParseSC) {
-				Set tError = $SYSTEM.Status.GetErrorText(tParseSC)
-				$$$LOGWARNING("Agent reply broke the decision contract twice, escalating: "_tError)
-				Set pResponse = ..EscalateDecision(pRequest, "Agent reply broke the decision contract twice: "_tError)
-			}
-		}
+		Set pResponse = ..Converse(tAgent, tSession, pRequest)
 
+		// Also after an AI Hub error: the tokens were spent and the session is the evidence
 		$$$ThrowOnError(tSession.%Save())
 		Set tStats = tSession.GetStats()
 		Set pResponse = ..ApplyMessageBudget(pRequest, tStats, ..MaxToolCalls, ..MaxTokensPerMessage, pResponse)
@@ -116,6 +107,53 @@ Method Triage(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As Age
 		If $IsObject(tSession) Do tSession.%Save()
 	}
 	Quit tSC
+}
+
+/// Ask for a decision and parse it. One retry in all: the contract retry, or, when the run ends
+/// on MaxIterations, one last turn asking for the answer without tools. An AI Hub error never
+/// escapes; it becomes an ESCALATE that names it, so the caller still saves the session and Usage.
+Method Converse(pAgent As %AI.Agent, pSession As %AI.Agent.Session, pRequest As AgenticProd.Msg.TriageRequest) As AgenticProd.Msg.Decision
+{
+	Set tText = ..Ask(pAgent, pSession, ..BuildTask(pRequest), .tError)
+	If tError [ $$$AICoreMaxIterationsReached {
+		$$$LOGWARNING("Agent used its tool budget without answering, asking once for the final answer")
+		Set tText = ..Ask(pAgent, pSession, ..#FINALANSWER, .tError)
+		Quit:tError'="" ..EscalateDecision(pRequest, "agent gave no decision after its tool budget: "_tError)
+		Set tSC = ##class(AgenticProd.Msg.Decision).FromAgentText(tText, .tDecision)
+		Quit:$$$ISERR(tSC) ..EscalateDecision(pRequest, "agent reply after its tool budget broke the decision contract: "_$SYSTEM.Status.GetErrorText(tSC))
+		Quit tDecision
+	}
+	Quit:tError'="" ..EscalateDecision(pRequest, "agent call failed: "_tError)
+
+	Set tSC = ##class(AgenticProd.Msg.Decision).FromAgentText(tText, .tDecision)
+	Quit:$$$ISOK(tSC) tDecision
+	Set tContract = $SYSTEM.Status.GetErrorText(tSC)
+	$$$LOGWARNING("Agent reply broke the decision contract, retrying once: "_tContract)
+	Set tText = ..Ask(pAgent, pSession, "Your answer was rejected: "_tContract_". Reply again with the decision JSON object only.", .tError)
+	Quit:tError'="" ..EscalateDecision(pRequest, "agent call failed on the contract retry: "_tError)
+	Set tSC = ##class(AgenticProd.Msg.Decision).FromAgentText(tText, .tDecision)
+	Quit:$$$ISOK(tSC) tDecision
+	$$$LOGWARNING("Agent reply broke the decision contract twice, escalating: "_$SYSTEM.Status.GetErrorText(tSC))
+	Quit ..EscalateDecision(pRequest, "Agent reply broke the decision contract twice: "_$SYSTEM.Status.GetErrorText(tSC))
+}
+
+/// One agent turn. Returns the reply text, or "" with pError set when AI Hub throws.
+Method Ask(pAgent As %AI.Agent, pSession As %AI.Agent.Session, pText As %String, Output pError As %String) As %String
+{
+	Set pError = "", tText = ""
+	Try {
+		Set tText = ..AgentChat(pAgent, pSession, pText).Content
+	} Catch ex {
+		Set pError = ex.DisplayString()
+		$$$LOGWARNING("Agent call failed: "_pError)
+	}
+	Quit tText
+}
+
+/// The only place that calls the LLM; unit tests override it with a stub.
+Method AgentChat(pAgent As %AI.Agent, pSession As %AI.Agent.Session, pText As %String) As %RegisteredObject
+{
+	Quit pAgent.Chat(pSession, pText)
 }
 
 /// The task text sent to the agent. Error text comes from the interface, so it goes

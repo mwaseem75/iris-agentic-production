@@ -97,6 +97,60 @@ Method TestMessageBudgetForcesEscalate()
 	Do $$$AssertEquals(tOut, tFix, "0 = no limit")
 }
 
+/// An AI Hub error must not lose the run: session saved, Usage written, ESCALATE names the error.
+Method TestAgentErrorStillWritesUsage()
+{
+	Set tOp = ..StubOp("THROW:<%AICore>ProviderError: HTTP 500 from provider")
+	Set tUsageRows = ..CountUsage()
+	Do $$$AssertStatusOK(tOp.Triage(..StubRequest(), .tDecision))
+	Do $$$AssertEquals(tDecision.Decision, "ESCALATE")
+	Do $$$AssertTrue(tDecision.Reason [ "ProviderError", tDecision.Reason)
+	Do $$$AssertNotEquals(tDecision.AgentSessionId, "", "session saved and linked")
+	Do $$$AssertEquals(..CountUsage(), tUsageRows + 1, "Usage row written for the failed run")
+	Do $$$AssertEquals(tOp.Calls, 1, "no retry after a provider error")
+	Do ..DeleteSession(tDecision)
+}
+
+/// MaxIterations gets one last turn without tools; that turn is the only retry.
+Method TestMaxIterationsGetsOneFinalTurn()
+{
+	Set tMax = "THROW:<%AICore>MaxIterationsReached: Max iterations (6) reached without a final response"
+	Set tOp = ..StubOp(tMax, "{""decision"":""ESCALATE"",""error_class"":""UNMAPPED_CODE"",""confidence"":0.4,""validated"":false,""reason"":""no mapping tools""}")
+	Do $$$AssertStatusOK(tOp.Triage(..StubRequest(), .tDecision))
+	Do $$$AssertEquals(tOp.Calls, 2)
+	Do $$$AssertEquals(tDecision.Reason, "no mapping tools", "final answer used")
+	Do ..DeleteSession(tDecision)
+
+	Set tOp = ..StubOp(tMax, "still not JSON", "{""decision"":""ESCALATE""}")
+	Do $$$AssertStatusOK(tOp.Triage(..StubRequest(), .tDecision))
+	Do $$$AssertEquals(tOp.Calls, 2, "no contract retry after the final turn")
+	Do $$$AssertEquals(tDecision.Decision, "ESCALATE")
+	Do $$$AssertTrue(tDecision.Reason [ "after its tool budget", tDecision.Reason)
+	Do ..DeleteSession(tDecision)
+}
+
+Method StubOp(pReplies... As %String) As AgenticProd.Test.Operation.StubAgentOp
+{
+	Set tOp = ##class(AgenticProd.Test.Operation.StubAgentOp).%New("TestAgentOp")
+	Set tOp.DailyTokenBudget = 0
+	For i = 1:1:$GET(pReplies) Do tOp.Script.Insert(pReplies(i))
+	Quit tOp
+}
+
+Method StubRequest() As AgenticProd.Msg.TriageRequest
+{
+	Set tRequest = ##class(AgenticProd.Msg.TriageRequest).%New()
+	Set tRequest.HeaderId = -9102
+	Set tRequest.Format = "HL7v2"
+	Set tRequest.ErrorClass = "UNMAPPED_CODE"
+	Quit tRequest
+}
+
+Method DeleteSession(pDecision As AgenticProd.Msg.Decision)
+{
+	Do:pDecision.AgentSessionId'="" ##class(%AI.Agent.Session).%DeleteId(pDecision.AgentSessionId)
+}
+
 /// %Init makes no LLM call. Helpers such as CheckFix or MaskedText must never show up as tools.
 Method TestAgentToolList()
 {
