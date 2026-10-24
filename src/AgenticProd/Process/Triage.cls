@@ -23,7 +23,7 @@ Property AgentTimeout As %Integer(MINVAL = 1) [ InitialExpression = 120 ];
 /// Where the new, fixed message goes after an AUTO_FIX.
 Property TargetConfigName As Ens.DataType.ConfigName;
 
-/// Where MAP_CODE and ESCALATE decisions go for a person to decide (Workflow task from 4.4).
+/// Workflow operation (role) that gets an ApprovalTask for every MAP_CODE and ESCALATE.
 Property ApprovalTarget As Ens.DataType.ConfigName;
 
 /// Lowest agent confidence accepted for AUTO_FIX.
@@ -53,9 +53,10 @@ Method OnRequest(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As 
 			Set tSC = $$$OK
 		}
 		$$$ThrowOnError(..Plan(pRequest, tDecision, .pResponse, .tOutcome, .tFixed))
-		Set tSendSC = ..Dispatch(pRequest, pResponse, tOutcome, tFixed)
-		If $$$ISERR(tSendSC) Set tOutcome = "ERROR:"_tOutcome
-		$$$ThrowOnError(##class(AgenticProd.Data.DecisionLog).Record(pRequest, pResponse, , tOutcome, $SELECT(tOutcome = "APPLIED": tFixed, 1: "")))
+		// Logged before the send: the row ID is the approval task's completion key
+		$$$ThrowOnError(##class(AgenticProd.Data.DecisionLog).Record(pRequest, pResponse, .tLogId, tOutcome, $SELECT(tOutcome = "APPLIED": tFixed, 1: "")))
+		Set tSendSC = ..Dispatch(pRequest, pResponse, tOutcome, tFixed, tLogId)
+		If $$$ISERR(tSendSC) $$$ThrowOnError(..SetOutcome(tLogId, "ERROR:"_tOutcome))
 		$$$TRACE("Triage header "_pRequest.HeaderId_": agent "_tDecision.Decision_", outcome "_tOutcome)
 		$$$ThrowOnError(tSendSC)
 	} Catch ex {
@@ -105,6 +106,79 @@ Method Plan(pRequest As AgenticProd.Msg.TriageRequest, pDecision As AgenticProd.
 	Quit tSC
 }
 
+/// The reviewer's answer to the ApprovalTask sent for DecisionLog row pCompletionKey.
+Method OnResponse(request As %Library.Persistent, ByRef response As %Library.Persistent, callrequest As %Library.Persistent, callresponse As %Library.Persistent, pCompletionKey As %String) As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		Quit:'$IsObject(callresponse)
+		Quit:'callrequest.%Extends("AgenticProd.Msg.ApprovalTask")
+		$$$ThrowOnError(..Review(request, callrequest, callresponse, pCompletionKey, .tFixed))
+		If $IsObject(tFixed) $$$ThrowOnError(..SendRequestAsync(..TargetConfigName, tFixed, 0))
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// Act on pAnswer to pTask and record it on DecisionLog row pLogId (Outcome, Reviewer).
+/// Reject: REVIEW_REJECTED. MAP_CODE approved: ApplyMapping with the reviewer's Loinc, APPROVED.
+/// ESCALATE approved: with a fix, CheckFix again; on PASS or PASS_NEEDS_REVIEW pFixed is the
+/// new, saved message to send (REVIEW_APPLIED), else REVIEW_FIX_FAILED. Without a fix,
+/// REVIEW_CLOSED. Sends nothing.
+Method Review(pRequest As AgenticProd.Msg.TriageRequest, pTask As AgenticProd.Msg.ApprovalTask, pAnswer As EnsLib.Workflow.TaskResponse, pLogId As %String, Output pFixed As %Persistent) As %Status
+{
+	Set pFixed = ""
+	Set tSC = $$$OK
+	Try {
+		Set tLog = ##class(AgenticProd.Data.DecisionLog).%OpenId(pLogId, , .tSC)
+		$$$ThrowOnError(tSC)
+		Set tLog.Reviewer = pAnswer.%UserName
+		Set tLog.ReviewedAt = $ZDATETIME($ZTIMESTAMP, 3)
+		If pAnswer.%Action '= "Approve" {
+			Set tLog.Outcome = "REVIEW_REJECTED"
+		} ElseIf pTask.Decision = "MAP_CODE" {
+			Set tLoinc = $ZSTRIP(pAnswer.%FormValues.GetAt("Loinc"), "<>W")
+			Set:tLoinc="" tLoinc = pTask.Loinc
+			Set tLog.Loinc = tLoinc
+			$$$ThrowOnError(..ApplyMapping(pRequest, pTask, tLoinc, pAnswer.%UserName))
+			Set tLog.Outcome = "APPROVED"
+		} ElseIf pTask.FixJSON = "" {
+			Set tLog.Outcome = "REVIEW_CLOSED"
+		} Else {
+			// The person stands in for the AUTO_FIX whitelist, not for validation or the identity guard
+			Set tWhy = ..RecheckFix(pRequest, ##class(%DynamicArray).%FromJSON(pTask.FixJSON), 1, .pFixed)
+			If tWhy = "" {
+				Set tLog.Outcome = "REVIEW_APPLIED"
+				Set tLog.FixedBodyClass = $CLASSNAME(pFixed), tLog.FixedBodyId = pFixed.%Id()
+			} Else {
+				Set tLog.Outcome = "REVIEW_FIX_FAILED", tLog.ReviewNote = tWhy
+				$$$LOGWARNING("Reviewer "_pAnswer.%UserName_" approved the fix for header "_pTask.HeaderId_", not applied: "_tWhy)
+			}
+		}
+		$$$ThrowOnError(tLog.%Save())
+		$$$TRACE("Review of header "_pTask.HeaderId_" by "_pAnswer.%UserName_": "_pAnswer.%Action_", outcome "_tLog.Outcome)
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// Approved MAP_CODE with pLoinc (the reviewer's correction, if any).
+Method ApplyMapping(pRequest As AgenticProd.Msg.TriageRequest, pTask As AgenticProd.Msg.ApprovalTask, pLoinc As %String, pReviewer As %String) As %Status
+{
+	// TODO 4.5: write LabCodeMap (LOINC^display) and resend the original message to LabRouter
+	Quit $$$OK
+}
+
+ClassMethod SetOutcome(pLogId As %String, pOutcome As %String) As %Status [ Internal ]
+{
+	Set tLog = ##class(AgenticProd.Data.DecisionLog).%OpenId(pLogId, , .tSC)
+	Quit:'$IsObject(tLog) tSC
+	Set tLog.Outcome = pOutcome
+	Quit tLog.%Save()
+}
+
 /// "" when the AUTO_FIX may go ahead, with pFixed the new, saved, fixed message; else why not.
 Method AutoFixRefusal(pRequest As AgenticProd.Msg.TriageRequest, pDecision As AgenticProd.Msg.Decision, Output pFixed As %Persistent) As %String
 {
@@ -114,29 +188,38 @@ Method AutoFixRefusal(pRequest As AgenticProd.Msg.TriageRequest, pDecision As Ag
 	Quit:pDecision.Confidence<..AutoFixThreshold "confidence "_pDecision.Confidence_" is below AutoFixThreshold "_..AutoFixThreshold
 	Quit:pDecision.Fix.Count()=0 "no fix steps"
 	Set tChecker = ..CheckerFor(pRequest.Format)
-	Quit:tChecker="" "no fix checker for format '"_pRequest.Format_"'"
-	Set tSC = ##class(AgenticProd.Tools.Base).OpenBody(pRequest.HeaderId, .tBody)
-	Quit:$$$ISERR(tSC) "cannot open the failed message: "_$SYSTEM.Status.GetErrorText(tSC)
-
 	// "from" is always sent, so a step the agent left without one must match an empty value
 	Set tFix = []
 	For i = 1:1:pDecision.Fix.Count() {
 		Set tStep = pDecision.Fix.GetAt(i)
 		Do tFix.%Push({"path":(tStep.Path), "from":(tStep.FromValue), "to":(tStep.ToValue)})
 	}
-	Set tSC = $CLASSMETHOD(tChecker, "CheckFix", tBody, tFix, .tResult, .tCopy)
+	Quit ..RecheckFix(pRequest, tFix, 0, .pFixed)
+}
+
+/// Run the format's CheckFix on pFix ([{path, from, to}]) against the failed message.
+/// "" when it may be applied, with pFixed the new, saved message; else why not.
+/// pReviewed: a person approved it, so PASS_NEEDS_REVIEW is accepted too.
+Method RecheckFix(pRequest As AgenticProd.Msg.TriageRequest, pFix As %DynamicArray, pReviewed As %Boolean, Output pFixed As %Persistent) As %String
+{
+	Set pFixed = ""
+	Set tChecker = ..CheckerFor(pRequest.Format)
+	Quit:tChecker="" "no fix checker for format '"_pRequest.Format_"'"
+	Set tSC = ##class(AgenticProd.Tools.Base).OpenBody(pRequest.HeaderId, .tBody)
+	Quit:$$$ISERR(tSC) "cannot open the failed message: "_$SYSTEM.Status.GetErrorText(tSC)
+	Set tSC = $CLASSMETHOD(tChecker, "CheckFix", tBody, pFix, .tResult, .tCopy)
 	Quit:$$$ISERR(tSC) "re-check of the fix did not run: "_$SYSTEM.Status.GetErrorText(tSC)
 	Quit:tResult.result="REFUSED" "fix touches a protected identity field: "_tResult.errors.%Get(0)
-	Quit:tResult.result="PASS_NEEDS_REVIEW" "fix validates but is not auto-fixable: "_$EXTRACT(tResult.errors.%ToJSON(), 1, 500)
-	Quit:tResult.result'="PASS" "Triage re-check of the fix did not pass: "_$EXTRACT(tResult.errors.%ToJSON(), 1, 500)
+	Quit:(tResult.result="PASS_NEEDS_REVIEW")&&'pReviewed "fix validates but is not auto-fixable: "_$EXTRACT(tResult.errors.%ToJSON(), 1, 500)
+	Quit:(tResult.result'="PASS")&&(tResult.result'="PASS_NEEDS_REVIEW") "Triage re-check of the fix did not pass: "_$EXTRACT(tResult.errors.%ToJSON(), 1, 500)
 	Set tSC = tCopy.%Save()
 	Quit:$$$ISERR(tSC) "cannot save the fixed message: "_$SYSTEM.Status.GetErrorText(tSC)
 	Set pFixed = tCopy
 	Quit ""
 }
 
-/// Carry out pOutcome from Plan.
-Method Dispatch(pRequest As AgenticProd.Msg.TriageRequest, pDecision As AgenticProd.Msg.Decision, pOutcome As %String, pFixed As %Persistent) As %Status
+/// Carry out pOutcome from Plan. pLogId (DecisionLog row) comes back as the approval's completion key.
+Method Dispatch(pRequest As AgenticProd.Msg.TriageRequest, pDecision As AgenticProd.Msg.Decision, pOutcome As %String, pFixed As %Persistent, pLogId As %String = "") As %Status
 {
 	If pOutcome = "APPLIED" Quit ..SendRequestAsync(..TargetConfigName, pFixed, 0)
 	If pOutcome = "RESENT" Quit ##class(Ens.MessageHeader).ResendDuplicatedMessage(pRequest.HeaderId)
@@ -144,7 +227,7 @@ Method Dispatch(pRequest As AgenticProd.Msg.TriageRequest, pDecision As AgenticP
 		$$$LOGWARNING("Triage rejected header "_pRequest.HeaderId_" ("_pDecision.ErrorClass_"): "_pDecision.Reason)
 		Quit ..WriteRejected(pRequest, pDecision)
 	}
-	Quit ..SendRequestAsync(..ApprovalTarget, pDecision, 0)
+	Quit ..SendRequestAsync(..ApprovalTarget, ##class(AgenticProd.Msg.ApprovalTask).FromDecision(pRequest, pDecision), 1, pLogId)
 }
 
 /// Write the rejected message and a reason file into RejectPath for the sender to pick up:

@@ -25,7 +25,7 @@ XData ProductionDefinition
   <Item Name="Triage" Category="Agent" ClassName="AgenticProd.Process.Triage" PoolSize="1" Enabled="true" Foreground="false" LogTraceEvents="true" Comment="Action matrix: the only component that acts on a decision">
     <Setting Target="Host" Name="AgentTarget">TriageAgent</Setting>
     <Setting Target="Host" Name="TargetConfigName">LabRouter</Setting>
-    <Setting Target="Host" Name="ApprovalTarget">ApprovalStub</Setting>
+    <Setting Target="Host" Name="ApprovalTarget">IntegrationSupport</Setting>
     <Setting Target="Host" Name="AutoFixThreshold">0.85</Setting>
   </Item>
   <Item Name="TriageAgent" Category="Agent" ClassName="AgenticProd.Operation.Agent" PoolSize="1" Enabled="true" Foreground="false" LogTraceEvents="true" Comment="AI Hub triage agent (read-only)">
@@ -34,7 +34,7 @@ XData ProductionDefinition
     <Setting Target="Host" Name="DailyTokenBudget">200000</Setting>
     <Setting Target="Host" Name="RunAsUser">agentic_agent</Setting>
   </Item>
-  <Item Name="ApprovalStub" Category="Agent" ClassName="AgenticProd.Operation.ApprovalStub" PoolSize="1" Enabled="true" Foreground="false" LogTraceEvents="true" Comment="Logs MAP_CODE/ESCALATE until the Workflow task (4.4)">
+  <Item Name="IntegrationSupport" Category="Agent" ClassName="EnsLib.Workflow.Operation" PoolSize="1" Enabled="true" Foreground="false" LogTraceEvents="true" Comment="Workflow role: reviewers approve or reject MAP_CODE and ESCALATE tasks">
   </Item>
   <Item Name="TestTrigger" Category="Test" ClassName="AgenticProd.Service.TestTrigger" PoolSize="0" Enabled="true" Foreground="false" LogTraceEvents="true" Comment="Sends one synthetic TriageRequest">
     <Setting Target="Host" Name="TargetConfigName">TriageAgent</Setting>

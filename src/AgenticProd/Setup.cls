@@ -7,6 +7,14 @@ Parameter AGENTROLE = "AgenticProd_Agent";
 
 Parameter AGENTUSER = "agentic_agent";
 
+/// Workflow role; also the name of the EnsLib.Workflow.Operation item Triage sends tasks to.
+Parameter REVIEWROLE = "IntegrationSupport";
+
+/// Demo reviewer for the Workflow inbox. Demo-only password, documented in the README.
+Parameter REVIEWUSER = "reviewer";
+
+Parameter REVIEWPASSWORD = "Review-Demo-2026";
+
 /// Synthetic-use LOINC subset (see kb/LOINC_NOTICE.md).
 Parameter LOINCFILE = "/home/irisowner/dev/kb/loinc_subset.csv";
 
@@ -23,6 +31,7 @@ ClassMethod Run() As %Status
 		$$$ThrowOnError(..SeedLabCodeMap())
 		$$$ThrowOnError(..BuildLoincKB())
 		$$$ThrowOnError(..AgentSecurity())
+		$$$ThrowOnError(..WorkflowSetup())
 	} Catch ex {
 		Set tSC = ex.AsStatus()
 	}
@@ -125,6 +134,36 @@ ClassMethod AgentSecurity() As %Status
 		Set tSC = ex.AsStatus()
 	}
 	Quit tSC
+}
+
+/// Workflow role REVIEWROLE with the demo reviewer in it. The reviewer is an IRIS user with
+/// %EnsRole_Operator only, enough for the Workflow inbox.
+ClassMethod WorkflowSetup() As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		$$$ThrowOnError(..CreateReviewer($NAMESPACE))
+		If '##class(EnsLib.Workflow.RoleDefinition).%ExistsId(..#REVIEWROLE) {
+			$$$ThrowOnError(##class(EnsLib.Workflow.RoleDefinition).CreateRole(..#REVIEWROLE))
+		}
+		If '##class(EnsLib.Workflow.UserDefinition).%ExistsId(..#REVIEWUSER) {
+			$$$ThrowOnError(##class(EnsLib.Workflow.UserDefinition).CreateUser(..#REVIEWUSER, "Demo reviewer"))
+		}
+		If '##class(EnsLib.Workflow.RoleMembership).%ExistsId(..#REVIEWROLE_"||"_..#REVIEWUSER) {
+			$$$ThrowOnError(##class(EnsLib.Workflow.RoleDefinition).AddUserToRole(..#REVIEWROLE, ..#REVIEWUSER))
+		}
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+ClassMethod CreateReviewer(pNamespace As %String) As %Status [ Private ]
+{
+	New $NAMESPACE
+	Set $NAMESPACE = "%SYS"
+	Quit:##class(Security.Users).Exists(..#REVIEWUSER) $$$OK
+	Quit ##class(Security.Users).Create(..#REVIEWUSER, "%EnsRole_Operator", ..#REVIEWPASSWORD, "AgenticProd demo reviewer", pNamespace)
 }
 
 ClassMethod CreateRoleAndUser(pNamespace As %String) As %Status [ Private ]

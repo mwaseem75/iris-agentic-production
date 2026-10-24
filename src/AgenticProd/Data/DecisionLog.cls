@@ -51,6 +51,14 @@ Property FixedBodyClass As %String(MAXLEN = 128);
 
 Property FixedBodyId As %String(MAXLEN = 50);
 
+/// Workflow user who answered the ApprovalTask, and when (UTC).
+Property Reviewer As %String(MAXLEN = 128);
+
+Property ReviewedAt As %TimeStamp;
+
+/// Why a reviewer-approved fix was not applied (re-check FAIL or REFUSED).
+Property ReviewNote As %String(MAXLEN = "");
+
 Index HeaderIdx On HeaderId;
 
 Index FixedBodyIdx On (FixedBodyId, FixedBodyClass);
@@ -164,6 +172,15 @@ Storage Default
 </Value>
 <Value name="21">
 <Value>FixedBodyId</Value>
+</Value>
+<Value name="22">
+<Value>Reviewer</Value>
+</Value>
+<Value name="23">
+<Value>ReviewedAt</Value>
+</Value>
+<Value name="24">
+<Value>ReviewNote</Value>
 </Value>
 </Data>
 <DataLocation>^AgenticProd.Data.DecisionLogD</DataLocation>

@@ -188,6 +188,99 @@ Method TestFlaggedNeverAutoFix()
 	Do $$$AssertEquals(tFinal.Evidence.GetAt(1), "suspicious instruction in NTE(1):3: system note")
 }
 
+/// MAP_CODE task: reviewer's Loinc correction is kept; reject leaves the mapping alone.
+Method TestReviewMapCode01()
+{
+	Do $$$AssertStatusOK(..Case("01", "UNMAPPED_CODE", .tRequest))
+	Do tRequest.Flags.Insert("NTE(1):3: system note")
+	Set tDecision = ..Stub("MAP_CODE", "UNMAPPED_CODE", 0.9, 0)
+	Set tDecision.Mapping.LocalCode = "GLU-01", tDecision.Mapping.Loinc = "2345-7", tDecision.Mapping.Display = "Glucose [Mass/volume] in Serum or Plasma"
+	Do tDecision.Evidence.Insert("search_loinc: 2345-7")
+	Set tTask = ##class(AgenticProd.Msg.ApprovalTask).FromDecision(tRequest, tDecision)
+	Do $$$AssertEquals(tTask.%Actions, "Approve,Reject")
+	Do $$$AssertEquals(tTask.%FormFields, "Loinc")
+	Do $$$AssertEquals(tTask.%FormValues.GetAt("Loinc"), "2345-7")
+	Do $$$AssertEquals(tTask.LocalCode_"|"_tTask.Display, "GLU-01|Glucose [Mass/volume] in Serum or Plasma")
+	Do $$$AssertEquals(tTask.Flags.GetAt(1), "NTE(1):3: system note")
+	Do $$$AssertEquals(tTask.Evidence.GetAt(1), "search_loinc: 2345-7")
+	Do $$$AssertStatusOK(tTask.%Save(), "task saves as a message")
+	Do ##class(AgenticProd.Msg.ApprovalTask).%DeleteId(tTask.%Id())
+
+	Set tLog = ..Reviewed(tRequest, tDecision, "Approve", "2339-0", .tFixed)
+	Do $$$AssertEquals(tLog.Outcome, "APPROVED")
+	Do $$$AssertEquals(tLog.Reviewer, "reviewer")
+	Do $$$AssertNotEquals(tLog.ReviewedAt, "")
+	Do $$$AssertEquals(tLog.Loinc, "2339-0", "reviewer's correction")
+	Do $$$AssertEquals(tFixed, "")
+
+	Set tLog = ..Reviewed(tRequest, tDecision, "Approve", "", .tFixed)
+	Do $$$AssertEquals(tLog.Loinc, "2345-7", "empty form field keeps the proposal")
+
+	Set tLog = ..Reviewed(tRequest, tDecision, "Reject", "2339-0", .tFixed)
+	Do $$$AssertEquals(tLog.Outcome, "REVIEW_REJECTED")
+	Do $$$AssertEquals(tLog.Loinc, "2345-7", "rejected: proposal logged as it was")
+}
+
+/// ESCALATE with a fix: an approved fix is re-checked; PASS_NEEDS_REVIEW is enough once a person
+/// approved it, FAIL and REFUSED are not.
+Method TestReviewEscalateFix()
+{
+	Do $$$AssertStatusOK(..Case("05", "BAD_FORMAT", .tRequest))
+	Set tDecision = ..Stub("AUTO_FIX", "BAD_FORMAT", 0.6, 1, "OBX(1):14", "2026-10-23 10:15", "202610231015")
+	Do $$$AssertStatusOK(..Triage().Plan(tRequest, tDecision, .tFinal, .tOutcome))
+	Do $$$AssertEquals(tOutcome, "DOWNGRADED:AUTO_FIX")
+	Set tLog = ..Reviewed(tRequest, tFinal, "Approve", "", .tFixed)
+	Do $$$AssertEquals(tLog.Outcome, "REVIEW_APPLIED", tLog.ReviewNote)
+	If $$$AssertTrue($IsObject(tFixed), "new message built") {
+		Do $$$AssertEquals(tFixed.GetValueAt("4:14"), "202610231015")
+		Do $$$AssertEquals(tLog.FixedBodyId, tFixed.%Id(), "loop guard sees the reviewed fix")
+		Do ##class(EnsLib.HL7.Message).%DeleteId(tFixed.%Id())
+	}
+
+	// Unit added by a person: not auto-fixable, but approved
+	Do $$$AssertStatusOK(..Case("07", "MISSING_FIELD", .tRequest))
+	Set tDecision = ..Stub("ESCALATE", "MISSING_FIELD", 0.7, 0, "OBX(1):6", "", "mmol/L")
+	Set tLog = ..Reviewed(tRequest, tDecision, "Approve", "", .tFixed)
+	Do $$$AssertEquals(tLog.Outcome, "REVIEW_APPLIED", tLog.ReviewNote)
+	Do:$IsObject(tFixed) ##class(EnsLib.HL7.Message).%DeleteId(tFixed.%Id())
+
+	Do $$$AssertStatusOK(..Case("05", "BAD_FORMAT", .tRequest))
+	Set tDecision = ..Stub("ESCALATE", "BAD_FORMAT", 0.6, 0, "OBX(1):14", "2026-10-23 10:15", "2026/10/23 10:15")
+	Set tLog = ..Reviewed(tRequest, tDecision, "Approve", "", .tFixed)
+	Do $$$AssertEquals(tLog.Outcome, "REVIEW_FIX_FAILED")
+	Do $$$AssertTrue(tLog.ReviewNote [ "did not pass", tLog.ReviewNote)
+	Do $$$AssertEquals(tFixed, "")
+
+	Do $$$AssertStatusOK(..Case("11", "IDENTITY_ISSUE", .tRequest))
+	Set tDecision = ..Stub("ESCALATE", "IDENTITY_ISSUE", 0.9, 0, "PID(1):3.4", "", "SIMHOSP")
+	Set tLog = ..Reviewed(tRequest, tDecision, "Approve", "", .tFixed)
+	Do $$$AssertEquals(tLog.Outcome, "REVIEW_FIX_FAILED")
+	Do $$$AssertTrue(tLog.ReviewNote [ "protected identity field", tLog.ReviewNote)
+	Do $$$AssertEquals(tFixed, "")
+}
+
+Method TestReviewEscalateNoFix()
+{
+	Do $$$AssertStatusOK(..Case("17", "UNMAPPED_CODE", .tRequest))
+	Set tLog = ..Reviewed(tRequest, ..Stub("ESCALATE", "UNMAPPED_CODE", 0.4, 0), "Approve", "", .tFixed)
+	Do $$$AssertEquals(tLog.Outcome, "REVIEW_CLOSED")
+	Do $$$AssertEquals(tLog.Reviewer, "reviewer")
+	Do $$$AssertEquals(tFixed, "")
+}
+
+/// Log pDecision, then run Triage.Review with a stub Workflow answer from "reviewer".
+/// Returns the reopened DecisionLog row.
+Method Reviewed(pRequest As AgenticProd.Msg.TriageRequest, pDecision As AgenticProd.Msg.Decision, pAction As %String, pLoinc As %String, Output pFixed As %Persistent) As AgenticProd.Data.DecisionLog
+{
+	Do $$$AssertStatusOK(##class(AgenticProd.Data.DecisionLog).Record(pRequest, pDecision, .tLogId, "SENT_FOR_APPROVAL"))
+	Set tTask = ##class(AgenticProd.Msg.ApprovalTask).FromDecision(pRequest, pDecision)
+	Set tAnswer = ##class(EnsLib.Workflow.TaskResponse).%New()
+	Set tAnswer.%Action = pAction, tAnswer.%UserName = "reviewer"
+	Do tAnswer.%FormValues.SetAt(pLoinc, "Loinc")
+	Do $$$AssertStatusOK(..Triage().Review(pRequest, tTask, tAnswer, tLogId, .pFixed))
+	Quit ##class(AgenticProd.Data.DecisionLog).%OpenId(tLogId)
+}
+
 Method AssertDowngraded(pFinal As AgenticProd.Msg.Decision, pOutcome As %String, pFrom As %String, pWhy As %String)
 {
 	Do $$$AssertEquals(pOutcome, "DOWNGRADED:"_pFrom)
