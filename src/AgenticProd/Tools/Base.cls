@@ -64,7 +64,11 @@ Method GetErrorEvents(headerId As %Integer) As %String
 Method GetSimilarDecisions(errorClass As %String, sourceCode As %String = "") As %String
 {
 	$$$TRACE("get_similar_decisions errorClass="_errorClass_" sourceCode="_sourceCode)
-	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 5 HeaderId, Source, Decision, ErrorClass, Confidence, Validated, LocalCode, Loinc, Outcome, Reason, DecisionJSON, CreatedAt FROM AgenticProd_Data.DecisionLog WHERE ErrorClass = ? AND (? = '' OR LocalCode = ?) ORDER BY ID DESC", $ZCONVERT(errorClass, "U"), sourceCode, sourceCode)
+	Set tSQL = "SELECT TOP 5 HeaderId, Source, Decision, ErrorClass, Confidence, Validated, LocalCode, Loinc, Outcome, Reason, DecisionJSON, CreatedAt FROM AgenticProd_Data.DecisionLog WHERE ErrorClass = ?"
+	Set tArgs = 1, tArgs(1) = $ZCONVERT(errorClass, "U")
+	// IRIS binds "" as NULL, so "? = ''" never matches; add the code filter only when given
+	If sourceCode '= "" Set tSQL = tSQL_" AND LocalCode = ?", tArgs = 2, tArgs(2) = sourceCode
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, tSQL_" ORDER BY ID DESC", tArgs...)
 	If tRS.%SQLCODE < 0 Quit "ERROR: SQLCODE "_tRS.%SQLCODE_" "_tRS.%Message
 	Set tList = []
 	While tRS.%Next() {

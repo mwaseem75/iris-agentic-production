@@ -55,10 +55,38 @@ Method TestGetSimilarDecisions()
 	Do $$$AssertEquals([].%FromJSON($PIECE(tOut, $CHAR(10), 2)).%Size(), 0, "other error class")
 }
 
+/// Empty sourceCode means any code. IRIS binds "" as NULL, which broke the first version.
+Method TestGetSimilarDecisionsAnyCode()
+{
+	Set tRow = ##class(AgenticProd.Data.DecisionLog).%New()
+	Set tRow.HeaderId = -9300
+	Set tRow.Decision = "MAP_CODE"
+	Set tRow.ErrorClass = "UNMAPPED_CODE"
+	Set tRow.LocalCode = ..#TESTCODE
+	Set tRow.Reason = "any code row"
+	Do $$$AssertStatusOK(tRow.%Save())
+	Set tOut = ##class(AgenticProd.Tools.Base).%New().GetSimilarDecisions("UNMAPPED_CODE", "")
+	Set tList = [].%FromJSON($PIECE(tOut, $CHAR(10), 2))
+	Do $$$AssertTrue(tList.%Size() > 0, "empty sourceCode matches any code: "_$EXTRACT(tOut, 1, 300))
+	Do $$$AssertEquals(tList.%Get(0).reason, "any code row", "newest first")
+}
+
+Method OnBeforeAllTests() As %Status
+{
+	// Rows left by an aborted run would break the "last 5" and "newest first" checks
+	Do ..DeleteTestRows()
+	Quit $$$OK
+}
+
 Method OnAfterAllTests() As %Status
 {
-	Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM AgenticProd_Data.DecisionLog WHERE LocalCode = ?", ..#TESTCODE)
+	Do ..DeleteTestRows()
 	Quit ##class(AgenticProd.Test.Tools.HL7Test).Cleanup()
+}
+
+ClassMethod DeleteTestRows() [ Private ]
+{
+	Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM AgenticProd_Data.DecisionLog WHERE LocalCode = ?", ..#TESTCODE)
 }
 
 }
