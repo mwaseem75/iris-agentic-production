@@ -100,6 +100,7 @@ Method TriageRequest(pMsg As EnsLib.HL7.Message, pClass As %String, pText As %St
 	Set tRequest.SessionId = ..%SessionId
 	Set tRequest.Source = pMsg.GetValueAt("1:3.1")
 	Set tRequest.Format = "HL7v2"
+	Set tRequest.ControlId = pMsg.GetValueAt("1:10")
 	Set tRequest.ErrorText = pText
 	Set tRequest.ErrorClass = pClass
 	Do ..ScanFreeText(pMsg, tRequest.Flags)

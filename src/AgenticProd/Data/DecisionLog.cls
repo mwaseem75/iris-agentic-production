@@ -59,7 +59,14 @@ Property ReviewedAt As %TimeStamp;
 /// Why a reviewer-approved fix was not applied (re-check FAIL or REFUSED).
 Property ReviewNote As %String(MAXLEN = "");
 
+/// Eval run and case, from an "EV<runId>-<caseId>" control ID; empty for normal traffic.
+Property EvalRunId As %Integer;
+
+Property CaseId As %String(MAXLEN = 20);
+
 Index HeaderIdx On HeaderId;
+
+Index EvalCaseIdx On (EvalRunId, CaseId);
 
 Index FixedBodyIdx On (FixedBodyId, FixedBodyClass);
 
@@ -80,6 +87,8 @@ ClassMethod Record(pRequest As AgenticProd.Msg.TriageRequest, pDecision As Agent
 		Set tRow.Source = pRequest.Source
 		Set tRow.Format = pRequest.Format
 		Set tRow.ErrorText = pRequest.ErrorText
+		Set tRow.CaseId = ##class(AgenticProd.Eval.Runner).CaseOf(pRequest.ControlId, .tRunId)
+		Set tRow.EvalRunId = tRunId
 		Set tRow.Decision = pDecision.Decision
 		Set tRow.ErrorClass = pDecision.ErrorClass
 		Set tRow.Confidence = pDecision.Confidence
@@ -181,6 +190,12 @@ Storage Default
 </Value>
 <Value name="24">
 <Value>ReviewNote</Value>
+</Value>
+<Value name="25">
+<Value>EvalRunId</Value>
+</Value>
+<Value name="26">
+<Value>CaseId</Value>
 </Value>
 </Data>
 <DataLocation>^AgenticProd.Data.DecisionLogD</DataLocation>

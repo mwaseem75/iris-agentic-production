@@ -33,6 +33,7 @@ XData ProductionDefinition
     <Setting Target="Host" Name="MaxIterations">3</Setting>
     <Setting Target="Host" Name="DailyTokenBudget">200000</Setting>
     <Setting Target="Host" Name="RunAsUser">agentic_agent</Setting>
+    <Setting Target="Host" Name="Mode">live</Setting>
   </Item>
   <Item Name="IntegrationSupport" Category="Agent" ClassName="EnsLib.Workflow.Operation" PoolSize="1" Enabled="true" Foreground="false" LogTraceEvents="true" Comment="Workflow role: reviewers approve or reject MAP_CODE and ESCALATE tasks">
   </Item>

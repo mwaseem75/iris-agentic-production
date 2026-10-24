@@ -34,7 +34,11 @@ Property MaxToolCalls As %Integer(MINVAL = 0) [ InitialExpression = 8 ];
 /// 0 = no limit.
 Property MaxTokensPerMessage As %Integer(MINVAL = 0) [ InitialExpression = 20000 ];
 
-Parameter SETTINGS = "Model:Agent,MaxIterations:Agent,MaxToolCalls:Agent,MaxTokensPerMessage:Agent,DailyTokenBudget:Agent,RunAsUser:Agent";
+/// live calls the LLM. replay answers with the Decision recorded by the latest live run of the
+/// same eval case and Model, no LLM call and no key needed (eval and demo reruns).
+Property Mode As %String(VALUELIST = ",live,replay") [ InitialExpression = "live" ];
+
+Parameter SETTINGS = "Model:Agent,Mode:Agent,MaxIterations:Agent,MaxToolCalls:Agent,MaxTokensPerMessage:Agent,DailyTokenBudget:Agent,RunAsUser:Agent";
 
 /// Fail closed: if the switch fails the item does not start, rather than run the agent with %All.
 /// The switch lasts for the job's life, so this item must keep its own pool (no shared jobs).
@@ -62,6 +66,10 @@ Method Triage(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As Age
 	Set tSession = ""
 	Set tStart = $ZHOROLOG
 	Try {
+		If ..Mode = "replay" {
+			$$$ThrowOnError(..Replay(pRequest, .pResponse))
+			Quit
+		}
 		// Never drop the message: over budget it still goes to Triage, as ESCALATE
 		Set tUsed = ..TokensUsedToday()
 		If ..DailyTokenBudget, tUsed >= ..DailyTokenBudget {
@@ -101,6 +109,10 @@ Method Triage(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As Age
 		Set tUsage.TotalMs = ($ZHOROLOG - tStart) * 1000 \ 1
 		Set tUsage.Decision = pResponse.Decision
 		Set tUsage.Confidence = pResponse.Confidence
+		Set tUsage.CaseId = ##class(AgenticProd.Eval.Runner).CaseOf(pRequest.ControlId, .tRunId)
+		Set tUsage.EvalRunId = tRunId
+		$$$ThrowOnError(pResponse.%JSONExportToString(.tJSON))
+		Set tUsage.DecisionJSON = tJSON
 		$$$ThrowOnError(tUsage.%Save())
 		Set pResponse.CostUsd = tUsage.CostUsd
 		$$$TRACE("Agent decision="_pResponse.Decision_" session="_pResponse.AgentSessionId_" tokens="_pResponse.PromptTokens_"+"_pResponse.CompletionTokens_" toolCalls="_tStats."total_tool_calls"_" llmMs="_tStats."total_llm_duration_ms")
@@ -108,6 +120,53 @@ Method Triage(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As Age
 		Set tSC = ex.AsStatus()
 		// Keep the failed conversation for diagnosis.
 		If $IsObject(tSession) Do tSession.%Save()
+	}
+	Quit tSC
+}
+
+/// Replay mode: the Decision of the latest live Usage row for the request's eval case and Model,
+/// or ESCALATE "no recorded run". Writes a Usage row marked Replay, tokens and cost 0.
+Method Replay(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As AgenticProd.Msg.Decision) As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		Set tStart = $ZHOROLOG
+		Set tCase = ##class(AgenticProd.Eval.Runner).CaseOf(pRequest.ControlId, .tRunId)
+		Set (tJSON, tAgentSession) = ""
+		If tCase '= "" {
+			// Rows written before 5.4 have no DecisionJSON, so they cannot be replayed
+			Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 1 DecisionJSON, AgentSessionId FROM AgenticProd_Data.Usage WHERE CaseId = ? AND Model = ? AND COALESCE(Replay, 0) = 0 AND DecisionJSON IS NOT NULL ORDER BY ID DESC", tCase, ..Model)
+			If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message))
+			If tRS.%Next() Set tJSON = tRS.DecisionJSON, tAgentSession = tRS.AgentSessionId
+		}
+		If tJSON = "" {
+			Set pResponse = ..EscalateDecision(pRequest, "replay: no recorded run for case '"_tCase_"' and model "_..Model)
+		} Else {
+			Set pResponse = ##class(AgenticProd.Msg.Decision).%New()
+			$$$ThrowOnError(pResponse.%JSONImport(tJSON))
+		}
+		Set pResponse.Model = ..Model
+		Set pResponse.AgentSessionId = tAgentSession
+		Set (pResponse.PromptTokens, pResponse.CompletionTokens, pResponse.CostUsd) = 0
+
+		Set tUsage = ##class(AgenticProd.Data.Usage).%New()
+		Set tUsage.Provider = ##class(AgenticProd.Agent.TriageAgent).#PROVIDER
+		Set tUsage.Model = ..Model
+		Set (tUsage.PromptTokens, tUsage.CompletionTokens, tUsage.ReasoningTokens, tUsage.CostUsd) = 0
+		Set tUsage.Replay = 1
+		Set tUsage.HeaderId = pRequest.HeaderId
+		Set tUsage.SessionId = pRequest.SessionId
+		Set tUsage.AgentSessionId = tAgentSession
+		Set tUsage.CaseId = tCase, tUsage.EvalRunId = tRunId
+		Set tUsage.Decision = pResponse.Decision
+		Set tUsage.Confidence = pResponse.Confidence
+		$$$ThrowOnError(pResponse.%JSONExportToString(.tOut))
+		Set tUsage.DecisionJSON = tOut
+		Set tUsage.TotalMs = ($ZHOROLOG - tStart) * 1000 \ 1
+		$$$ThrowOnError(tUsage.%Save())
+		$$$TRACE("Replay decision="_pResponse.Decision_" case="_tCase_" model="_..Model_" recordedSession="_tAgentSession)
+	} Catch ex {
+		Set tSC = ex.AsStatus()
 	}
 	Quit tSC
 }

@@ -189,6 +189,69 @@ Method TestAgentToolList()
 	Do $$$AssertEquals(tNames, "get_error_events,get_failed_message,get_segment,get_similar_decisions,lookup_code,search_interface_spec,search_loinc,similar_past_mappings,validate_fix")
 }
 
+/// Replay answers from the latest live row for the case and model, never the agent or a replay row.
+Method TestReplayReturnsRecordedDecision()
+{
+	Set tOld = {"decision":"ESCALATE","error_class":"OTHER","confidence":0.1,"reason":"older run"}
+	Set tLive = {"decision":"MAP_CODE","error_class":"UNMAPPED_CODE","confidence":0.8,"mapping":{"local_code":"GLU-01","loinc":"2345-7","display":"Glucose"},"evidence":["unit mg/dL"],"reason":"recorded"}
+	Do $$$AssertStatusOK(..AddRecorded("T91", "replay-model", tOld, "11", 0))
+	Do $$$AssertStatusOK(..AddRecorded("T91", "replay-model", tLive, "12", 0))
+	Do $$$AssertStatusOK(..AddRecorded("T91", "other-model", tOld, "13", 0))
+	Do $$$AssertStatusOK(..AddRecorded("T91", "replay-model", tOld, "14", 1))
+
+	Set tOp = ##class(AgenticProd.Operation.Agent).%New("TestAgentOp")
+	Set tOp.Mode = "replay", tOp.Model = "replay-model"
+	Set tOp.DailyTokenBudget = 1
+	Set tRequest = ##class(AgenticProd.Msg.TriageRequest).%New()
+	Set tRequest.HeaderId = -9102
+	Set tRequest.ControlId = "EV9999-T91"
+	Do $$$AssertStatusOK(tOp.Triage(tRequest, .tDecision))
+	Do $$$AssertEquals(tDecision.Decision, "MAP_CODE", "latest live row for case and model")
+	Do $$$AssertEquals(tDecision.Mapping.Loinc, "2345-7")
+	Do $$$AssertEquals(tDecision.AgentSessionId, "12", "points at the recorded session")
+	Do $$$AssertEquals(tDecision.CostUsd, 0)
+
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 1 Replay, CostUsd, PromptTokens, EvalRunId, CaseId, Decision FROM AgenticProd_Data.Usage WHERE HeaderId = -9102 ORDER BY ID DESC")
+	Do tRS.%Next()
+	Do $$$AssertEquals(tRS.Replay, 1, "Usage row marked replay")
+	Do $$$AssertEquals(+tRS.CostUsd, 0, "replay costs nothing")
+	Do $$$AssertEquals(+tRS.PromptTokens, 0)
+	Do $$$AssertEquals(tRS.EvalRunId, 9999)
+	Do $$$AssertEquals(tRS.CaseId, "T91")
+	Do $$$AssertEquals(tRS.Decision, "MAP_CODE")
+}
+
+Method TestReplayWithoutRecordEscalates()
+{
+	Set tOp = ##class(AgenticProd.Operation.Agent).%New("TestAgentOp")
+	Set tOp.Mode = "replay", tOp.Model = "replay-model"
+	Set tRequest = ##class(AgenticProd.Msg.TriageRequest).%New()
+	Set tRequest.HeaderId = -9102
+	Set tRequest.ErrorClass = "BAD_FORMAT"
+	Set tRequest.ControlId = "EV9999-T92"
+	Do $$$AssertStatusOK(tOp.Triage(tRequest, .tDecision))
+	Do $$$AssertEquals(tDecision.Decision, "ESCALATE")
+	Do $$$AssertTrue(tDecision.Reason [ "no recorded run", "reason says why")
+
+	Set tRequest.ControlId = "MSG00001"
+	Do $$$AssertStatusOK(tOp.Triage(tRequest, .tDecision))
+	Do $$$AssertEquals(tDecision.Decision, "ESCALATE", "not an eval message: nothing to replay")
+}
+
+/// A live Usage row as Operation.Agent writes it (or a replay row when pReplay).
+Method AddRecorded(pCase As %String, pModel As %String, pDecision As %DynamicObject, pSession As %String, pReplay As %Boolean) As %Status
+{
+	Set tRow = ##class(AgenticProd.Data.Usage).%New()
+	Set tRow.HeaderId = -9102
+	Set tRow.Model = pModel
+	Set tRow.CaseId = pCase, tRow.EvalRunId = 9998
+	Set tRow.AgentSessionId = pSession
+	Set tRow.DecisionJSON = pDecision.%ToJSON()
+	Set tRow.Decision = pDecision.decision
+	Set tRow.Replay = pReplay
+	Quit tRow.%Save()
+}
+
 Method AddUsage(pPrompt As %Integer, pCompletion As %Integer) As %Status
 {
 	Set tRow = ##class(AgenticProd.Data.Usage).%New()

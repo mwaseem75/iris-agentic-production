@@ -53,7 +53,22 @@ Property Confidence As %Numeric(SCALE = 4);
 
 Property CreatedAt As %TimeStamp [ InitialExpression = {$ZDATETIME($ZTIMESTAMP, 3)} ];
 
+/// Eval run and case, from an "EV<runId>-<caseId>" control ID; empty for normal traffic.
+Property EvalRunId As %Integer;
+
+Property CaseId As %String(MAXLEN = 20);
+
+/// The Decision the operation returned, as JSON. Replay mode answers from it.
+Property DecisionJSON As %String(MAXLEN = "");
+
+/// 1 = answered from a recorded run, no LLM call (tokens and cost 0).
+Property Replay As %Boolean [ InitialExpression = 0 ];
+
 Index HeaderIdx On HeaderId;
+
+Index EvalCaseIdx On (EvalRunId, CaseId);
+
+Index CaseModelIdx On (CaseId, Model);
 
 Index CreatedIdx On CreatedAt;
 
@@ -149,6 +164,18 @@ Storage Default
 </Value>
 <Value name="22">
 <Value>CreatedAt</Value>
+</Value>
+<Value name="23">
+<Value>EvalRunId</Value>
+</Value>
+<Value name="24">
+<Value>CaseId</Value>
+</Value>
+<Value name="25">
+<Value>DecisionJSON</Value>
+</Value>
+<Value name="26">
+<Value>Replay</Value>
 </Value>
 </Data>
 <DataLocation>^AgenticProd.Data.UsageD</DataLocation>

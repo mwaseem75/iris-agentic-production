@@ -15,6 +15,10 @@ Property Source As %String(%JSONFIELDNAME = "source", MAXLEN = 128);
 /// Payload format, e.g. HL7v2 or FHIR. Tells the agent which format skill to load.
 Property Format As %String(%JSONFIELDNAME = "format", MAXLEN = 20);
 
+/// Sender's message ID (HL7 MSH-10). Eval sends use "EV<runId>-<caseId>" so results join back
+/// to the case (see Eval.Runner.CaseOf).
+Property ControlId As %String(%JSONFIELDNAME = "control_id", MAXLEN = 200);
+
 /// Validation or processing error text that triggered triage.
 Property ErrorText As %String(%JSONFIELDNAME = "error_text", MAXLEN = "");
 
@@ -49,6 +53,9 @@ Storage Default
 </Value>
 <Value name="7">
 <Value>Flags</Value>
+</Value>
+<Value name="8">
+<Value>ControlId</Value>
 </Value>
 </Data>
 <DefaultData>TriageRequestDefaultData</DefaultData>
