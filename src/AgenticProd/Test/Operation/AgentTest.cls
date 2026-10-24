@@ -55,6 +55,48 @@ Method TestOverBudgetEscalatesWithoutAgent()
 	Do $$$AssertEquals(..CountUsage(), tUsageRows, "no Usage row for a skipped run")
 }
 
+/// Stub stats in the GetStats() shape; no agent or session needed.
+Method TestMessageBudgetForcesEscalate()
+{
+	Set tRequest = ##class(AgenticProd.Msg.TriageRequest).%New()
+	Set tRequest.HeaderId = -9103
+	Set tRequest.ErrorClass = "BAD_FORMAT"
+	Set tFix = ##class(AgenticProd.Msg.Decision).%New()
+	Set tFix.Decision = "AUTO_FIX"
+	Set tFix.ErrorClass = "BAD_FORMAT"
+	Set tFix.Validated = 1
+
+	Set tStats = {"total_tool_calls":8, "total_prompt_tokens":15000, "total_completion_tokens":5000}
+	Set tOut = ##class(AgenticProd.Operation.Agent).ApplyMessageBudget(tRequest, tStats, 8, 20000, tFix)
+	Do $$$AssertEquals(tOut, tFix, "at the limits the decision is kept")
+
+	Set tStats."total_tool_calls" = 9
+	Set tOut = ##class(AgenticProd.Operation.Agent).ApplyMessageBudget(tRequest, tStats, 8, 20000, tFix)
+	Do $$$AssertEquals(tOut.Decision, "ESCALATE", "too many tool calls")
+	Do $$$AssertTrue(tOut.Reason [ "budget exceeded", tOut.Reason)
+	Do $$$AssertNotTrue(tOut.Validated)
+
+	Set tStats = {"total_tool_calls":2, "total_prompt_tokens":20000, "total_completion_tokens":1}
+	Set tOut = ##class(AgenticProd.Operation.Agent).ApplyMessageBudget(tRequest, tStats, 8, 20000, tFix)
+	Do $$$AssertEquals(tOut.Decision, "ESCALATE", "too many tokens")
+	Do $$$AssertTrue(tOut.Reason [ "20001 tokens", tOut.Reason)
+
+	Set tOut = ##class(AgenticProd.Operation.Agent).ApplyMessageBudget(tRequest, tStats, 0, 0, tFix)
+	Do $$$AssertEquals(tOut, tFix, "0 = no limit")
+}
+
+/// %Init makes no LLM call. Helpers such as CheckFix or MaskedText must never show up as tools.
+Method TestAgentToolList()
+{
+	Set tAgent = ##class(AgenticProd.Agent.TriageAgent).%New()
+	Do $$$AssertStatusOK(tAgent.%Init())
+	Set tNames = "", tIter = tAgent.ToolManager.%Discover().%GetIterator()
+	While tIter.%GetNext(.tKey, .tTool) {
+		Set tNames = tNames_$SELECT(tNames '= "": ",", 1: "")_tTool.name
+	}
+	Do $$$AssertEquals(tNames, "get_error_events,get_failed_message,get_segment,get_similar_decisions,search_interface_spec,validate_fix")
+}
+
 Method AddUsage(pPrompt As %Integer, pCompletion As %Integer) As %Status
 {
 	Set tRow = ##class(AgenticProd.Data.Usage).%New()

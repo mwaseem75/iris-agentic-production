@@ -23,7 +23,15 @@ Property DailyTokenBudget As %Integer(MINVAL = 0) [ InitialExpression = 200000 ]
 /// Empty keeps the production's own user (_Ensemble, %All); only for diagnosis.
 Property RunAsUser As %String(MAXLEN = 128) [ InitialExpression = "agentic_agent" ];
 
-Parameter SETTINGS = "Model:Agent,MaxIterations:Agent,DailyTokenBudget:Agent,RunAsUser:Agent";
+/// Tool calls allowed per message. Checked after the run (build 154 has no per-iteration
+/// hook); above it the decision is forced to ESCALATE. 0 = no limit.
+Property MaxToolCalls As %Integer(MINVAL = 0) [ InitialExpression = 8 ];
+
+/// Prompt + completion tokens allowed per message, checked after the run like MaxToolCalls.
+/// 0 = no limit.
+Property MaxTokensPerMessage As %Integer(MINVAL = 0) [ InitialExpression = 20000 ];
+
+Parameter SETTINGS = "Model:Agent,MaxIterations:Agent,MaxToolCalls:Agent,MaxTokensPerMessage:Agent,DailyTokenBudget:Agent,RunAsUser:Agent";
 
 /// Fail closed: if the switch fails the item does not start, rather than run the agent with %All.
 /// The switch lasts for the job's life, so this item must keep its own pool (no shared jobs).
@@ -87,6 +95,7 @@ Method Triage(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As Age
 
 		$$$ThrowOnError(tSession.%Save())
 		Set tStats = tSession.GetStats()
+		Set pResponse = ..ApplyMessageBudget(pRequest, tStats, ..MaxToolCalls, ..MaxTokensPerMessage, pResponse)
 		Set pResponse.Model = ..Model
 		Set pResponse.PromptTokens = tStats."total_prompt_tokens"
 		Set pResponse.CompletionTokens = tStats."total_completion_tokens"
@@ -133,6 +142,21 @@ ClassMethod TokensUsedToday() As %Integer
 	If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message))
 	Do tRS.%Next()
 	Quit +tRS.Used
+}
+
+/// Return pDecision, or an ESCALATE decision when the run's stats (session.GetStats()) are
+/// over the per-message tool call or token limit. A limit of 0 is off.
+ClassMethod ApplyMessageBudget(pRequest As AgenticProd.Msg.TriageRequest, pStats As %DynamicObject, pMaxToolCalls As %Integer, pMaxTokens As %Integer, pDecision As AgenticProd.Msg.Decision) As AgenticProd.Msg.Decision
+{
+	Set tToolCalls = +pStats."total_tool_calls"
+	Set tTokens = pStats."total_prompt_tokens" + pStats."total_completion_tokens"
+	Set tWhy = ""
+	If pMaxToolCalls, tToolCalls > pMaxToolCalls Set tWhy = tToolCalls_" tool calls (limit "_pMaxToolCalls_")"
+	If pMaxTokens, tTokens > pMaxTokens Set tWhy = tWhy_$SELECT(tWhy '= "": ", ", 1: "")_tTokens_" tokens (limit "_pMaxTokens_")"
+	Quit:tWhy="" pDecision
+	// The answer may look fine, but a run that needed this much is not trusted for AUTO_FIX
+	$$$LOGWARNING("Per-message budget exceeded for header "_pRequest.HeaderId_": "_tWhy_"; agent answered "_pDecision.Decision_", escalating")
+	Quit ..EscalateDecision(pRequest, "budget exceeded: "_tWhy_"; agent answered "_pDecision.Decision)
 }
 
 /// ESCALATE decision used when the agent gives no valid answer.
