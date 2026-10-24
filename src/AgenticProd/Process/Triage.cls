@@ -113,8 +113,9 @@ Method OnResponse(request As %Library.Persistent, ByRef response As %Library.Per
 	Try {
 		Quit:'$IsObject(callresponse)
 		Quit:'callrequest.%Extends("AgenticProd.Msg.ApprovalTask")
-		$$$ThrowOnError(..Review(request, callrequest, callresponse, pCompletionKey, .tFixed))
+		$$$ThrowOnError(..Review(request, callrequest, callresponse, pCompletionKey, .tFixed, .tResend))
 		If $IsObject(tFixed) $$$ThrowOnError(..SendRequestAsync(..TargetConfigName, tFixed, 0))
+		If tResend '= "" $$$ThrowOnError(..ResendOriginal(tResend))
 	} Catch ex {
 		Set tSC = ex.AsStatus()
 	}
@@ -122,13 +123,14 @@ Method OnResponse(request As %Library.Persistent, ByRef response As %Library.Per
 }
 
 /// Act on pAnswer to pTask and record it on DecisionLog row pLogId (Outcome, Reviewer).
-/// Reject: REVIEW_REJECTED. MAP_CODE approved: ApplyMapping with the reviewer's Loinc, APPROVED.
+/// Reject: REVIEW_REJECTED. MAP_CODE approved: ApplyMapping with the reviewer's Loinc, APPROVED
+/// and pResend = the failed header to resend; a bad LOINC is REVIEW_BAD_LOINC, nothing written.
 /// ESCALATE approved: with a fix, CheckFix again; on PASS or PASS_NEEDS_REVIEW pFixed is the
 /// new, saved message to send (REVIEW_APPLIED), else REVIEW_FIX_FAILED. Without a fix,
 /// REVIEW_CLOSED. Sends nothing.
-Method Review(pRequest As AgenticProd.Msg.TriageRequest, pTask As AgenticProd.Msg.ApprovalTask, pAnswer As EnsLib.Workflow.TaskResponse, pLogId As %String, Output pFixed As %Persistent) As %Status
+Method Review(pRequest As AgenticProd.Msg.TriageRequest, pTask As AgenticProd.Msg.ApprovalTask, pAnswer As EnsLib.Workflow.TaskResponse, pLogId As %String, Output pFixed As %Persistent, Output pResend As %String) As %Status
 {
-	Set pFixed = ""
+	Set (pFixed, pResend) = ""
 	Set tSC = $$$OK
 	Try {
 		Set tLog = ##class(AgenticProd.Data.DecisionLog).%OpenId(pLogId, , .tSC)
@@ -140,9 +142,14 @@ Method Review(pRequest As AgenticProd.Msg.TriageRequest, pTask As AgenticProd.Ms
 		} ElseIf pTask.Decision = "MAP_CODE" {
 			Set tLoinc = $ZSTRIP(pAnswer.%FormValues.GetAt("Loinc"), "<>W")
 			Set:tLoinc="" tLoinc = pTask.Loinc
-			Set tLog.Loinc = tLoinc
-			$$$ThrowOnError(..ApplyMapping(pRequest, pTask, tLoinc, pAnswer.%UserName))
-			Set tLog.Outcome = "APPROVED"
+			$$$ThrowOnError(..ApplyMapping(pTask, tLoinc, .tWhy))
+			If tWhy = "" {
+				Set tLog.Loinc = tLoinc, tLog.Outcome = "APPROVED", pResend = pRequest.HeaderId
+			} Else {
+				// The message stays failed; the reviewer can answer a new task, not this one
+				Set tLog.Outcome = "REVIEW_BAD_LOINC", tLog.ReviewNote = tWhy
+				$$$LOGWARNING("Reviewer "_pAnswer.%UserName_" approved '"_tLoinc_"' for "_pTask.LocalCode_" (header "_pTask.HeaderId_"), not applied: "_tWhy)
+			}
 		} ElseIf pTask.FixJSON = "" {
 			Set tLog.Outcome = "REVIEW_CLOSED"
 		} Else {
@@ -164,11 +171,59 @@ Method Review(pRequest As AgenticProd.Msg.TriageRequest, pTask As AgenticProd.Ms
 	Quit tSC
 }
 
-/// Approved MAP_CODE with pLoinc (the reviewer's correction, if any).
-Method ApplyMapping(pRequest As AgenticProd.Msg.TriageRequest, pTask As AgenticProd.Msg.ApprovalTask, pLoinc As %String, pReviewer As %String) As %Status
+/// Write LabCodeMap pTask.LocalCode -> "pLoinc^display" for an approved MAP_CODE (pLoinc is the
+/// reviewer's correction, if any). pWhy is "" when written, else why not; then nothing is written.
+/// Display comes from the LOINC subset; a valid code outside it keeps the agent's display only
+/// if the reviewer left the code as proposed.
+ClassMethod ApplyMapping(pTask As AgenticProd.Msg.ApprovalTask, pLoinc As %String, Output pWhy As %String) As %Status
 {
-	// TODO 4.5: write LabCodeMap (LOINC^display) and resend the original message to LabRouter
-	Quit $$$OK
+	Set pWhy = ""
+	Set tSC = $$$OK
+	Try {
+		Set pWhy = ..LoincProblem(pLoinc)
+		Set:(pWhy="")&&(pTask.LocalCode="") pWhy = "task has no local code"
+		Quit:pWhy'=""
+		Set tDisplay = ..LoincDisplay(pLoinc, .tFound)
+		Set:'tFound tDisplay = $SELECT(pLoinc = pTask.Loinc: pTask.Display, 1: "")
+		$$$ThrowOnError(##class(Ens.Util.LookupTable).%UpdateValue(##class(AgenticProd.Tools.Mapping).#CODEMAP, pTask.LocalCode, pLoinc_"^"_tDisplay))
+		$$$TRACE("LabCodeMap "_pTask.LocalCode_" -> "_pLoinc_"^"_tDisplay)
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// "" when pLoinc is NNNNN-N (1 to 5 digits) with a correct Mod 10 check digit, else why not.
+ClassMethod LoincProblem(pLoinc As %String) As %String
+{
+	Quit:'$MATCH(pLoinc, "\d{1,5}-\d") "'"_pLoinc_"' is not a LOINC code (NNNNN-N)"
+	// LOINC Mod 10 = Luhn on the digits before the dash: double every other digit from the right
+	Set tNum = $PIECE(pLoinc, "-"), tSum = 0
+	For i = 1:1:$LENGTH(tNum) {
+		Set tDigit = $EXTRACT(tNum, $LENGTH(tNum) + 1 - i)
+		Set:i#2 tDigit = tDigit * 2
+		Set tSum = tSum + (tDigit # 10) + (tDigit \ 10)
+	}
+	Set tCheck = (10 - (tSum # 10)) # 10
+	Quit:tCheck'=$PIECE(pLoinc, "-", 2) "'"_pLoinc_"' has a wrong check digit (expected "_tCheck_")"
+	Quit ""
+}
+
+/// Long name of pLoinc in the search_loinc subset; pFound is 0 when the code is not in it.
+ClassMethod LoincDisplay(pLoinc As %String, Output pFound As %Boolean) As %String
+{
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 1 text FROM "_##class(AgenticProd.Tools.Mapping).#LOINCTABLE_" WHERE loinc = ?", pLoinc)
+	If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message))
+	Set pFound = tRS.%Next()
+	// Row text is "long_name | component | system | scale | units" (Setup.BuildLoincKB)
+	Quit $SELECT(pFound: $PIECE(tRS.text, " | "), 1: "")
+}
+
+/// Resend the failed message under pHeaderId to TargetConfigName (LabRouter): with the new
+/// LabCodeMap entry it now passes the lookup, so no agent call.
+Method ResendOriginal(pHeaderId As %String, Output pNewHeaderId As %String) As %Status
+{
+	Quit ##class(Ens.MessageHeader).ResendDuplicatedMessage(pHeaderId, .pNewHeaderId, ..TargetConfigName)
 }
 
 ClassMethod SetOutcome(pLogId As %String, pOutcome As %String) As %Status [ Internal ]

@@ -1,5 +1,7 @@
-/// Process.Triage action matrix with stub decisions on eval cases. Calls Plan (and Record for
-/// the resend count) directly, so no production, no send and no LLM.
+Include Ensemble
+
+/// Process.Triage action matrix with stub decisions on eval cases. Calls Plan, Review and
+/// ApplyMapping directly, no LLM. Only TestLearningLoop01 sends, into the running production.
 Class AgenticProd.Test.Process.TriageTest Extends %UnitTest.TestCase
 {
 
@@ -188,7 +190,8 @@ Method TestFlaggedNeverAutoFix()
 	Do $$$AssertEquals(tFinal.Evidence.GetAt(1), "suspicious instruction in NTE(1):3: system note")
 }
 
-/// MAP_CODE task: reviewer's Loinc correction is kept; reject leaves the mapping alone.
+/// MAP_CODE task: approve writes LabCodeMap (reviewer's correction wins), reject and a bad
+/// check digit write nothing.
 Method TestReviewMapCode01()
 {
 	Do $$$AssertStatusOK(..Case("01", "UNMAPPED_CODE", .tRequest))
@@ -206,19 +209,102 @@ Method TestReviewMapCode01()
 	Do $$$AssertStatusOK(tTask.%Save(), "task saves as a message")
 	Do ##class(AgenticProd.Msg.ApprovalTask).%DeleteId(tTask.%Id())
 
-	Set tLog = ..Reviewed(tRequest, tDecision, "Approve", "2339-0", .tFixed)
+	Do ..RemoveTestMappings()
+	Set tLog = ..Reviewed(tRequest, tDecision, "Reject", "2339-0", .tFixed, .tResend)
+	Do $$$AssertEquals(tLog.Outcome, "REVIEW_REJECTED")
+	Do $$$AssertEquals(tLog.Loinc, "2345-7", "rejected: proposal logged as it was")
+	Do $$$AssertEquals(..Mapped("GLU-01"), "", "rejected: no LabCodeMap entry")
+	Do $$$AssertEquals(tResend, "")
+
+	Set tLog = ..Reviewed(tRequest, tDecision, "Approve", "2345-8", .tFixed, .tResend)
+	Do $$$AssertEquals(tLog.Outcome, "REVIEW_BAD_LOINC")
+	Do $$$AssertTrue(tLog.ReviewNote [ "wrong check digit (expected 7)", tLog.ReviewNote)
+	Do $$$AssertEquals(..Mapped("GLU-01"), "", "bad LOINC: no LabCodeMap entry")
+	Do $$$AssertEquals(tResend, "", "bad LOINC: message stays failed")
+
+	Set tLog = ..Reviewed(tRequest, tDecision, "Approve", "2339-0", .tFixed, .tResend)
 	Do $$$AssertEquals(tLog.Outcome, "APPROVED")
 	Do $$$AssertEquals(tLog.Reviewer, "reviewer")
 	Do $$$AssertNotEquals(tLog.ReviewedAt, "")
 	Do $$$AssertEquals(tLog.Loinc, "2339-0", "reviewer's correction")
+	Do $$$AssertEquals(..Mapped("GLU-01"), "2339-0^Glucose [Mass/volume] in Blood", "corrected code, display from the subset")
+	Do $$$AssertEquals(tResend, tRequest.HeaderId, "original message resent")
 	Do $$$AssertEquals(tFixed, "")
 
 	Set tLog = ..Reviewed(tRequest, tDecision, "Approve", "", .tFixed)
 	Do $$$AssertEquals(tLog.Loinc, "2345-7", "empty form field keeps the proposal")
+	Do $$$AssertEquals(..Mapped("GLU-01"), "2345-7^Glucose [Mass/volume] in Serum or Plasma")
+	Do ..RemoveTestMappings()
+}
 
-	Set tLog = ..Reviewed(tRequest, tDecision, "Reject", "2339-0", .tFixed)
-	Do $$$AssertEquals(tLog.Outcome, "REVIEW_REJECTED")
-	Do $$$AssertEquals(tLog.Loinc, "2345-7", "rejected: proposal logged as it was")
+/// Valid codes outside the LOINC subset: the agent's display only if the code is unchanged.
+Method TestMappingOutsideSubset()
+{
+	Do ..RemoveTestMappings()
+	Set tTask = ##class(AgenticProd.Msg.ApprovalTask).%New()
+	Set tTask.LocalCode = "GLU-01", tTask.Loinc = "12345-5", tTask.Display = "agent display"
+	Do $$$AssertStatusOK(##class(AgenticProd.Process.Triage).ApplyMapping(tTask, "12345-5", .tWhy))
+	Do $$$AssertEquals(tWhy, "")
+	Do $$$AssertEquals(..Mapped("GLU-01"), "12345-5^agent display", "unchanged: agent's display")
+	Set tTask.Loinc = "2345-7"
+	Do $$$AssertStatusOK(##class(AgenticProd.Process.Triage).ApplyMapping(tTask, "12345-5", .tWhy))
+	Do $$$AssertEquals(..Mapped("GLU-01"), "12345-5^", "changed by the reviewer: no display")
+	Do ..RemoveTestMappings()
+}
+
+Method TestLoincCheckDigit()
+{
+	For tCode = "2345-7", "2339-0", "2093-3", "17861-6", "630-4" {
+		Do $$$AssertEquals(##class(AgenticProd.Process.Triage).LoincProblem(tCode), "", tCode_" valid")
+	}
+	For tCode = "2345-8", "2345", "2345-77", "123456-1", "GLU-01", "" {
+		Do $$$AssertNotEquals(##class(AgenticProd.Process.Triage).LoincProblem(tCode), "", "'"_tCode_"' refused")
+	}
+}
+
+/// Learning loop end to end in the running production: approve 01, resend, and the message
+/// reaches data/out through LabRouter with no Triage or agent message in the new session.
+Method TestLearningLoop01()
+{
+	If '##class(Ens.Director).IsProductionRunning() {
+		Do $$$AssertSkipped("production not running")
+		Quit
+	}
+	Do ..RemoveTestMappings()
+	Do $$$AssertStatusOK(..Case("01", "UNMAPPED_CODE", .tRequest))
+	Set tDecision = ..Stub("MAP_CODE", "UNMAPPED_CODE", 0.9, 0)
+	Set tDecision.Mapping.LocalCode = "GLU-01", tDecision.Mapping.Loinc = "2345-7"
+	Set tLog = ..Reviewed(tRequest, tDecision, "Approve", "", .tFixed, .tResend)
+	Do $$$AssertEquals(tLog.Outcome, "APPROVED")
+	// Only a queued request header can be resent; LoadCase leaves type and priority unset
+	Set tHeader = ##class(Ens.MessageHeader).%OpenId(tResend)
+	Set tHeader.Type = $$$eMessageTypeRequest, tHeader.Priority = $$$eMessagePriorityAsync, tHeader.TargetConfigName = "LabRouter"
+	Do $$$AssertStatusOK(tHeader.%Save())
+
+	Set tOutDir = "/home/irisowner/dev/data/out/"
+	Set tBefore = ..OutFiles(tOutDir, "MSG00001_*")
+	Set tTriage = ..Triage()
+	Set tTriage.TargetConfigName = "LabRouter"
+	If '$$$AssertStatusOK(tTriage.ResendOriginal(tResend, .tNewId)) Quit
+	Set tSession = ##class(Ens.MessageHeader).%OpenId(tNewId).SessionId
+	// LabRouter and NphiesOut run in their own jobs; a file within 15 s or the test fails
+	For i = 1:1:30 {
+		Set tNew = ""
+		Set tAfter = ..OutFiles(tOutDir, "MSG00001_*")
+		Set tPtr = 0
+		While $LISTNEXT(tAfter, tPtr, tFile) {
+			If '$LISTFIND(tBefore, tFile) Set tNew = tFile  Quit
+		}
+		Quit:tNew'=""
+		Hang 0.5
+	}
+	If $$$AssertNotEquals(tNew, "", "resent message reached data/out") {
+		Do ##class(%File).Delete(tNew)
+	}
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT COUNT(*) AS N FROM Ens.MessageHeader WHERE SessionId = ? AND TargetConfigName IN ('Triage', 'TriageAgent')", tSession)
+	Do tRS.%Next()
+	Do $$$AssertEquals(tRS.N, 0, "no Triage or agent message in session "_tSession)
+	Do ..RemoveTestMappings()
 }
 
 /// ESCALATE with a fix: an approved fix is re-checked; PASS_NEEDS_REVIEW is enough once a person
@@ -270,15 +356,39 @@ Method TestReviewEscalateNoFix()
 
 /// Log pDecision, then run Triage.Review with a stub Workflow answer from "reviewer".
 /// Returns the reopened DecisionLog row.
-Method Reviewed(pRequest As AgenticProd.Msg.TriageRequest, pDecision As AgenticProd.Msg.Decision, pAction As %String, pLoinc As %String, Output pFixed As %Persistent) As AgenticProd.Data.DecisionLog
+Method Reviewed(pRequest As AgenticProd.Msg.TriageRequest, pDecision As AgenticProd.Msg.Decision, pAction As %String, pLoinc As %String, Output pFixed As %Persistent, Output pResend As %String) As AgenticProd.Data.DecisionLog
 {
 	Do $$$AssertStatusOK(##class(AgenticProd.Data.DecisionLog).Record(pRequest, pDecision, .tLogId, "SENT_FOR_APPROVAL"))
 	Set tTask = ##class(AgenticProd.Msg.ApprovalTask).FromDecision(pRequest, pDecision)
 	Set tAnswer = ##class(EnsLib.Workflow.TaskResponse).%New()
 	Set tAnswer.%Action = pAction, tAnswer.%UserName = "reviewer"
 	Do tAnswer.%FormValues.SetAt(pLoinc, "Loinc")
-	Do $$$AssertStatusOK(..Triage().Review(pRequest, tTask, tAnswer, tLogId, .pFixed))
+	Do $$$AssertStatusOK(..Triage().Review(pRequest, tTask, tAnswer, tLogId, .pFixed, .pResend))
 	Quit ##class(AgenticProd.Data.DecisionLog).%OpenId(tLogId)
+}
+
+/// LabCodeMap value for pCode, "" if unmapped.
+ClassMethod Mapped(pCode As %String) As %String
+{
+	Quit ##class(Ens.Util.FunctionSet).Lookup("LabCodeMap", pCode)
+}
+
+/// GLU-01 is unmapped by design (eval case 01), so any entry for it is a test's.
+ClassMethod RemoveTestMappings()
+{
+	Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM Ens_Util.LookupTable WHERE TableName = 'LabCodeMap' AND KeyName = 'GLU-01'")
+}
+
+/// $LIST of full paths in pDir matching pSpec.
+ClassMethod OutFiles(pDir As %String, pSpec As %String) As %List
+{
+	Set tList = ""
+	Set tFile = $ZSEARCH(pDir_pSpec)
+	While tFile '= "" {
+		Set tList = tList_$LISTBUILD(tFile)
+		Set tFile = $ZSEARCH("")
+	}
+	Quit tList
 }
 
 Method AssertDowngraded(pFinal As AgenticProd.Msg.Decision, pOutcome As %String, pFrom As %String, pWhy As %String)
@@ -333,6 +443,7 @@ ClassMethod AddStep(pDecision As AgenticProd.Msg.Decision, pPath As %String, pFr
 
 Method OnAfterAllTests() As %Status
 {
+	Do ..RemoveTestMappings()
 	Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM AgenticProd_Data.DecisionLog WHERE Source = ?", ..#TESTSOURCE)
 	// Plan's downgrade warnings, logged outside a production
 	Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM Ens_Util.Log WHERE SourceClass = 'AgenticProd.Process.Triage' AND (ConfigName IS NULL OR ConfigName = 'TestTriage')")
