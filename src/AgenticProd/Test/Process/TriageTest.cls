@@ -254,10 +254,10 @@ Method TestMappingOutsideSubset()
 
 Method TestLoincCheckDigit()
 {
-	For tCode = "2345-7", "2339-0", "2093-3", "17861-6", "630-4" {
+	For tCode = "2345-7", "2339-0", "2093-3", "17861-6", "630-4", "100000-9", "1234567-4" {
 		Do $$$AssertEquals(##class(AgenticProd.Process.Triage).LoincProblem(tCode), "", tCode_" valid")
 	}
-	For tCode = "2345-8", "2345", "2345-77", "123456-1", "GLU-01", "" {
+	For tCode = "2345-8", "2345", "2345-77", "123456-1", "12345678-0", "GLU-01", "" {
 		Do $$$AssertNotEquals(##class(AgenticProd.Process.Triage).LoincProblem(tCode), "", "'"_tCode_"' refused")
 	}
 }

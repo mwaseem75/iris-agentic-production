@@ -193,10 +193,11 @@ ClassMethod ApplyMapping(pTask As AgenticProd.Msg.ApprovalTask, pLoinc As %Strin
 	Quit tSC
 }
 
-/// "" when pLoinc is NNNNN-N (1 to 5 digits) with a correct Mod 10 check digit, else why not.
+/// "" when pLoinc is NNNNN-N (1 to 7 digits) with a correct Mod 10 check digit, else why not.
 ClassMethod LoincProblem(pLoinc As %String) As %String
 {
-	Quit:'$MATCH(pLoinc, "\d{1,5}-\d") "'"_pLoinc_"' is not a LOINC code (NNNNN-N)"
+	// 6-digit codes exist since the 100000 range opened; 7 leaves headroom
+	Quit:'$MATCH(pLoinc, "\d{1,7}-\d") "'"_pLoinc_"' is not a LOINC code (NNNNN-N)"
 	// LOINC Mod 10 = Luhn on the digits before the dash: double every other digit from the right
 	Set tNum = $PIECE(pLoinc, "-"), tSum = 0
 	For i = 1:1:$LENGTH(tNum) {
