@@ -22,6 +22,13 @@ Method OnMessage(pRequest As EnsLib.HL7.Message, Output pResponse As EnsLib.HL7.
 	Quit ##super(pRequest, .pResponse)
 }
 
+/// Every file is <MSH-10>_<timestamp>.hl7. The FileOperation default uses the source file name,
+/// which a message built by Triage does not have.
+Method outputDocument(pFilename As %String, pDocument As EnsLib.HL7.Message, pSeparators As %String, pDoFraming As %Integer) As %Status
+{
+	Quit ##super(..Adapter.CreateFilename(pDocument.GetValueAt("1:10"), "%f_%Q.hl7"), pDocument, .pSeparators, .pDoFraming)
+}
+
 /// Forget past simulated timeouts, so the next send of those messages times out again.
 ClassMethod ResetSimulation()
 {
