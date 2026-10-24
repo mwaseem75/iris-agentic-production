@@ -14,6 +14,20 @@ Method TestSearchLoincGlucose()
 	Do $$$AssertEquals(tHits.%Get(0).system, "Ser/Plas")
 }
 
+/// No method in the query: the general HbA1c code comes back marked method none, the
+/// HPLC/electrophoresis codes with their method (case 02).
+Method TestSearchLoincMethod()
+{
+	Set tHits = [].%FromJSON(##class(AgenticProd.Tools.Mapping).%New().SearchLoinc("Hemoglobin A1c", "blood", "%"))
+	Set tMethods = ""
+	For i = 0:1:tHits.%Size() - 1 {
+		Set tHit = tHits.%Get(i), tMethods(tHit.loinc) = tHit.method
+	}
+	Do $$$AssertEquals($GET(tMethods("4548-4")), "none", "4548-4 returned, method none: "_tHits.%ToJSON())
+	Do $$$AssertEquals($GET(tMethods("17856-6")), "HPLC")
+	Do $$$AssertEquals($GET(tMethods("4549-2")), "Electrophoresis")
+}
+
 /// Troponin I and T high-sensitivity both fit serum + ng/L: the skill must ESCALATE on this.
 Method TestSearchLoincTroponinReturnsBoth()
 {

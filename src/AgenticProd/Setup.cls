@@ -58,16 +58,29 @@ ClassMethod SeedLabCodeMap() As %Status
 }
 
 /// Knowledge base search_loinc: one FastEmbed (local) vector row per line of LOINCFILE, text
-/// "long_name | component | system | scale | units". ReindexDocument keys each row by its LOINC
-/// code, so running this again replaces rows instead of adding copies.
+/// "long_name | component | system | scale | method | units" (method "none" when empty).
+/// ReindexDocument keys each row by its LOINC code, so running this again replaces rows instead
+/// of adding copies. A table missing a promoted field is dropped and built again.
 ClassMethod BuildLoincKB(Output pCount As %Integer) As %Status
 {
 	Set pCount = 0
 	Set tSC = $$$OK
 	Try {
+		Set tTable = ##class(AgenticProd.Tools.Mapping).#LOINCTABLE
+		// build 154: VectorStore.Build is CREATE TABLE IF NOT EXISTS, it never adds a new column
+		Set tIter = ##class(AgenticProd.Tools.Mapping).LoincFields().%GetIterator()
+		While tIter.%GetNext(, .tField) {
+			Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ?", $PIECE(tTable, "."), $PIECE(tTable, ".", 2), tField.name)
+			Continue:tRS.%Next()
+			For tDrop = tTable, tTable_"_Config" {
+				Set tRS = ##class(%SQL.Statement).%ExecDirect(, "DROP TABLE IF EXISTS "_tDrop)
+				If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message))
+			}
+			Quit
+		}
 		Set tEmb = ##class(%AI.RAG.Embedding.FastEmbed).Create()
 		Set tVS = ##class(%AI.RAG.VectorStore.IRIS).%New()
-		Set tVS.TableName = ##class(AgenticProd.Tools.Mapping).#LOINCTABLE
+		Set tVS.TableName = tTable
 		Set tVS.Dimensions = tEmb.Dimensions
 		Set tVS.ModelName = tEmb.ModelName
 		// Promoted so search_loinc returns them as fields, not parsed out of the text
@@ -82,9 +95,9 @@ ClassMethod BuildLoincKB(Output pCount As %Integer) As %Status
 			Set tLine = $ZSTRIP(tFile.ReadLine(), ">", $CHAR(13))
 			Continue:tLine=""
 			Set tRow = ..CSVRow(tLine)
-			Continue:$LISTLENGTH(tRow)<6
-			Set $LISTBUILD(tLoinc, tName, tComponent, tSystem, tScale, tUnits) = tRow
-			Do tKB.ReindexDocument(tLoinc, tName_" | "_tComponent_" | "_tSystem_" | "_tScale_" | "_tUnits, {"loinc":(tLoinc), "system":(tSystem), "units":(tUnits)})
+			Continue:$LISTLENGTH(tRow)<7
+			Set $LISTBUILD(tLoinc, tName, tComponent, tSystem, tScale, tMethod, tUnits) = tRow
+			Do tKB.ReindexDocument(tLoinc, tName_" | "_tComponent_" | "_tSystem_" | "_tScale_" | "_$SELECT(tMethod'="": tMethod, 1: "none")_" | "_tUnits, {"loinc":(tLoinc), "system":(tSystem), "method":(tMethod), "units":(tUnits)})
 			Set pCount = pCount + 1
 		}
 	} Catch ex {

@@ -1,47 +1,47 @@
-loinc,long_name,component,system,scale,typical_units
-2345-7,Glucose [Mass/volume] in Serum or Plasma,Glucose,Ser/Plas,Qn,mg/dL
-2339-0,Glucose [Mass/volume] in Blood,Glucose,Bld,Qn,mg/dL
-1558-6,Fasting glucose [Mass/volume] in Serum or Plasma,Glucose^post CFst,Ser/Plas,Qn,mg/dL
-2350-7,Glucose [Mass/volume] in Urine,Glucose,Urine,Qn,mg/dL
-4548-4,Hemoglobin A1c/Hemoglobin.total in Blood,Hemoglobin A1c/Hemoglobin.total,Bld,Qn,%
-17856-6,Hemoglobin A1c/Hemoglobin.total in Blood by HPLC,Hemoglobin A1c/Hemoglobin.total,Bld,Qn,%
-4549-2,Hemoglobin A1c/Hemoglobin.total in Blood by Electrophoresis,Hemoglobin A1c/Hemoglobin.total,Bld,Qn,%
-2160-0,Creatinine [Mass/volume] in Serum or Plasma,Creatinine,Ser/Plas,Qn,mg/dL
-38483-4,Creatinine [Mass/volume] in Blood,Creatinine,Bld,Qn,mg/dL
-2161-8,Creatinine [Mass/volume] in Urine,Creatinine,Urine,Qn,mg/dL
-2823-3,Potassium [Moles/volume] in Serum or Plasma,Potassium,Ser/Plas,Qn,mmol/L
-6298-4,Potassium [Moles/volume] in Blood,Potassium,Bld,Qn,mmol/L
-2951-2,Sodium [Moles/volume] in Serum or Plasma,Sodium,Ser/Plas,Qn,mmol/L
-2947-0,Sodium [Moles/volume] in Blood,Sodium,Bld,Qn,mmol/L
-2075-0,Chloride [Moles/volume] in Serum or Plasma,Chloride,Ser/Plas,Qn,mmol/L
-2028-9,"Carbon dioxide, total [Moles/volume] in Serum or Plasma","Carbon dioxide, total",Ser/Plas,Qn,mmol/L
-17861-6,Calcium [Mass/volume] in Serum or Plasma,Calcium,Ser/Plas,Qn,mg/dL
-19123-9,Magnesium [Mass/volume] in Serum or Plasma,Magnesium,Ser/Plas,Qn,mg/dL
-2777-1,Phosphate [Mass/volume] in Serum or Plasma,Phosphate,Ser/Plas,Qn,mg/dL
-3094-0,Urea nitrogen [Mass/volume] in Serum or Plasma,Urea nitrogen,Ser/Plas,Qn,mg/dL
-3084-1,Urate [Mass/volume] in Serum or Plasma,Urate,Ser/Plas,Qn,mg/dL
-1751-7,Albumin [Mass/volume] in Serum or Plasma,Albumin,Ser/Plas,Qn,g/dL
-1975-2,Bilirubin.total [Mass/volume] in Serum or Plasma,Bilirubin.total,Ser/Plas,Qn,mg/dL
-1742-6,Alanine aminotransferase [Enzymatic activity/volume] in Serum or Plasma,Alanine aminotransferase,Ser/Plas,Qn,U/L
-1920-8,Aspartate aminotransferase [Enzymatic activity/volume] in Serum or Plasma,Aspartate aminotransferase,Ser/Plas,Qn,U/L
-6768-6,Alkaline phosphatase [Enzymatic activity/volume] in Serum or Plasma,Alkaline phosphatase,Ser/Plas,Qn,U/L
-2093-3,Cholesterol [Mass/volume] in Serum or Plasma,Cholesterol,Ser/Plas,Qn,mg/dL
-2085-9,Cholesterol in HDL [Mass/volume] in Serum or Plasma,Cholesterol.in HDL,Ser/Plas,Qn,mg/dL
-13457-7,Cholesterol in LDL [Mass/volume] in Serum or Plasma by calculation,Cholesterol.in LDL,Ser/Plas,Qn,mg/dL
-2571-8,Triglyceride [Mass/volume] in Serum or Plasma,Triglyceride,Ser/Plas,Qn,mg/dL
-3016-3,Thyrotropin [Units/volume] in Serum or Plasma,Thyrotropin,Ser/Plas,Qn,mIU/L
-3024-7,Thyroxine (T4) free [Mass/volume] in Serum or Plasma,Thyroxine.free,Ser/Plas,Qn,ng/dL
-2276-4,Ferritin [Mass/volume] in Serum or Plasma,Ferritin,Ser/Plas,Qn,ng/mL
-1988-5,C reactive protein [Mass/volume] in Serum or Plasma,C reactive protein,Ser/Plas,Qn,mg/L
-30522-7,C reactive protein [Mass/volume] in Serum or Plasma by High sensitivity method,C reactive protein,Ser/Plas,Qn,mg/L
-10839-9,Troponin I.cardiac [Mass/volume] in Serum or Plasma,Troponin I.cardiac,Ser/Plas,Qn,ng/mL
-89579-7,Troponin I.cardiac [Mass/volume] in Serum or Plasma by High sensitivity method,Troponin I.cardiac,Ser/Plas,Qn,ng/L
-6598-7,Troponin T.cardiac [Mass/volume] in Serum or Plasma,Troponin T.cardiac,Ser/Plas,Qn,ng/mL
-67151-1,Troponin T.cardiac [Mass/volume] in Serum or Plasma by High sensitivity method,Troponin T.cardiac,Ser/Plas,Qn,ng/L
-718-7,Hemoglobin [Mass/volume] in Blood,Hemoglobin,Bld,Qn,g/dL
-4544-3,Hematocrit [Volume Fraction] of Blood by Automated count,Hematocrit,Bld,Qn,%
-6690-2,Leukocytes [#/volume] in Blood by Automated count,Leukocytes,Bld,Qn,10*3/uL
-777-3,Platelets [#/volume] in Blood by Automated count,Platelets,Bld,Qn,10*3/uL
-5902-2,Prothrombin time (PT),Coagulation tissue factor induced,PPP,Qn,s
-6301-6,INR in Platelet poor plasma by Coagulation assay,Coagulation tissue factor induced.INR,PPP,Qn,{INR}
-630-4,Bacteria identified in Urine by Culture,Bacteria identified,Urine,Nom,
+loinc,long_name,component,system,scale,method,typical_units
+2345-7,Glucose [Mass/volume] in Serum or Plasma,Glucose,Ser/Plas,Qn,,mg/dL
+2339-0,Glucose [Mass/volume] in Blood,Glucose,Bld,Qn,,mg/dL
+1558-6,Fasting glucose [Mass/volume] in Serum or Plasma,Glucose^post CFst,Ser/Plas,Qn,,mg/dL
+2350-7,Glucose [Mass/volume] in Urine,Glucose,Urine,Qn,,mg/dL
+4548-4,Hemoglobin A1c/Hemoglobin.total in Blood,Hemoglobin A1c/Hemoglobin.total,Bld,Qn,,%
+17856-6,Hemoglobin A1c/Hemoglobin.total in Blood by HPLC,Hemoglobin A1c/Hemoglobin.total,Bld,Qn,HPLC,%
+4549-2,Hemoglobin A1c/Hemoglobin.total in Blood by Electrophoresis,Hemoglobin A1c/Hemoglobin.total,Bld,Qn,Electrophoresis,%
+2160-0,Creatinine [Mass/volume] in Serum or Plasma,Creatinine,Ser/Plas,Qn,,mg/dL
+38483-4,Creatinine [Mass/volume] in Blood,Creatinine,Bld,Qn,,mg/dL
+2161-8,Creatinine [Mass/volume] in Urine,Creatinine,Urine,Qn,,mg/dL
+2823-3,Potassium [Moles/volume] in Serum or Plasma,Potassium,Ser/Plas,Qn,,mmol/L
+6298-4,Potassium [Moles/volume] in Blood,Potassium,Bld,Qn,,mmol/L
+2951-2,Sodium [Moles/volume] in Serum or Plasma,Sodium,Ser/Plas,Qn,,mmol/L
+2947-0,Sodium [Moles/volume] in Blood,Sodium,Bld,Qn,,mmol/L
+2075-0,Chloride [Moles/volume] in Serum or Plasma,Chloride,Ser/Plas,Qn,,mmol/L
+2028-9,"Carbon dioxide, total [Moles/volume] in Serum or Plasma","Carbon dioxide, total",Ser/Plas,Qn,,mmol/L
+17861-6,Calcium [Mass/volume] in Serum or Plasma,Calcium,Ser/Plas,Qn,,mg/dL
+19123-9,Magnesium [Mass/volume] in Serum or Plasma,Magnesium,Ser/Plas,Qn,,mg/dL
+2777-1,Phosphate [Mass/volume] in Serum or Plasma,Phosphate,Ser/Plas,Qn,,mg/dL
+3094-0,Urea nitrogen [Mass/volume] in Serum or Plasma,Urea nitrogen,Ser/Plas,Qn,,mg/dL
+3084-1,Urate [Mass/volume] in Serum or Plasma,Urate,Ser/Plas,Qn,,mg/dL
+1751-7,Albumin [Mass/volume] in Serum or Plasma,Albumin,Ser/Plas,Qn,,g/dL
+1975-2,Bilirubin.total [Mass/volume] in Serum or Plasma,Bilirubin.total,Ser/Plas,Qn,,mg/dL
+1742-6,Alanine aminotransferase [Enzymatic activity/volume] in Serum or Plasma,Alanine aminotransferase,Ser/Plas,Qn,,U/L
+1920-8,Aspartate aminotransferase [Enzymatic activity/volume] in Serum or Plasma,Aspartate aminotransferase,Ser/Plas,Qn,,U/L
+6768-6,Alkaline phosphatase [Enzymatic activity/volume] in Serum or Plasma,Alkaline phosphatase,Ser/Plas,Qn,,U/L
+2093-3,Cholesterol [Mass/volume] in Serum or Plasma,Cholesterol,Ser/Plas,Qn,,mg/dL
+2085-9,Cholesterol in HDL [Mass/volume] in Serum or Plasma,Cholesterol.in HDL,Ser/Plas,Qn,,mg/dL
+13457-7,Cholesterol in LDL [Mass/volume] in Serum or Plasma by calculation,Cholesterol.in LDL,Ser/Plas,Qn,Calculated,mg/dL
+2571-8,Triglyceride [Mass/volume] in Serum or Plasma,Triglyceride,Ser/Plas,Qn,,mg/dL
+3016-3,Thyrotropin [Units/volume] in Serum or Plasma,Thyrotropin,Ser/Plas,Qn,,mIU/L
+3024-7,Thyroxine (T4) free [Mass/volume] in Serum or Plasma,Thyroxine.free,Ser/Plas,Qn,,ng/dL
+2276-4,Ferritin [Mass/volume] in Serum or Plasma,Ferritin,Ser/Plas,Qn,,ng/mL
+1988-5,C reactive protein [Mass/volume] in Serum or Plasma,C reactive protein,Ser/Plas,Qn,,mg/L
+30522-7,C reactive protein [Mass/volume] in Serum or Plasma by High sensitivity method,C reactive protein,Ser/Plas,Qn,High sensitivity,mg/L
+10839-9,Troponin I.cardiac [Mass/volume] in Serum or Plasma,Troponin I.cardiac,Ser/Plas,Qn,,ng/mL
+89579-7,Troponin I.cardiac [Mass/volume] in Serum or Plasma by High sensitivity method,Troponin I.cardiac,Ser/Plas,Qn,High sensitivity,ng/L
+6598-7,Troponin T.cardiac [Mass/volume] in Serum or Plasma,Troponin T.cardiac,Ser/Plas,Qn,,ng/mL
+67151-1,Troponin T.cardiac [Mass/volume] in Serum or Plasma by High sensitivity method,Troponin T.cardiac,Ser/Plas,Qn,High sensitivity,ng/L
+718-7,Hemoglobin [Mass/volume] in Blood,Hemoglobin,Bld,Qn,,g/dL
+4544-3,Hematocrit [Volume Fraction] of Blood by Automated count,Hematocrit,Bld,Qn,Automated count,%
+6690-2,Leukocytes [#/volume] in Blood by Automated count,Leukocytes,Bld,Qn,Automated count,10*3/uL
+777-3,Platelets [#/volume] in Blood by Automated count,Platelets,Bld,Qn,Automated count,10*3/uL
+5902-2,Prothrombin time (PT),Coagulation tissue factor induced,PPP,Qn,,s
+6301-6,INR in Platelet poor plasma by Coagulation assay,Coagulation tissue factor induced.INR,PPP,Qn,Coagulation assay,{INR}
+630-4,Bacteria identified in Urine by Culture,Bacteria identified,Urine,Nom,,

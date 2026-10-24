@@ -22,7 +22,7 @@ XData Definition [ MimeType = application/xml ]
     <Description>Check whether a local test code (OBX-3.1) already has a LOINC mapping in LabCodeMap. localCode is the code exactly as sent, e.g. "GLU-01"; source is the sending application from MSH-3, e.g. "LAB_SIM". Returns the mapping as JSON, or "none" when the code is unmapped.</Description>
   </Tool>
   <Tool Name="search_loinc" Method="SearchLoinc">
-    <Description>Search the LOINC subset for candidate codes. text is the test name from OBX-3.2 (e.g. "Glucose", "Troponin"); specimen is the specimen if known (e.g. "serum", "blood", "urine"); units is OBX-6 (e.g. "mg/dL"). Returns up to 5 candidates as JSON with loinc, display, system (specimen), units and score (higher is closer). The score only ranks text similarity: check that system and units agree with the message before you choose.</Description>
+    <Description>Search the LOINC subset for candidate codes. text is the test name from OBX-3.2 (e.g. "Glucose", "Troponin"); specimen is the specimen if known (e.g. "serum", "blood", "urine"); units is OBX-6 (e.g. "mg/dL"). Returns up to 5 candidates as JSON with loinc, display, system (specimen), method, units and score (higher is closer). method "none" is the general code for the test, with no specific lab method; any other method (e.g. "HPLC") is a method-specific code. The score only ranks text similarity: check that system, method and units agree with the message before you choose.</Description>
   </Tool>
   <Tool Name="similar_past_mappings" Method="SimilarPastMappings">
     <Description>Get mappings a person approved before for the same local code, or for a test name like text (e.g. "Glucose"). localCode and text may be empty, but not both. Returns up to 5 approved mappings as JSON with local_code, loinc, reason and created_at, newest first, or an empty list.</Description>
@@ -52,7 +52,7 @@ Method SearchLoinc(text As %String, specimen As %String, units As %String) As %S
 		Set tHits = ..LoincSearch(tQuery)
 		Set tOut = [], tIter = tHits.%GetIterator()
 		While tIter.%GetNext(, .tHit) {
-			Do tOut.%Push({"loinc":(tHit.metadata.loinc), "display":($PIECE(tHit.text, " | ")), "system":(tHit.metadata.system), "units":(tHit.metadata.units), "score":($NUMBER(tHit.score, 3))})
+			Do tOut.%Push({"loinc":(tHit.metadata.loinc), "display":($PIECE(tHit.text, " | ")), "system":(tHit.metadata.system), "method":($SELECT(tHit.metadata.method'="": tHit.metadata.method, 1: "none")), "units":(tHit.metadata.units), "score":($NUMBER(tHit.score, 3))})
 		}
 		Set tResult = tOut.%ToJSON()
 	} Catch ex {
@@ -119,7 +119,7 @@ ClassMethod Prepare() As %Status
 /// Promoted metadata columns of LOINCTABLE; Build must get the same list every time.
 ClassMethod LoincFields() As %DynamicArray [ Internal ]
 {
-	Quit [{"name":"loinc", "type":"varchar(20)"}, {"name":"system", "type":"varchar(30)"}, {"name":"units", "type":"varchar(30)"}]
+	Quit [{"name":"loinc", "type":"varchar(20)"}, {"name":"system", "type":"varchar(30)"}, {"name":"method", "type":"varchar(40)"}, {"name":"units", "type":"varchar(30)"}]
 }
 
 }

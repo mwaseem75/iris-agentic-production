@@ -216,7 +216,7 @@ ClassMethod LoincDisplay(pLoinc As %String, Output pFound As %Boolean) As %Strin
 	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 1 text FROM "_##class(AgenticProd.Tools.Mapping).#LOINCTABLE_" WHERE loinc = ?", pLoinc)
 	If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message))
 	Set pFound = tRS.%Next()
-	// Row text is "long_name | component | system | scale | units" (Setup.BuildLoincKB)
+	// Row text is "long_name | component | system | scale | method | units" (Setup.BuildLoincKB)
 	Quit $SELECT(pFound: $PIECE(tRS.text, " | "), 1: "")
 }
 

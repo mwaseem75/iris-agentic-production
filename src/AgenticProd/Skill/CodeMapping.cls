@@ -38,8 +38,8 @@ Use these steps when a local test code (OBX-3.1) has no LOINC mapping.
 - If two candidates fit equally well, do not pick one: `ESCALATE` and list both in
   `evidence`. Typical cases: troponin I vs troponin T, standard vs high-sensitivity method,
   fasting vs random, serum vs blood when the specimen is not given.
-- If the message gives no method, choose the code without a method over method-specific ones
-  (4548-4, not the HPLC code). That is not ambiguity. A method in OBX-3.2 or OBX-17 decides it.
+- If OBX-3.2 and OBX-17 name no method, choose a candidate with method none. Only pick a
+  method-specific code when the message names that method.
 - If no candidate fits, `ESCALATE`.
 
 ## Deciding
