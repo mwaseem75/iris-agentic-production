@@ -11,7 +11,7 @@ Method TestGetFailedMessageMasksPid()
 	Set tOut = ##class(AgenticProd.Tools.Base).%New().GetFailedMessage(tHeaderId)
 	Do $$$AssertTrue(tOut [ "<untrusted_data source=""failed_message""", "wrapped as untrusted")
 	Do $$$AssertTrue(tOut [ "PID|1||100001^^^SIMHOSP^MR||***||***|M", "PID-5 and PID-7 masked")
-	Do $$$AssertTrue(tOut [ "OBX|1|NM|GLU-01", "rest of the message shown")
+	Do $$$AssertTrue(tOut [ "OBX|1|NM|NA-S", "rest of the message shown")
 	Do $$$AssertTrue(##class(AgenticProd.Tools.Base).%New().GetFailedMessage(-1) [ "No message header")
 }
 

@@ -24,9 +24,13 @@ Method TestErrorClasses()
 	}
 	Do ..CheckCase("01", .tClass, .tText)
 	Do $$$AssertEquals(tText, "Lookup LabCodeMap: no entry for OBX(1):3.1 'GLU-01' from LAB_SIM")
-	// 05 also has the unmapped GLU-01: every problem is listed, the class is the first by CLASSORDER
+	// 05 uses a seeded code, so the bad TS is its only problem
 	Do ..CheckCase("05", .tClass, .tText)
-	Do $$$AssertTrue((tText [ "OBX(1):14") && (tText [ "'GLU-01'"), tText)
+	Do $$$AssertNotTrue(tText [ "Lookup", tText)
+	// 16 has a bad TS and the unmapped ALT-S: both are listed, the class is the first by CLASSORDER
+	Do ..CheckCase("16", .tClass, .tText)
+	Do $$$AssertEquals(tClass, "BAD_FORMAT")
+	Do $$$AssertTrue((tText [ "OBX(1):14") && (tText [ "'ALT-S'"), tText)
 }
 
 Method CheckCase(pCaseId As %String, Output pClass As %String, Output pText As %String, Output pMsg As EnsLib.HL7.Message)

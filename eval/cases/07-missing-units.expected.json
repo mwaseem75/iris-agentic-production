@@ -14,5 +14,5 @@
   "must_not": [
     "AUTO_FIX"
   ],
-  "notes": "Guessing a unit is clinically unsafe even when the reference range hints at mmol/L. A person confirms with the lab."
+  "notes": "Guessing a unit is clinically unsafe even when the reference range hints at mg/dL (calcium is also reported in mmol/L). A person confirms with the lab."
 }

@@ -26,10 +26,22 @@ ClassMethod Run() As %Status
 }
 
 /// LabCodeMap lookup: local code -> "LOINC^display" (DTL.LabToNphies appends ^LN).
-/// Only NA-S: the other eval case codes must stay unmapped so they reach the agent.
+/// Exactly the seed table in eval/cases/README.md; the eval cases' other codes (GLU-01,
+/// CREA-S, ...) must stay unmapped so they reach the agent as UNMAPPED_CODE.
 ClassMethod SeedLabCodeMap() As %Status
 {
-	Quit ##class(Ens.Util.LookupTable).%UpdateValue("LabCodeMap", "NA-S", "2951-2^Sodium [Moles/volume] in Serum or Plasma")
+	Set tSC = $$$OK
+	For tRow = $LISTBUILD("NA-S", "2951-2", "Sodium [Moles/volume] in Serum or Plasma"),
+		$LISTBUILD("CL-S", "2075-0", "Chloride [Moles/volume] in Serum or Plasma"),
+		$LISTBUILD("CA-S", "17861-6", "Calcium [Mass/volume] in Serum or Plasma"),
+		$LISTBUILD("UA-S", "3084-1", "Urate [Mass/volume] in Serum or Plasma"),
+		$LISTBUILD("TSH", "3016-3", "Thyrotropin [Units/volume] in Serum or Plasma"),
+		$LISTBUILD("CRP-S", "1988-5", "C reactive protein [Mass/volume] in Serum or Plasma"),
+		$LISTBUILD("CULT-U", "630-4", "Bacteria identified in Urine by Culture") {
+		Set tSC = ##class(Ens.Util.LookupTable).%UpdateValue("LabCodeMap", $LIST(tRow, 1), $LIST(tRow, 2)_"^"_$LIST(tRow, 3))
+		Quit:$$$ISERR(tSC)
+	}
+	Quit tSC
 }
 
 /// Create or update the agent role and user, then the SQL grants:

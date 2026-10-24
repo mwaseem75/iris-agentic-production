@@ -135,7 +135,7 @@ Method TestOffWhitelistEscalates()
 		$LISTBUILD("01", "code", "OBX(1):3", "GLU-01^Glucose^L", "2345-7^Glucose^LN"),
 		$LISTBUILD("07", "unit", "OBX(1):6", "", "mmol/L"),
 		$LISTBUILD("09", "status", "OBR(1):25", "X1", "F"),
-		$LISTBUILD("05", "value", "OBX(1):14", "2026-10-23 10:15", "202610231015", "OBX(1):5", "98", "120"))
+		$LISTBUILD("05", "value", "OBX(1):14", "2026-10-23 10:15", "202610231015", "OBX(1):5", "139", "145"))
 	For i = 1:1:$LISTLENGTH(tCases) {
 		Set tCase = $LIST(tCases, i)
 		Do $$$AssertStatusOK(..Case($LIST(tCase, 1), "BAD_FORMAT", .tRequest))
