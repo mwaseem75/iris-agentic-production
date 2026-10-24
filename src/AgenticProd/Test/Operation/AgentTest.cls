@@ -160,7 +160,8 @@ Method TestAgentToolList()
 	While tIter.%GetNext(.tKey, .tTool) {
 		Set tNames = tNames_$SELECT(tNames '= "": ",", 1: "")_tTool.name
 	}
-	Do $$$AssertEquals(tNames, "get_error_events,get_failed_message,get_segment,get_similar_decisions,search_interface_spec,validate_fix")
+	// 9 own tools; load_skill is AI Hub's built-in and is not listed by %Discover
+	Do $$$AssertEquals(tNames, "get_error_events,get_failed_message,get_segment,get_similar_decisions,lookup_code,search_interface_spec,search_loinc,similar_past_mappings,validate_fix")
 }
 
 Method AddUsage(pPrompt As %Integer, pCompletion As %Integer) As %Status

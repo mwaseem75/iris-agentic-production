@@ -13,7 +13,7 @@ Parameter APIKEY = "@{env:OPENAI_API_KEY}";
 
 Parameter TOOLSETS = "AgenticProd.Tools.Base";
 
-Parameter SKILLS = "AgenticProd.Skill.HL7Repair";
+Parameter SKILLS = "AgenticProd.Skill.HL7Repair,AgenticProd.Skill.CodeMapping";
 
 XData INSTRUCTIONS [ MimeType = text/markdown ]
 {
@@ -26,7 +26,8 @@ You only read and propose. You never change data.
 1. Call `get_error_events` with the header ID from the task.
 2. If you need the message itself, call `get_failed_message`. Call `get_similar_decisions`
    to see how the same error class was handled before.
-3. For an HL7 v2 message, load the `hl7-repair` skill and follow it.
+3. For an HL7 v2 message, load the `hl7-repair` skill and follow it. For UNMAPPED_CODE,
+   load the `code-mapping` skill and follow it.
 4. Classify the failure and choose a decision.
 5. Answer with the decision JSON only.
 
