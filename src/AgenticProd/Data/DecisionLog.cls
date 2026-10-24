@@ -51,8 +51,8 @@ Index ErrorClassIdx On ErrorClass [ Type = bitmap ];
 
 Index LocalCodeIdx On LocalCode;
 
-/// Copy a Decision and the request it answers into the log.
-ClassMethod Record(pRequest As AgenticProd.Msg.TriageRequest, pDecision As AgenticProd.Msg.Decision, Output pId As %String) As %Status
+/// Copy a Decision and the request it answers into the log. pOutcome is what Triage did.
+ClassMethod Record(pRequest As AgenticProd.Msg.TriageRequest, pDecision As AgenticProd.Msg.Decision, Output pId As %String, pOutcome As %String = "") As %Status
 {
 	Set pId = ""
 	Set tSC = $$$OK
@@ -75,6 +75,7 @@ ClassMethod Record(pRequest As AgenticProd.Msg.TriageRequest, pDecision As Agent
 		Set tRow.Model = pDecision.Model
 		Set tRow.AgentSessionId = pDecision.AgentSessionId
 		Set tRow.CostUsd = pDecision.CostUsd
+		Set tRow.Outcome = pOutcome
 		$$$ThrowOnError(pDecision.%JSONExportToString(.tJSON))
 		Set tRow.DecisionJSON = tJSON
 		$$$ThrowOnError(tRow.%Save())

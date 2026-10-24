@@ -131,9 +131,11 @@ Method ValidateFix(headerId As %Integer, fixJSON As %String) As %String
 
 /// Core of validate_fix, also used by Process.Triage to re-check a fix before applying it.
 /// pResult.result is PASS, FAIL or REFUSED. pMsg is never modified or saved.
-ClassMethod CheckFix(pMsg As EnsLib.HL7.Message, pFix As %DynamicArray, Output pResult As %DynamicObject) As %Status
+/// pCopy is the fixed, unsaved copy; only use it on PASS.
+ClassMethod CheckFix(pMsg As EnsLib.HL7.Message, pFix As %DynamicArray, Output pResult As %DynamicObject, Output pCopy As EnsLib.HL7.Message) As %Status
 {
 	Set pResult = {"result":"FAIL", "errors":[], "applied":0}
+	Set pCopy = ""
 	Set tSC = $$$OK
 	Try {
 		If pFix.%Size() = 0 {
@@ -162,6 +164,7 @@ ClassMethod CheckFix(pMsg As EnsLib.HL7.Message, pFix As %DynamicArray, Output p
 		// Re-parse from text so the copy shares no segment objects with the stored message
 		Set tCopy = ##class(EnsLib.HL7.Message).ImportFromString(pMsg.OutputToString(), .tSC)
 		$$$ThrowOnError(tSC)
+		Set pCopy = tCopy
 		Set tIter = pFix.%GetIterator()
 		While tIter.%GetNext(.tKey, .tStep) {
 			Do ..ParsePath(tStep.path, .tName, .tOcc, .tField, .tSub)
