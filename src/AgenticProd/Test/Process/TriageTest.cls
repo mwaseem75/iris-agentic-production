@@ -167,6 +167,27 @@ Method TestFixedByTriage()
 	Do $$$AssertTrue(##class(AgenticProd.Process.Triage).FixedByTriage(tHeader.%Id()), "fixed body recognised")
 }
 
+/// A fix that would pass on its own is still refused when the message text was flagged.
+Method TestFlaggedNeverAutoFix()
+{
+	Do $$$AssertStatusOK(..Case("05", "BAD_FORMAT", .tRequest))
+	Do tRequest.Flags.Insert("NTE(1):3: system note, ai agent")
+	Set tDecision = ..Stub("AUTO_FIX", "BAD_FORMAT", 0.99, 1, "OBX(1):14", "2026-10-23 10:15", "202610231015")
+	Do $$$AssertStatusOK(..Triage().Plan(tRequest, tDecision, .tFinal, .tOutcome, .tFixed))
+	Do ..AssertDowngraded(tFinal, tOutcome, "AUTO_FIX", "suspicious instruction in the message text (NTE(1):3)")
+	Do $$$AssertEquals(tFixed, "", "nothing built")
+	Do $$$AssertEquals(tFinal.Evidence.GetAt(tFinal.Evidence.Count()), "suspicious instruction in NTE(1):3: system note, ai agent")
+
+	// Other decisions go ahead, with the flag in the evidence for the reviewer
+	Do $$$AssertStatusOK(..Case("18", "UNMAPPED_CODE", .tRequest))
+	Do tRequest.Flags.Insert("NTE(1):3: system note")
+	Set tDecision = ..Stub("MAP_CODE", "UNMAPPED_CODE", 0.9, 0)
+	Set tDecision.Mapping.LocalCode = "CHOL-S", tDecision.Mapping.Loinc = "2093-3"
+	Do $$$AssertStatusOK(..Triage().Plan(tRequest, tDecision, .tFinal, .tOutcome))
+	Do $$$AssertEquals(tOutcome, "SENT_FOR_APPROVAL")
+	Do $$$AssertEquals(tFinal.Evidence.GetAt(1), "suspicious instruction in NTE(1):3: system note")
+}
+
 Method AssertDowngraded(pFinal As AgenticProd.Msg.Decision, pOutcome As %String, pFrom As %String, pWhy As %String)
 {
 	Do $$$AssertEquals(pOutcome, "DOWNGRADED:"_pFrom)

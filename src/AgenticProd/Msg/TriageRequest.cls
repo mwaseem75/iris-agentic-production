@@ -21,6 +21,10 @@ Property ErrorText As %String(%JSONFIELDNAME = "error_text", MAXLEN = "");
 /// The router's first guess at the error class. The agent may change it.
 Property ErrorClass As AgenticProd.Msg.ErrorClass(%JSONFIELDNAME = "error_class");
 
+/// Policy.InjectionGuard hits, one per segment field: "NTE(1): system note, ai agent".
+/// Any hit means no AUTO_FIX; Triage copies them into the decision evidence for the reviewer.
+Property Flags As list Of %String(%JSONFIELDNAME = "flags", MAXLEN = 500);
+
 Storage Default
 {
 <Data name="TriageRequestDefaultData">
@@ -42,6 +46,9 @@ Storage Default
 </Value>
 <Value name="6">
 <Value>ErrorClass</Value>
+</Value>
+<Value name="7">
+<Value>Flags</Value>
 </Value>
 </Data>
 <DefaultData>TriageRequestDefaultData</DefaultData>

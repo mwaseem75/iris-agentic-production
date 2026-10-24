@@ -102,7 +102,29 @@ Method TriageRequest(pMsg As EnsLib.HL7.Message, pClass As %String, pText As %St
 	Set tRequest.Format = "HL7v2"
 	Set tRequest.ErrorText = pText
 	Set tRequest.ErrorClass = pClass
+	Do ..ScanFreeText(pMsg, tRequest.Flags)
 	Quit tRequest
+}
+
+/// Add an InjectionGuard hit to pFlags for each NTE-3 and text OBX-5 (TX, ST, FT) that has one.
+ClassMethod ScanFreeText(pMsg As EnsLib.HL7.Message, pFlags As %ListOfDataTypes)
+{
+	Set (tNTE, tOBX) = 0
+	For i = 1:1:pMsg.SegCount {
+		Set tSeg = pMsg.GetSegmentAt(i)
+		Continue:'$IsObject(tSeg)
+		Set tName = tSeg.Name, tRef = "", tText = ""
+		If tName = "NTE" {
+			Set tNTE = tNTE + 1, tRef = "NTE("_tNTE_"):3", tText = tSeg.GetValueAt("3")
+		} ElseIf tName = "OBX" {
+			Set tOBX = tOBX + 1
+			// Coded and numeric values cannot carry a sentence the agent would read as an instruction
+			If ",TX,ST,FT," [ (","_tSeg.GetValueAt("2")_",") Set tRef = "OBX("_tOBX_"):5", tText = tSeg.GetValueAt("5")
+		}
+		Continue:tRef=""
+		Set tHits = ##class(AgenticProd.Policy.InjectionGuard).Scan(tText)
+		Do:tHits'="" pFlags.Insert(tRef_": "_tHits)
+	}
 }
 
 Storage Default

@@ -74,7 +74,8 @@ Method Plan(pRequest As AgenticProd.Msg.TriageRequest, pDecision As AgenticProd.
 	Try {
 		Set tAction = pDecision.Decision, tWhy = ""
 		If tAction = "AUTO_FIX" {
-			Set tWhy = ..AutoFixRefusal(pRequest, pDecision, .pFixed)
+			// The agent read the flagged text, so its fix may be the injected instruction
+			Set tWhy = $SELECT(pRequest.Flags.Count(): "suspicious instruction in the message text ("_..FlagRefs(pRequest)_")", 1: ..AutoFixRefusal(pRequest, pDecision, .pFixed))
 			Set pOutcome = "APPLIED"
 		} ElseIf tAction = "RESEND" {
 			If pDecision.ErrorClass '= "TRANSIENT" {
@@ -92,11 +93,12 @@ Method Plan(pRequest As AgenticProd.Msg.TriageRequest, pDecision As AgenticProd.
 		}
 		If tWhy = "" {
 			Set pFinal = pDecision
-			Quit
+		} Else {
+			Set pFinal = pDecision.Escalated("downgraded from "_tAction_": "_tWhy_$SELECT(pDecision.Reason '= "": " (agent: "_pDecision.Reason_")", 1: ""))
+			Set pOutcome = "DOWNGRADED:"_tAction
+			$$$LOGWARNING("Triage header "_pRequest.HeaderId_" downgraded from "_tAction_": "_tWhy)
 		}
-		Set pFinal = pDecision.Escalated("downgraded from "_tAction_": "_tWhy_$SELECT(pDecision.Reason '= "": " (agent: "_pDecision.Reason_")", 1: ""))
-		Set pOutcome = "DOWNGRADED:"_tAction
-		$$$LOGWARNING("Triage header "_pRequest.HeaderId_" downgraded from "_tAction_": "_tWhy)
+		For i = 1:1:pRequest.Flags.Count() Do pFinal.Evidence.Insert("suspicious instruction in "_pRequest.Flags.GetAt(i))
 	} Catch ex {
 		Set tSC = ex.AsStatus()
 	}
@@ -196,6 +198,14 @@ ClassMethod ResendCount(pHeaderId As %Integer) As %Integer
 	If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message))
 	Do tRS.%Next()
 	Quit +tRS.N
+}
+
+/// "NTE(1):3, OBX(1):5" from the request's InjectionGuard flags.
+ClassMethod FlagRefs(pRequest As AgenticProd.Msg.TriageRequest) As %String [ Internal ]
+{
+	Set tRefs = ""
+	For i = 1:1:pRequest.Flags.Count() Set tRefs = tRefs_$SELECT(tRefs '= "": ", ", 1: "")_$PIECE(pRequest.Flags.GetAt(i), ": ")
+	Quit tRefs
 }
 
 ClassMethod CheckerFor(pFormat As %String) As %String [ Internal ]
