@@ -38,7 +38,12 @@ Method OnRequest(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As 
 	Set tSC = $$$OK
 	Try {
 		Set tDecision = ""
-		Set tSC = ..SendRequestSync(..AgentTarget, pRequest, .tDecision, ..AgentTimeout)
+		If ..FixedByTriage(pRequest.HeaderId) {
+			// Our own fix failed again: another agent round could loop, so a person decides
+			Set tDecision = ##class(AgenticProd.Operation.Agent).EscalateDecision(pRequest, "message built by a Triage AUTO_FIX failed again; agent not called a second time")
+		} Else {
+			Set tSC = ..SendRequestSync(..AgentTarget, pRequest, .tDecision, ..AgentTimeout)
+		}
 		If $$$ISERR(tSC) || '$IsObject(tDecision) {
 			// No answer still ends with a person looking at the message, never a drop
 			Set tDecision = ##class(AgenticProd.Operation.Agent).EscalateDecision(pRequest, "agent gave no decision: "_$SELECT($$$ISERR(tSC): $SYSTEM.Status.GetErrorText(tSC), 1: "timed out after "_..AgentTimeout_" s"))
@@ -47,7 +52,7 @@ Method OnRequest(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As 
 		$$$ThrowOnError(..Plan(pRequest, tDecision, .pResponse, .tOutcome, .tFixed))
 		Set tSendSC = ..Dispatch(pRequest, pResponse, tOutcome, tFixed)
 		If $$$ISERR(tSendSC) Set tOutcome = "ERROR:"_tOutcome
-		$$$ThrowOnError(##class(AgenticProd.Data.DecisionLog).Record(pRequest, pResponse, , tOutcome))
+		$$$ThrowOnError(##class(AgenticProd.Data.DecisionLog).Record(pRequest, pResponse, , tOutcome, $SELECT(tOutcome = "APPLIED": tFixed, 1: "")))
 		$$$TRACE("Triage header "_pRequest.HeaderId_": agent "_tDecision.Decision_", outcome "_tOutcome)
 		$$$ThrowOnError(tSendSC)
 	} Catch ex {
@@ -136,6 +141,15 @@ Method Dispatch(pRequest As AgenticProd.Msg.TriageRequest, pDecision As AgenticP
 		Quit $$$OK
 	}
 	Quit ..SendRequestAsync(..ApprovalTarget, pDecision, 0)
+}
+
+/// True if the failed message's body is one Triage built for an APPLIED fix (DecisionLog).
+ClassMethod FixedByTriage(pHeaderId As %Integer) As %Boolean
+{
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT COUNT(*) AS N FROM AgenticProd_Data.DecisionLog d, Ens.MessageHeader h WHERE h.ID = ? AND d.FixedBodyId = h.MessageBodyId AND d.FixedBodyClass = h.MessageBodyClassName", pHeaderId)
+	If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message))
+	Do tRS.%Next()
+	Quit tRS.N > 0
 }
 
 /// RESENT decisions already logged for this message. A resend gets a new header but keeps the

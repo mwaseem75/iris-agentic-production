@@ -17,11 +17,19 @@ ClassMethod Run() As %Status
 	Set tSC = $$$OK
 	Try {
 		$$$ThrowOnError(##class(AgenticProd.Data.PriceTable).Seed())
+		$$$ThrowOnError(..SeedLabCodeMap())
 		$$$ThrowOnError(..AgentSecurity())
 	} Catch ex {
 		Set tSC = ex.AsStatus()
 	}
 	Quit tSC
+}
+
+/// LabCodeMap lookup: local code -> "LOINC^display" (DTL.LabToNphies appends ^LN).
+/// Only NA-S: the other eval case codes must stay unmapped so they reach the agent.
+ClassMethod SeedLabCodeMap() As %Status
+{
+	Quit ##class(Ens.Util.LookupTable).%UpdateValue("LabCodeMap", "NA-S", "2951-2^Sodium [Moles/volume] in Serum or Plasma")
 }
 
 /// Create or update the agent role and user, then the SQL grants:

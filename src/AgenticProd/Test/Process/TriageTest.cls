@@ -142,6 +142,24 @@ Method TestOffWhitelistEscalates()
 	}
 }
 
+/// A body Triage built for an APPLIED fix is recognised when it fails again (loop guard).
+Method TestFixedByTriage()
+{
+	Do $$$AssertStatusOK(..Case("05", "BAD_FORMAT", .tRequest))
+	Set tDecision = ..Stub("AUTO_FIX", "BAD_FORMAT", 0.9, 1, "OBX(1):14", "2026-10-23 10:15", "202610231015")
+	Do $$$AssertStatusOK(..Triage().Plan(tRequest, tDecision, .tFinal, .tOutcome, .tFixed))
+	Do $$$AssertEquals(tOutcome, "APPLIED")
+	Do $$$AssertNotTrue(##class(AgenticProd.Process.Triage).FixedByTriage(tRequest.HeaderId), "original body is not a Triage fix")
+	Do $$$AssertStatusOK(##class(AgenticProd.Data.DecisionLog).Record(tRequest, tFinal, , tOutcome, tFixed))
+
+	// The fixed message arrives back under a new header, as it would from LabRouter
+	Set tHeader = ##class(Ens.MessageHeader).%New()
+	Set tHeader.SourceConfigName = ##class(AgenticProd.Test.Tools.HL7Test).#TESTSOURCE
+	Set tHeader.MessageBodyClassName = $CLASSNAME(tFixed), tHeader.MessageBodyId = tFixed.%Id()
+	Do $$$AssertStatusOK(tHeader.%Save())
+	Do $$$AssertTrue(##class(AgenticProd.Process.Triage).FixedByTriage(tHeader.%Id()), "fixed body recognised")
+}
+
 Method AssertDowngraded(pFinal As AgenticProd.Msg.Decision, pOutcome As %String, pFrom As %String, pWhy As %String)
 {
 	Do $$$AssertEquals(pOutcome, "DOWNGRADED:"_pFrom)

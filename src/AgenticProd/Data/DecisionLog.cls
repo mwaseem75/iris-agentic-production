@@ -45,14 +45,23 @@ Property Outcome As %String(MAXLEN = 30);
 
 Property CreatedAt As %TimeStamp [ InitialExpression = {$ZDATETIME($ZTIMESTAMP, 3)} ];
 
+/// Body Triage built for an APPLIED fix. If that body fails again, Triage escalates without
+/// calling the agent (loop guard).
+Property FixedBodyClass As %String(MAXLEN = 128);
+
+Property FixedBodyId As %String(MAXLEN = 50);
+
 Index HeaderIdx On HeaderId;
+
+Index FixedBodyIdx On (FixedBodyId, FixedBodyClass);
 
 Index ErrorClassIdx On ErrorClass [ Type = bitmap ];
 
 Index LocalCodeIdx On LocalCode;
 
-/// Copy a Decision and the request it answers into the log. pOutcome is what Triage did.
-ClassMethod Record(pRequest As AgenticProd.Msg.TriageRequest, pDecision As AgenticProd.Msg.Decision, Output pId As %String, pOutcome As %String = "") As %Status
+/// Copy a Decision and the request it answers into the log. pOutcome is what Triage did;
+/// pFixedBody is the new message of an APPLIED fix.
+ClassMethod Record(pRequest As AgenticProd.Msg.TriageRequest, pDecision As AgenticProd.Msg.Decision, Output pId As %String, pOutcome As %String = "", pFixedBody As %Persistent = "") As %Status
 {
 	Set pId = ""
 	Set tSC = $$$OK
@@ -76,6 +85,10 @@ ClassMethod Record(pRequest As AgenticProd.Msg.TriageRequest, pDecision As Agent
 		Set tRow.AgentSessionId = pDecision.AgentSessionId
 		Set tRow.CostUsd = pDecision.CostUsd
 		Set tRow.Outcome = pOutcome
+		If $IsObject(pFixedBody) {
+			Set tRow.FixedBodyClass = $CLASSNAME(pFixedBody)
+			Set tRow.FixedBodyId = pFixedBody.%Id()
+		}
 		$$$ThrowOnError(pDecision.%JSONExportToString(.tJSON))
 		Set tRow.DecisionJSON = tJSON
 		$$$ThrowOnError(tRow.%Save())
@@ -145,6 +158,12 @@ Storage Default
 </Value>
 <Value name="19">
 <Value>CreatedAt</Value>
+</Value>
+<Value name="20">
+<Value>FixedBodyClass</Value>
+</Value>
+<Value name="21">
+<Value>FixedBodyId</Value>
 </Value>
 </Data>
 <DataLocation>^AgenticProd.Data.DecisionLogD</DataLocation>
