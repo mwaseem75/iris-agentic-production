@@ -65,6 +65,12 @@ Method TestMessageBudgetForcesEscalate()
 	Set tFix.Decision = "AUTO_FIX"
 	Set tFix.ErrorClass = "BAD_FORMAT"
 	Set tFix.Validated = 1
+	Set tFix.Confidence = 0.9
+	Set tFix.Reason = "reformat OBX-14"
+	Set tStep = ##class(AgenticProd.Msg.FixStep).%New()
+	Set tStep.Path = "OBX(1):14", tStep.FromValue = "2026-10-23 10:15", tStep.ToValue = "202610231015"
+	Do tFix.Fix.Insert(tStep)
+	Do tFix.Evidence.Insert("validate_fix PASS")
 
 	Set tStats = {"total_tool_calls":8, "total_prompt_tokens":15000, "total_completion_tokens":5000}
 	Set tOut = ##class(AgenticProd.Operation.Agent).ApplyMessageBudget(tRequest, tStats, 8, 20000, tFix)
@@ -75,6 +81,12 @@ Method TestMessageBudgetForcesEscalate()
 	Do $$$AssertEquals(tOut.Decision, "ESCALATE", "too many tool calls")
 	Do $$$AssertTrue(tOut.Reason [ "budget exceeded", tOut.Reason)
 	Do $$$AssertNotTrue(tOut.Validated)
+	// The reviewer still sees the proposal
+	Do $$$AssertEquals(tOut.Fix.Count(), 1)
+	Do $$$AssertEquals(tOut.Fix.GetAt(1).ToValue, "202610231015")
+	Do $$$AssertEquals(tOut.Evidence.GetAt(1), "validate_fix PASS")
+	Do $$$AssertEquals(tOut.Confidence, 0.9)
+	Do $$$AssertEquals(tFix.Decision, "AUTO_FIX", "agent's decision object not changed")
 
 	Set tStats = {"total_tool_calls":2, "total_prompt_tokens":20000, "total_completion_tokens":1}
 	Set tOut = ##class(AgenticProd.Operation.Agent).ApplyMessageBudget(tRequest, tStats, 8, 20000, tFix)

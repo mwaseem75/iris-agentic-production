@@ -145,7 +145,8 @@ ClassMethod TokensUsedToday() As %Integer
 }
 
 /// Return pDecision, or an ESCALATE decision when the run's stats (session.GetStats()) are
-/// over the per-message tool call or token limit. A limit of 0 is off.
+/// over the per-message tool call or token limit. A limit of 0 is off. The escalated copy keeps
+/// the agent's fix, mapping and evidence.
 ClassMethod ApplyMessageBudget(pRequest As AgenticProd.Msg.TriageRequest, pStats As %DynamicObject, pMaxToolCalls As %Integer, pMaxTokens As %Integer, pDecision As AgenticProd.Msg.Decision) As AgenticProd.Msg.Decision
 {
 	Set tToolCalls = +pStats."total_tool_calls"
@@ -156,7 +157,7 @@ ClassMethod ApplyMessageBudget(pRequest As AgenticProd.Msg.TriageRequest, pStats
 	Quit:tWhy="" pDecision
 	// The answer may look fine, but a run that needed this much is not trusted for AUTO_FIX
 	$$$LOGWARNING("Per-message budget exceeded for header "_pRequest.HeaderId_": "_tWhy_"; agent answered "_pDecision.Decision_", escalating")
-	Quit ..EscalateDecision(pRequest, "budget exceeded: "_tWhy_"; agent answered "_pDecision.Decision)
+	Quit pDecision.Escalated("budget exceeded: "_tWhy_"; agent answered "_pDecision.Decision)
 }
 
 /// ESCALATE decision used when the agent gives no valid answer.

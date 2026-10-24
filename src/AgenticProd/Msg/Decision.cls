@@ -142,6 +142,17 @@ ClassMethod Validate(pObj As %DynamicObject) As %Status
 	Quit $$$OK
 }
 
+/// Copy of this decision turned into ESCALATE with pReason. Fix, mapping and evidence stay so
+/// the reviewer sees the proposal; Validated is cleared since the proposal is no longer trusted.
+Method Escalated(pReason As %String) As AgenticProd.Msg.Decision
+{
+	Set tCopy = ..%ConstructClone(1)
+	Set tCopy.Decision = "ESCALATE"
+	Set tCopy.Validated = 0
+	Set tCopy.Reason = pReason
+	Quit tCopy
+}
+
 /// Text from the first "{" to the last "}", or "" if there is none.
 ClassMethod ExtractJSON(pText As %String) As %String [ Internal ]
 {
