@@ -22,8 +22,9 @@ XData INSTRUCTIONS [ MimeType = text/markdown ]
 Use these steps when a local test code (OBX-3.1) has no LOINC mapping.
 
 ## Steps
-1. `get_segment` for the OBX named in the error. Note OBX-3.1 (local code), OBX-3.2 (test
-   name), OBX-6 (units) and the specimen if the message gives one (serum, blood, urine).
+1. `get_failed_message`. From it note OBX-3.1 (local code), OBX-3.2 (test name), OBX-6
+   (units) and SPM-4 (specimen type, e.g. Serum specimen, Blood specimen); if there is no
+   SPM, use OBR-15.
 2. `lookup_code` with the local code and the sender (MSH-3). If it is already mapped, the
    failure is something else: say so and `ESCALATE`.
 3. `similar_past_mappings` with the local code and the test name. An approved mapping for the
@@ -37,6 +38,8 @@ Use these steps when a local test code (OBX-3.1) has no LOINC mapping.
 - If two candidates fit equally well, do not pick one: `ESCALATE` and list both in
   `evidence`. Typical cases: troponin I vs troponin T, standard vs high-sensitivity method,
   fasting vs random, serum vs blood when the specimen is not given.
+- If the message gives no method, choose the code without a method over method-specific ones
+  (4548-4, not the HPLC code). That is not ambiguity. A method in OBX-3.2 or OBX-17 decides it.
 - If no candidate fits, `ESCALATE`.
 
 ## Deciding

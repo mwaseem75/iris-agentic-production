@@ -21,5 +21,5 @@
     "loinc": "4548-4",
     "display": "Hemoglobin A1c/Hemoglobin.total in Blood"
   },
-  "notes": "Specimen serum/plasma, units %. Unit and specimen should support the LOINC choice."
+  "notes": "Specimen blood (SPM-4), units %. Unit and specimen should support the LOINC choice. No method given, so the method-less 4548-4, not the HPLC or electrophoresis codes."
 }

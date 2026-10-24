@@ -21,5 +21,5 @@
     "loinc": "2160-0",
     "display": "Creatinine [Mass/volume] in Serum or Plasma"
   },
-  "notes": "Specimen serum/plasma, units mg/dL. Unit and specimen should support the LOINC choice."
+  "notes": "Specimen serum (SPM-4), units mg/dL. Unit and specimen should support the LOINC choice."
 }
