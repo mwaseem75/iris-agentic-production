@@ -6,3 +6,7 @@ CLAUDE_CODE_SETUP.md
 .claude/
 docs/architecture.md
 docs/TRACKER.md
+
+# Runtime message folders (synthetic data only); keep the folders
+data/*/*
+!data/*/.gitkeep

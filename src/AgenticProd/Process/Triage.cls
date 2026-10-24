@@ -29,7 +29,10 @@ Property ApprovalTarget As Ens.DataType.ConfigName;
 /// Lowest agent confidence accepted for AUTO_FIX.
 Property AutoFixThreshold As %Numeric(MAXVAL = 1, MINVAL = 0) [ InitialExpression = 0.85 ];
 
-Parameter SETTINGS = "AgentTarget:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},TargetConfigName:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},ApprovalTarget:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},AutoFixThreshold:Triage,AgentTimeout:Triage";
+/// Folder for rejected messages and their reason files.
+Property RejectPath As %String(MAXLEN = 500) [ InitialExpression = "/home/irisowner/dev/data/rejected/" ];
+
+Parameter SETTINGS = "AgentTarget:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},TargetConfigName:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},ApprovalTarget:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},AutoFixThreshold:Triage,AgentTimeout:Triage,RejectPath:Triage";
 
 /// Ask the agent, apply the action matrix, act, and log what was done in Data.DecisionLog.
 /// pResponse is the decision Triage acted on (the agent's, or its ESCALATE downgrade).
@@ -136,11 +139,42 @@ Method Dispatch(pRequest As AgenticProd.Msg.TriageRequest, pDecision As AgenticP
 	If pOutcome = "APPLIED" Quit ..SendRequestAsync(..TargetConfigName, pFixed, 0)
 	If pOutcome = "RESENT" Quit ##class(Ens.MessageHeader).ResendDuplicatedMessage(pRequest.HeaderId)
 	If pOutcome = "REJECTED" {
-		// TODO 3.8: NACK to the sender once Service.LabFile exists
 		$$$LOGWARNING("Triage rejected header "_pRequest.HeaderId_" ("_pDecision.ErrorClass_"): "_pDecision.Reason)
-		Quit $$$OK
+		Quit ..WriteRejected(pRequest, pDecision)
 	}
 	Quit ..SendRequestAsync(..ApprovalTarget, pDecision, 0)
+}
+
+/// Write the rejected message and a reason file into RejectPath for the sender to pick up:
+/// rejected_<headerId>.msg and rejected_<headerId>.reason.txt.
+Method WriteRejected(pRequest As AgenticProd.Msg.TriageRequest, pDecision As AgenticProd.Msg.Decision) As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		$$$ThrowOnError(##class(AgenticProd.Tools.Base).OpenBody(pRequest.HeaderId, .tBody))
+		If '##class(%File).DirectoryExists(..RejectPath) Do ##class(%File).CreateDirectoryChain(..RejectPath)
+		Set tBase = ##class(%File).NormalizeFilename("rejected_"_pRequest.HeaderId, ..RejectPath)
+		// HL7, X12 and the other EDI documents serialise themselves; other formats get a pointer
+		Set tText = $SELECT(tBody.%Extends("EnsLib.EDI.Document"): tBody.OutputToString(), 1: $CLASSNAME(tBody)_" "_tBody.%Id())
+		$$$ThrowOnError(..WriteFile(tBase_".msg", tText))
+		Set tNL = $CHAR(10)
+		Set tReason = "Header: "_pRequest.HeaderId_tNL_"Source: "_pRequest.Source_tNL
+			_"Error class: "_pDecision.ErrorClass_tNL_"Reason: "_pDecision.Reason_tNL_"Errors: "_pRequest.ErrorText_tNL
+		$$$ThrowOnError(..WriteFile(tBase_".reason.txt", tReason))
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+ClassMethod WriteFile(pPath As %String, pText As %String) As %Status [ Internal ]
+{
+	Set tFile = ##class(%Stream.FileCharacter).%New()
+	Set tSC = tFile.LinkToFile(pPath)
+	Quit:$$$ISERR(tSC) tSC
+	Set tSC = tFile.Write(pText)
+	Quit:$$$ISERR(tSC) tSC
+	Quit tFile.%Save()
 }
 
 /// True if the failed message's body is one Triage built for an APPLIED fix (DecisionLog).
@@ -192,6 +226,9 @@ Storage Default
 </Value>
 <Value name="5">
 <Value>AutoFixThreshold</Value>
+</Value>
+<Value name="6">
+<Value>RejectPath</Value>
 </Value>
 </Data>
 <DefaultData>TriageDefaultData</DefaultData>

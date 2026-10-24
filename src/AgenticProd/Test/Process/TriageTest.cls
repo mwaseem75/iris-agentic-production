@@ -82,6 +82,13 @@ Method TestReject13And01()
 	Do $$$AssertStatusOK(..Triage().Plan(tRequest, tDecision, .tFinal, .tOutcome))
 	Do $$$AssertEquals(tOutcome, "REJECTED")
 	Do $$$AssertEquals(tFinal.Decision, "REJECT")
+	Set tTriage = ..Triage()
+	Do $$$AssertStatusOK(tTriage.WriteRejected(tRequest, tFinal))
+	Set tBase = ##class(%File).NormalizeFilename("rejected_"_tRequest.HeaderId, tTriage.RejectPath)
+	For tExt = ".msg", ".reason.txt" {
+		Do $$$AssertTrue(##class(%File).Exists(tBase_tExt), "wrote "_tBase_tExt)
+		Do ##class(%File).Delete(tBase_tExt)
+	}
 
 	Do $$$AssertStatusOK(..Case("01", "UNMAPPED_CODE", .tRequest))
 	Do $$$AssertStatusOK(..Triage().Plan(tRequest, ..Stub("REJECT", "UNMAPPED_CODE", 0.9, 0), .tFinal, .tOutcome))
