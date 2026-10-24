@@ -7,6 +7,9 @@ Parameter AGENTROLE = "AgenticProd_Agent";
 
 Parameter AGENTUSER = "agentic_agent";
 
+/// Synthetic-use LOINC subset (see kb/LOINC_NOTICE.md).
+Parameter LOINCFILE = "/home/irisowner/dev/kb/loinc_subset.csv";
+
 /// Database resources only cover what an interop job needs to store messages and read code.
 /// Data access inside IRISAPP_DATA is still all-or-nothing for globals; SQL grants narrow it
 /// for %SQL.Statement, which is the only way agent tools may query.
@@ -18,6 +21,7 @@ ClassMethod Run() As %Status
 	Try {
 		$$$ThrowOnError(##class(AgenticProd.Data.PriceTable).Seed())
 		$$$ThrowOnError(..SeedLabCodeMap())
+		$$$ThrowOnError(..BuildLoincKB())
 		$$$ThrowOnError(..AgentSecurity())
 	} Catch ex {
 		Set tSC = ex.AsStatus()
@@ -44,6 +48,63 @@ ClassMethod SeedLabCodeMap() As %Status
 	Quit tSC
 }
 
+/// Knowledge base search_loinc: one FastEmbed (local) vector row per line of LOINCFILE, text
+/// "long_name | component | system | scale | units". ReindexDocument keys each row by its LOINC
+/// code, so running this again replaces rows instead of adding copies.
+ClassMethod BuildLoincKB(Output pCount As %Integer) As %Status
+{
+	Set pCount = 0
+	Set tSC = $$$OK
+	Try {
+		Set tEmb = ##class(%AI.RAG.Embedding.FastEmbed).Create()
+		Set tVS = ##class(%AI.RAG.VectorStore.IRIS).%New()
+		Set tVS.TableName = ##class(AgenticProd.Tools.Mapping).#LOINCTABLE
+		Set tVS.Dimensions = tEmb.Dimensions
+		Set tVS.ModelName = tEmb.ModelName
+		// Promoted so search_loinc returns them as fields, not parsed out of the text
+		$$$ThrowOnError(tVS.Build(##class(AgenticProd.Tools.Mapping).LoincFields()))
+		Set tKB = ##class(%AI.RAG.KnowledgeBase).%New("search_loinc", "LOINC subset for lab code mapping")
+		$$$ThrowOnError(tKB.Build(tEmb, tVS))
+
+		Set tFile = ##class(%Stream.FileCharacter).%New()
+		$$$ThrowOnError(tFile.LinkToFile(..#LOINCFILE))
+		Do tFile.ReadLine()
+		While 'tFile.AtEnd {
+			Set tLine = $ZSTRIP(tFile.ReadLine(), ">", $CHAR(13))
+			Continue:tLine=""
+			Set tRow = ..CSVRow(tLine)
+			Continue:$LISTLENGTH(tRow)<6
+			Set $LISTBUILD(tLoinc, tName, tComponent, tSystem, tScale, tUnits) = tRow
+			Do tKB.ReindexDocument(tLoinc, tName_" | "_tComponent_" | "_tSystem_" | "_tScale_" | "_tUnits, {"loinc":(tLoinc), "system":(tSystem), "units":(tUnits)})
+			Set pCount = pCount + 1
+		}
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// One CSV line as a $LIST; double-quoted fields may hold commas and "" for a quote.
+ClassMethod CSVRow(pLine As %String) As %List [ Internal ]
+{
+	Set tRow = "", tField = "", tQuoted = 0
+	For i = 1:1:$LENGTH(pLine) {
+		Set c = $EXTRACT(pLine, i)
+		If tQuoted {
+			If c '= """" { Set tField = tField_c }
+			ElseIf $EXTRACT(pLine, i + 1) = """" { Set tField = tField_"""", i = i + 1 }
+			Else { Set tQuoted = 0 }
+		} ElseIf c = """" {
+			Set tQuoted = 1
+		} ElseIf c = "," {
+			Set tRow = tRow_$LISTBUILD(tField), tField = ""
+		} Else {
+			Set tField = tField_c
+		}
+	}
+	Quit tRow_$LISTBUILD(tField)
+}
+
 /// Create or update the agent role and user, then the SQL grants:
 /// SELECT on the schemas tools read, INSERT only on the three audit/usage tables, nothing else.
 ClassMethod AgentSecurity() As %Status
@@ -55,6 +116,7 @@ ClassMethod AgentSecurity() As %Status
 		For tSql = "GRANT SELECT ON SCHEMA AgenticProd_Data TO "_..#AGENTROLE,
 			"GRANT SELECT ON SCHEMA Ens TO "_..#AGENTROLE,
 			"GRANT SELECT ON SCHEMA Ens_Util TO "_..#AGENTROLE,
+			"GRANT SELECT ON SCHEMA AgenticProd_KB TO "_..#AGENTROLE,
 			"GRANT INSERT ON AgenticProd_Data.ToolCall, AgenticProd_Data.Usage, AgenticProd_Data.DecisionLog TO "_..#AGENTROLE {
 			Set tRS = ##class(%SQL.Statement).%ExecDirect(, tSql)
 			If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message_" ("_tSql_")"))

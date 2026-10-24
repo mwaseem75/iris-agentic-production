@@ -40,6 +40,9 @@ Parameter SETTINGS = "Model:Agent,MaxIterations:Agent,MaxToolCalls:Agent,MaxToke
 /// The switch lasts for the job's life, so this item must keep its own pool (no shared jobs).
 Method OnInit() As %Status
 {
+	// Needs CREATE TABLE rights, so before the switch; without it only search_loinc fails
+	Set tSC = ##class(AgenticProd.Tools.Mapping).Prepare()
+	If $$$ISERR(tSC) $$$LOGWARNING("search_loinc not available: "_$SYSTEM.Status.GetErrorText(tSC))
 	If ..RunAsUser = "" {
 		$$$LOGWARNING("RunAsUser is empty: agent job keeps "_$USERNAME_" ("_$ROLES_")")
 		Quit $$$OK

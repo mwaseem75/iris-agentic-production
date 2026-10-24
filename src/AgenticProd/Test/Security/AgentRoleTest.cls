@@ -12,7 +12,8 @@ Method TestAgentSqlIsSelectOnlyPlusAuditInserts()
 		Do $$$AssertFailure("could not start the probe job")
 		Quit
 	}
-	For i = 1:1:50 Quit:$DATA(^AgenticProd.Test.RoleProbe("done"))  Hang 0.2
+	// FastEmbed loads its model in the new process, so the probe can take several seconds
+	For i = 1:1:150 Quit:$DATA(^AgenticProd.Test.RoleProbe("done"))  Hang 0.2
 	Do $$$AssertTrue($DATA(^AgenticProd.Test.RoleProbe("done")), "probe job finished")
 	Do $$$AssertEquals($GET(^AgenticProd.Test.RoleProbe("login")), 1, "job switched to "_tUser)
 	Do $$$AssertEquals($GET(^AgenticProd.Test.RoleProbe("user")), tUser)
@@ -23,12 +24,17 @@ Method TestAgentSqlIsSelectOnlyPlusAuditInserts()
 	Do $$$AssertEquals($GET(^AgenticProd.Test.RoleProbe("update")), -99, "UPDATE refused (SQLCODE -99)")
 	Do $$$AssertEquals($GET(^AgenticProd.Test.RoleProbe("delete")), -99, "DELETE refused (SQLCODE -99)")
 	Do $$$AssertEquals($GET(^AgenticProd.Test.RoleProbe("insertOther")), -99, "INSERT on a non-audit table refused")
+	// Mapping tools read the KB table and the lookup table; both need the role's SELECT grants
+	Do $$$AssertTrue($GET(^AgenticProd.Test.RoleProbe("search")) [ "2345-7", "search_loinc works as the agent: "_$EXTRACT($GET(^AgenticProd.Test.RoleProbe("search")), 1, 200))
+	Do $$$AssertTrue($GET(^AgenticProd.Test.RoleProbe("lookup")) [ "2951-2", "lookup_code works as the agent: "_$GET(^AgenticProd.Test.RoleProbe("lookup")))
 }
 
 /// Child job body. Uses %SQL.Statement, the same path agent tools must use; embedded SQL
 /// skips privilege checks, so it would prove nothing here.
 ClassMethod Probe(pUser As %String)
 {
+	// Same order as Operation.Agent.OnInit
+	Do ##class(AgenticProd.Tools.Mapping).Prepare()
 	Set ^AgenticProd.Test.RoleProbe("login") = $SYSTEM.Security.Login(pUser)
 	Set ^AgenticProd.Test.RoleProbe("user") = $USERNAME
 	Set ^AgenticProd.Test.RoleProbe("roles") = $ROLES
@@ -44,6 +50,13 @@ ClassMethod Probe(pUser As %String)
 		} Catch ex {
 			Set ^AgenticProd.Test.RoleProbe(tKey) = "exception: "_ex.DisplayString()
 		}
+	}
+	Try {
+		Set tTools = ##class(AgenticProd.Tools.Mapping).%New()
+		Set ^AgenticProd.Test.RoleProbe("search") = tTools.SearchLoinc("Glucose", "serum", "mg/dL")
+		Set ^AgenticProd.Test.RoleProbe("lookup") = tTools.LookupCode("NA-S", "LAB_SIM")
+	} Catch ex {
+		Set ^AgenticProd.Test.RoleProbe("search") = "exception: "_ex.DisplayString()
 	}
 	Set ^AgenticProd.Test.RoleProbe("done") = 1
 }
