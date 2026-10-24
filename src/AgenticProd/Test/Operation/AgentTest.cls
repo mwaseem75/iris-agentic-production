@@ -129,6 +129,31 @@ Method TestMaxIterationsGetsOneFinalTurn()
 	Do ..DeleteSession(tDecision)
 }
 
+/// MAP_CODE without evidence uses the one retry; still none after it, the decision stays, marked.
+Method TestMapCodeNeedsEvidence()
+{
+	Set tBare = "{""decision"":""MAP_CODE"",""error_class"":""UNMAPPED_CODE"",""confidence"":0.9,""validated"":false,""reason"":""r"",""mapping"":{""local_code"":""GLU-01"",""loinc"":""2345-7""}}"
+	Set tWith = $EXTRACT(tBare, 1, *-1)_",""evidence"":[""search_loinc: 2345-7 Glucose SerPl""]}"
+	Set tOp = ..StubOp(tBare, tWith)
+	Do $$$AssertStatusOK(tOp.Triage(..StubRequest(), .tDecision))
+	Do $$$AssertEquals(tOp.Calls, 2, "retry asked for evidence")
+	Do $$$AssertEquals(tDecision.Evidence.GetAt(1), "search_loinc: 2345-7 Glucose SerPl")
+	Do ..DeleteSession(tDecision)
+
+	Set tOp = ..StubOp(tBare, tBare)
+	Do $$$AssertStatusOK(tOp.Triage(..StubRequest(), .tDecision))
+	Do $$$AssertEquals(tOp.Calls, 2)
+	Do $$$AssertEquals(tDecision.Decision, "MAP_CODE", "kept after the retry")
+	Do $$$AssertEquals(tDecision.Evidence.GetAt(1), "agent gave no evidence")
+	Do ..DeleteSession(tDecision)
+
+	// ESCALATE needs no evidence, so no retry
+	Set tOp = ..StubOp("{""decision"":""ESCALATE"",""error_class"":""OTHER"",""confidence"":0.3,""validated"":false,""reason"":""r""}")
+	Do $$$AssertStatusOK(tOp.Triage(..StubRequest(), .tDecision))
+	Do $$$AssertEquals(tOp.Calls, 1)
+	Do ..DeleteSession(tDecision)
+}
+
 Method StubOp(pReplies... As %String) As AgenticProd.Test.Operation.StubAgentOp
 {
 	Set tOp = ##class(AgenticProd.Test.Operation.StubAgentOp).%New("TestAgentOp")

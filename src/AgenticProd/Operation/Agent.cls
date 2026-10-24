@@ -124,20 +124,36 @@ Method Converse(pAgent As %AI.Agent, pSession As %AI.Agent.Session, pRequest As 
 		Quit:tError'="" ..EscalateDecision(pRequest, "agent gave no decision after its tool budget: "_tError)
 		Set tSC = ##class(AgenticProd.Msg.Decision).FromAgentText(tText, .tDecision)
 		Quit:$$$ISERR(tSC) ..EscalateDecision(pRequest, "agent reply after its tool budget broke the decision contract: "_$SYSTEM.Status.GetErrorText(tSC))
-		Quit tDecision
+		Quit ..MarkNoEvidence(tDecision)
 	}
 	Quit:tError'="" ..EscalateDecision(pRequest, "agent call failed: "_tError)
 
 	Set tSC = ##class(AgenticProd.Msg.Decision).FromAgentText(tText, .tDecision)
+	Set:$$$ISOK(tSC) tSC = ..EvidenceCheck(tDecision)
 	Quit:$$$ISOK(tSC) tDecision
 	Set tContract = $SYSTEM.Status.GetErrorText(tSC)
 	$$$LOGWARNING("Agent reply broke the decision contract, retrying once: "_tContract)
 	Set tText = ..Ask(pAgent, pSession, "Your answer was rejected: "_tContract_". Reply again with the decision JSON object only.", .tError)
 	Quit:tError'="" ..EscalateDecision(pRequest, "agent call failed on the contract retry: "_tError)
 	Set tSC = ##class(AgenticProd.Msg.Decision).FromAgentText(tText, .tDecision)
-	Quit:$$$ISOK(tSC) tDecision
+	Quit:$$$ISOK(tSC) ..MarkNoEvidence(tDecision)
 	$$$LOGWARNING("Agent reply broke the decision contract twice, escalating: "_$SYSTEM.Status.GetErrorText(tSC))
 	Quit ..EscalateDecision(pRequest, "Agent reply broke the decision contract twice: "_$SYSTEM.Status.GetErrorText(tSC))
+}
+
+/// MAP_CODE and AUTO_FIX need evidence. Not a contract rule in Decision.Validate: after the
+/// retry the decision is kept (see MarkNoEvidence), since Triage and the reviewer still decide.
+ClassMethod EvidenceCheck(pDecision As AgenticProd.Msg.Decision) As %Status
+{
+	If (",MAP_CODE,AUTO_FIX," '[ (","_pDecision.Decision_",")) || pDecision.Evidence.Count() Quit $$$OK
+	Quit ##class(AgenticProd.Msg.Decision).ContractError("evidence is required for "_pDecision.Decision)
+}
+
+/// pDecision, with evidence "agent gave no evidence" when EvidenceCheck still fails.
+ClassMethod MarkNoEvidence(pDecision As AgenticProd.Msg.Decision) As AgenticProd.Msg.Decision
+{
+	Do:$$$ISERR(..EvidenceCheck(pDecision)) pDecision.Evidence.Insert("agent gave no evidence")
+	Quit pDecision
 }
 
 /// One agent turn. Returns the reply text, or "" with pError set when AI Hub throws.
