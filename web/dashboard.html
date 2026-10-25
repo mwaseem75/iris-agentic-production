@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agentic Production</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --text: #1c2430; --muted: #5f6b7a; --line: #e2e6eb;
+  --accent: #2563a8; --good: #1f7a4d; --warn: #9a6400; --bad: #b42318;
+  --good-bg: #e7f4ec; --warn-bg: #fdf3e1; --bad-bg: #fdeceb; --info-bg: #e8f0fa;
+  --bar: #2563a8; --bar-bg: #e2e6eb;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12161c; --panel: #1b2129; --text: #e4e8ee; --muted: #9aa5b3; --line: #2c3540;
+    --accent: #7fb0ea; --good: #6fcf9b; --warn: #e8b55a; --bad: #f2867c;
+    --good-bg: #173326; --warn-bg: #3a2c12; --bad-bg: #3d1c1a; --info-bg: #1c2b3d;
+    --bar: #7fb0ea; --bar-bg: #2c3540;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+.wrap { max-width: 1280px; margin: 0 auto; padding: 20px 16px 48px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; margin-bottom: 18px; }
+h1 { font-size: 20px; margin: 0; font-weight: 650; }
+h2 { font-size: 15px; margin: 0 0 10px; font-weight: 650; }
+.muted { color: var(--muted); }
+.spacer { flex: 1; }
+button {
+  font: inherit; color: var(--accent); background: transparent; border: 1px solid var(--line);
+  border-radius: 6px; padding: 4px 12px; cursor: pointer;
+}
+button:hover { border-color: var(--accent); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; margin-bottom: 22px; }
+.tile { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+.tile .label { color: var(--muted); font-size: 12px; }
+.tile .value { font-size: 24px; font-weight: 650; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.tile .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.meter { height: 6px; background: var(--bar-bg); border-radius: 3px; margin-top: 8px; overflow: hidden; }
+.meter > div { height: 100%; background: var(--bar); }
+.meter.over > div { background: var(--bad); }
+section.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; margin-bottom: 22px; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { color: var(--muted); font-weight: 600; font-size: 12px; }
+td.num, th.num { text-align: right; }
+tbody tr:last-child td { border-bottom: 0; }
+tr.click { cursor: pointer; }
+tr.click:hover td, tr.sel td { background: var(--info-bg); }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.tag { display: inline-block; padding: 0 7px; border-radius: 10px; font-size: 12px; line-height: 19px; }
+.t-good { background: var(--good-bg); color: var(--good); }
+.t-warn { background: var(--warn-bg); color: var(--warn); }
+.t-bad { background: var(--bad-bg); color: var(--bad); }
+.t-info { background: var(--info-bg); color: var(--accent); }
+.err { color: var(--bad); margin: 0 0 12px; }
+.hidden { display: none; }
+@media (max-width: 600px) {
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .tile .value { font-size: 20px; }
+  .opt { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Agentic Production</h1>
+    <span class="muted">Self-healing interoperability, read-only view</span>
+    <span class="spacer"></span>
+    <span class="muted" id="updated"></span>
+    <button id="refresh" type="button">Refresh</button>
+  </header>
+  <p class="err hidden" id="error"></p>
+
+  <div class="tiles" id="tiles"></div>
+
+  <section class="panel">
+    <h2>Recent decisions <span class="muted" id="dec-count"></span></h2>
+    <div class="scroll">
+      <table>
+        <thead><tr>
+          <th>Time (UTC)</th><th>Case / header</th><th>Error class</th><th>Agent decision</th>
+          <th>Final outcome</th><th class="num">Confidence</th><th class="num">Cost</th><th class="opt">Model</th><th>Trace</th>
+        </tr></thead>
+        <tbody id="decisions"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Eval runs <span class="muted">(select a run to see each case)</span></h2>
+    <div class="scroll">
+      <table>
+        <thead><tr>
+          <th>Run</th><th>Label</th><th>Model</th><th class="num">Cases</th><th class="num">Accuracy</th>
+          <th class="num">Mapping acc.</th><th class="num">unsafe_agent</th><th class="num">unsafe_final</th>
+          <th class="num">Cost / msg</th><th class="num">p95 s</th><th class="opt">Status</th>
+        </tr></thead>
+        <tbody id="runs"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel hidden" id="detail">
+    <h2 id="detail-title"></h2>
+    <div class="scroll">
+      <table>
+        <thead><tr>
+          <th>Case</th><th>Slug</th><th>Expected</th><th>Agent</th><th>Agent LOINC</th>
+          <th>Final outcome</th><th>Result</th><th class="num">Seconds</th><th class="num">Cost</th>
+        </tr></thead>
+        <tbody id="results"></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<script>
+"use strict";
+var traceUrl = "";
+var selectedRun = null;
+
+function el(tag, text, cls) {
+  var e = document.createElement(tag);
+  if (text !== undefined && text !== null) e.textContent = text;
+  if (cls) e.className = cls;
+  return e;
+}
+function tag(text, kind) { return el("span", text, "tag t-" + kind); }
+function cell(row, content, cls) {
+  var td = el("td", null, cls);
+  if (content instanceof Node) td.appendChild(content); else td.textContent = content == null ? "" : content;
+  row.appendChild(td);
+  return td;
+}
+function money(v, digits) { return v == null ? "—" : "$" + Number(v).toFixed(digits || 4); }
+function pct(v) { return v == null ? "—" : (v * 100).toFixed(1) + "%"; }
+function num(v) { return v == null ? "—" : Number(v).toLocaleString("en-US"); }
+
+function outcomeKind(o) {
+  if (!o) return "info";
+  if (o === "APPLIED" || o === "APPROVED" || o === "RESENT" || o === "REVIEW_APPLIED") return "good";
+  if (o === "REJECTED" || o === "REVIEW_REJECTED" || o === "TIMEOUT" || o.indexOf("FAILED") >= 0 || o.indexOf("BAD") >= 0) return "bad";
+  return "warn";
+}
+
+function get(path) {
+  return fetch(path, { credentials: "same-origin", headers: { "Accept": "application/json" } }).then(function (r) {
+    // Login expired: reloading the page brings back the IRIS login form
+    if (r.status === 401) { location.reload(); throw new Error("login expired"); }
+    if (!r.ok) throw new Error(path + ": HTTP " + r.status);
+    return r.json();
+  });
+}
+
+function tile(label, value, sub, meter) {
+  var t = el("div", null, "tile");
+  t.appendChild(el("div", label, "label"));
+  t.appendChild(el("div", value, "value"));
+  if (sub) t.appendChild(el("div", sub, "sub"));
+  if (meter !== undefined) {
+    var m = el("div", null, "meter" + (meter >= 1 ? " over" : ""));
+    var f = el("div");
+    f.style.width = Math.min(100, meter * 100).toFixed(1) + "%";
+    m.appendChild(f);
+    t.appendChild(m);
+  }
+  return t;
+}
+
+function renderSummary(s) {
+  traceUrl = s.traceUrl || "";
+  var box = document.getElementById("tiles");
+  box.replaceChildren(
+    tile("Messages triaged", num(s.triaged)),
+    tile("Auto-fixed", num(s.autoFixed), "whitelisted fixes applied"),
+    tile("Sent for approval", num(s.sentForApproval), num(s.waiting) + " waiting"),
+    tile("Rejected", num(s.rejected), "returned to sender"),
+    tile("Mappings learned", num(s.mappingsLearned), "approved by a reviewer"),
+    tile("LLM cost today", money(s.costToday), num(s.agentRunsToday) + " agent runs"),
+    tile("Cost per message", money(s.costPerMessage), "all live agent runs"),
+    tile("Tokens today", num(s.tokensToday),
+      s.dailyTokenBudget ? "of " + num(s.dailyTokenBudget) + " daily budget" : "no daily budget",
+      s.dailyTokenBudget ? s.tokensToday / s.dailyTokenBudget : undefined)
+  );
+}
+
+function renderDecisions(rows) {
+  var body = document.getElementById("decisions");
+  body.replaceChildren();
+  document.getElementById("dec-count").textContent = "(last " + rows.length + ")";
+  rows.forEach(function (d) {
+    var tr = el("tr");
+    cell(tr, d.CreatedAt);
+    cell(tr, d.EvalRunId ? "EV" + d.EvalRunId + "-" + d.CaseId : "hdr " + d.HeaderId);
+    cell(tr, d.ErrorClass);
+    cell(tr, d.Decision);
+    cell(tr, tag(d.Outcome || "—", outcomeKind(d.Outcome)));
+    cell(tr, d.Confidence == null ? "—" : Number(d.Confidence).toFixed(2), "num");
+    cell(tr, money(d.CostUsd), "num");
+    cell(tr, d.Model, "opt");
+    if (d.SessionId && traceUrl) {
+      var a = el("a", "Visual Trace");
+      a.href = traceUrl + encodeURIComponent(d.SessionId);
+      a.target = "_blank"; a.rel = "noopener";
+      cell(tr, a);
+    } else cell(tr, "");
+    body.appendChild(tr);
+  });
+  if (!rows.length) { var tr = el("tr"); var td = cell(tr, "No decisions yet.", "muted"); td.colSpan = 9; body.appendChild(tr); }
+}
+
+function renderRuns(rows) {
+  var body = document.getElementById("runs");
+  body.replaceChildren();
+  rows.forEach(function (r) {
+    var tr = el("tr", null, "click" + (r.ID === selectedRun ? " sel" : ""));
+    tr.tabIndex = 0;
+    cell(tr, r.ID);
+    cell(tr, r.Label);
+    cell(tr, r.Model + (r.Mode === "replay" ? " (replay)" : ""));
+    cell(tr, num(r.CaseCount), "num");
+    cell(tr, pct(r.Accuracy), "num");
+    cell(tr, pct(r.MappingAccuracy), "num");
+    cell(tr, tag(num(r.UnsafeAgent), r.UnsafeAgent ? "warn" : "good"), "num");
+    cell(tr, tag(num(r.UnsafeFinal), r.UnsafeFinal ? "bad" : "good"), "num");
+    cell(tr, money(r.CostPerMessageUsd), "num");
+    cell(tr, r.P95Seconds == null ? "—" : r.P95Seconds, "num");
+    cell(tr, r.Status, "opt");
+    tr.addEventListener("click", function () { showRun(r); });
+    tr.addEventListener("keydown", function (e) { if (e.key === "Enter") showRun(r); });
+    body.appendChild(tr);
+  });
+  if (!rows.length) { var tr = el("tr"); var td = cell(tr, "No eval runs yet.", "muted"); td.colSpan = 11; body.appendChild(tr); }
+}
+
+function showRun(run) {
+  selectedRun = run.ID;
+  Array.prototype.forEach.call(document.querySelectorAll("#runs tr"), function (tr) {
+    tr.classList.toggle("sel", tr.firstChild && tr.firstChild.textContent === String(run.ID));
+  });
+  get("api/evalruns/" + run.ID).then(function (rows) {
+    document.getElementById("detail-title").textContent = "Run " + run.ID + ": " + (run.Label || run.Model) + " (" + rows.length + " cases)";
+    var body = document.getElementById("results");
+    body.replaceChildren();
+    rows.forEach(function (c) {
+      var tr = el("tr");
+      cell(tr, c.CaseId);
+      cell(tr, c.Slug);
+      cell(tr, c.ExpectedDecision + (c.ExpectedLoinc ? " " + c.ExpectedLoinc : ""));
+      cell(tr, c.AgentDecision || "—");
+      cell(tr, c.AgentLoinc || "");
+      cell(tr, tag(c.FinalOutcome || "—", outcomeKind(c.FinalOutcome)));
+      var res = c.UnsafeFinal ? tag("unsafe final", "bad")
+        : c.UnsafeAgent ? tag("unsafe proposal", "warn")
+        : c.Acceptable ? tag(c.Exact ? "exact" : "acceptable", "good")
+        : tag("miss", "bad");
+      var td = cell(tr, res);
+      if (c.Injection) td.appendChild(document.createTextNode(c.InjectionFlagged ? " injection flagged" : " injection"));
+      cell(tr, c.Seconds == null ? "—" : c.Seconds, "num");
+      cell(tr, money(c.CostUsd), "num");
+      body.appendChild(tr);
+    });
+    var d = document.getElementById("detail");
+    d.classList.remove("hidden");
+    d.scrollIntoView({ behavior: "smooth", block: "start" });
+  }).catch(showError);
+}
+
+function showError(e) {
+  var p = document.getElementById("error");
+  p.textContent = "Could not load data: " + e.message;
+  p.classList.remove("hidden");
+}
+
+function load() {
+  document.getElementById("error").classList.add("hidden");
+  // Summary first: it carries the Visual Trace base URL the decisions table links to
+  get("api/summary").then(function (s) {
+    renderSummary(s);
+    return Promise.all([get("api/decisions?limit=50"), get("api/evalruns")]);
+  }).then(function (res) {
+    renderDecisions(res[0]);
+    renderRuns(res[1]);
+    document.getElementById("updated").textContent = "Updated " + new Date().toLocaleTimeString();
+  }).catch(showError);
+}
+
+document.getElementById("refresh").addEventListener("click", load);
+load();
+setInterval(load, 30000);
+</script>
+</body>
+</html>

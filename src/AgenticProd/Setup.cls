@@ -15,6 +15,26 @@ Parameter REVIEWUSER = "reviewer";
 
 Parameter REVIEWPASSWORD = "Review-Demo-2026";
 
+/// Dashboard: DASHAPP serves web/ (login form, then the page), DASHAPI is UI.REST. Both need
+/// DASHRESOURCE, held by DASHROLE (given to the reviewer) and by %All, so only the reviewer
+/// and SuperUser get in. The page app does the login because %CSP.REST sends its challenge from
+/// Login(), which runs as UnknownUser and cannot load a class from IRISAPP.
+Parameter DASHAPP = "/agenticprod";
+
+Parameter DASHAPI = "/agenticprod/api";
+
+Parameter DASHDIR = "/home/irisowner/dev/web/";
+
+/// Login group shared by DASHAPP and DASHAPI, so one login covers the page and its API calls.
+Parameter DASHGROUP = "AgenticProd";
+
+Parameter DASHRESOURCE = "AgenticProd_Dashboard";
+
+Parameter DASHROLE = "AgenticProd_Dashboard";
+
+/// Read-only databases: the dashboard never writes. IRISTEMP is RW for SQL work globals.
+Parameter DASHRESOURCES = "AgenticProd_Dashboard:U,%DB_IRISAPP_DATA:R,%DB_IRISAPP_CODE:R,%DB_ENSLIB:R,%DB_HSLIB:R,%DB_HSSYS:R,%DB_IRISLIB:R,%DB_IRISSYS:R,%DB_IRISTEMP:RW";
+
 /// Synthetic-use LOINC subset (see kb/LOINC_NOTICE.md).
 Parameter LOINCFILE = "/home/irisowner/dev/kb/loinc_subset.csv";
 
@@ -32,6 +52,7 @@ ClassMethod Run() As %Status
 		$$$ThrowOnError(..BuildLoincKB())
 		$$$ThrowOnError(..AgentSecurity())
 		$$$ThrowOnError(..WorkflowSetup())
+		$$$ThrowOnError(..DashboardSetup())
 	} Catch ex {
 		Set tSC = ex.AsStatus()
 	}
@@ -169,6 +190,80 @@ ClassMethod WorkflowSetup() As %Status
 		Set tSC = ex.AsStatus()
 	}
 	Quit tSC
+}
+
+/// Web apps DASHAPP and DASHAPI, their resource and role, the reviewer in that role, and
+/// SELECT on the tables UI.REST reads. Needs WorkflowSetup first (the reviewer user).
+ClassMethod DashboardSetup() As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		$$$ThrowOnError(..CreateDashboardApp($NAMESPACE))
+		Set tSql = "GRANT SELECT ON AgenticProd_Data.DecisionLog, AgenticProd_Data.Usage, AgenticProd_Data.EvalRun, AgenticProd_Data.EvalResult TO "_..#DASHROLE
+		Set tRS = ##class(%SQL.Statement).%ExecDirect(, tSql)
+		If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message_" ("_tSql_")"))
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+ClassMethod CreateDashboardApp(pNamespace As %String) As %Status [ Private ]
+{
+	New $NAMESPACE
+	Set $NAMESPACE = "%SYS"
+	Set tSC = $$$OK
+	Try {
+		// No public permission: holding the resource is the whole access check
+		If '##class(Security.Resources).Exists(..#DASHRESOURCE) {
+			$$$ThrowOnError(##class(Security.Resources).Create(..#DASHRESOURCE, "AgenticProd dashboard", ""))
+		}
+		Set tDesc = "AgenticProd dashboard: read-only"
+		If ##class(Security.Roles).Exists(..#DASHROLE) {
+			Set tProps("Description") = tDesc, tProps("Resources") = ..#DASHRESOURCES
+			$$$ThrowOnError(##class(Security.Roles).Modify(..#DASHROLE, .tProps))
+		} Else {
+			$$$ThrowOnError(##class(Security.Roles).Create(..#DASHROLE, tDesc, ..#DASHRESOURCES))
+		}
+		$$$ThrowOnError(..AddUserRole(..#REVIEWUSER, ..#DASHROLE))
+		For tApp = ..#DASHAPP, ..#DASHAPI {
+			Kill tProps
+			Set tProps("NameSpace") = pNamespace
+			Set tProps("Resource") = ..#DASHRESOURCE
+			// 32 = password only
+			Set tProps("AutheEnabled") = 32
+			Set tProps("GroupById") = ..#DASHGROUP
+			Set tProps("Enabled") = 1
+			If tApp = ..#DASHAPP {
+				Set tProps("Description") = "AgenticProd dashboard page"
+				Set tProps("DispatchClass") = "", tProps("Path") = ..#DASHDIR, tProps("ServeFiles") = 3
+				// ServeFiles 3: static files go through the login and resource check (1 serves them to anyone)
+				// Recurse off, or /agenticprod/api would be served from DASHDIR too
+				Set tProps("Recurse") = 0
+			} Else {
+				Set tProps("Description") = "AgenticProd dashboard API (read-only)"
+				Set tProps("DispatchClass") = "AgenticProd.UI.REST"
+			}
+			If ##class(Security.Applications).Exists(tApp) {
+				$$$ThrowOnError(##class(Security.Applications).Modify(tApp, .tProps))
+			} Else {
+				$$$ThrowOnError(##class(Security.Applications).Create(tApp, .tProps))
+			}
+		}
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// Add pRole to pUser's roles, keeping the ones it has. Call from %SYS.
+ClassMethod AddUserRole(pUser As %String, pRole As %String) As %Status [ Private ]
+{
+	Set tSC = ##class(Security.Users).Get(pUser, .tProps)
+	Quit:$$$ISERR(tSC) tSC
+	Quit:$LISTFIND($LISTFROMSTRING(tProps("Roles")), pRole) $$$OK
+	Set tNew("Roles") = tProps("Roles")_$SELECT(tProps("Roles") '= "": ",", 1: "")_pRole
+	Quit ##class(Security.Users).Modify(pUser, .tNew)
 }
 
 ClassMethod CreateReviewer(pNamespace As %String) As %Status [ Private ]
