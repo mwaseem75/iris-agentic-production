@@ -158,6 +158,45 @@ Method TestSummarize()
 	Do $$$AssertEquals(tRun.P95Seconds, 19)
 }
 
+/// A stale row is scored again from the stored rows; seconds and cost stay as recorded.
+Method TestRescore()
+{
+	Set tRun = ##class(AgenticProd.Data.EvalRun).%New()
+	Set tRun.Label = "rescore test", tRun.Model = "test", tRun.Mode = "replay", tRun.Status = "DONE"
+	Do $$$AssertStatusOK(tRun.%Save())
+	Set tRunId = tRun.%Id()
+	Set tUsage = ##class(AgenticProd.Data.Usage).%New()
+	Set tUsage.HeaderId = -9202, tUsage.Model = "test", tUsage.EvalRunId = tRunId, tUsage.CaseId = "01"
+	Set tUsage.PromptTokens = 1000, tUsage.CompletionTokens = 100, tUsage.CostUsd = .001
+	Set tUsage.DecisionJSON = {"decision":"MAP_CODE", "error_class":"UNMAPPED_CODE", "mapping":{"local_code":"GLU-01", "loinc":"2345-7"}}.%ToJSON()
+	Do $$$AssertStatusOK(tUsage.%Save())
+	Set tLog = ##class(AgenticProd.Data.DecisionLog).%New()
+	Set tLog.HeaderId = -9202, tLog.Decision = "MAP_CODE", tLog.ErrorClass = "UNMAPPED_CODE", tLog.Outcome = "SENT_FOR_APPROVAL"
+	Set tLog.EvalRunId = tRunId, tLog.CaseId = "01", tLog.DecisionJSON = {"decision":"MAP_CODE", "evidence":[]}.%ToJSON()
+	Do $$$AssertStatusOK(tLog.%Save())
+	Set tRow = ##class(AgenticProd.Data.EvalResult).%New()
+	Set tRow.RunId = tRunId, tRow.CaseId = "01", (tRow.Acceptable, tRow.Exact) = 0
+	Set tRow.Seconds = 12, tRow.PromptTokens = 1000, tRow.CompletionTokens = 100, tRow.CostUsd = .001
+	Do $$$AssertStatusOK(tRow.%Save())
+
+	Do $$$AssertStatusOK(##class(AgenticProd.Eval.Runner).Rescore(tRunId))
+	Set tRow = ##class(AgenticProd.Data.EvalResult).%OpenId(tRow.%Id(), 0)
+	Do $$$AssertEquals(tRow.Acceptable, 1)
+	Do $$$AssertEquals(tRow.LoincMatch, 1)
+	Do $$$AssertEquals(tRow.Seconds, 12, "seconds kept")
+	Set tRun = ##class(AgenticProd.Data.EvalRun).%OpenId(tRunId, 0)
+	Do $$$AssertEquals(tRun.CaseCount, 1)
+	Do $$$AssertEquals(tRun.Accuracy, 1)
+	Do $$$AssertEquals(tRun.TotalCostUsd, .001)
+
+	For tTable = "Usage", "DecisionLog", "EvalResult" {
+		Set tCol = $SELECT(tTable = "EvalResult": "RunId", 1: "EvalRunId")
+		Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM AgenticProd_Data."_tTable_" WHERE "_tCol_" = ?", tRunId)
+	}
+	Do ##class(AgenticProd.Data.EvalRun).%DeleteId(tRunId)
+	Do $$$AssertStatusNotOK(##class(AgenticProd.Eval.Runner).Rescore(tRunId), "unknown run")
+}
+
 Method TestResetStateRestoresSeed()
 {
 	Set tMap = ##class(AgenticProd.Tools.Mapping).#CODEMAP

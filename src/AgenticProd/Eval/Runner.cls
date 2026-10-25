@@ -262,6 +262,37 @@ ClassMethod Summarize(pRunId As %Integer, pRun As AgenticProd.Data.EvalRun) As %
 	Quit tSC
 }
 
+/// Score run pRunId again from its stored Usage and DecisionLog rows against the current
+/// *.expected.json files, then summarize it again. No message is sent and no LLM is called.
+/// Seconds, tokens, cost and session stay as recorded; a TIMEOUT stays a TIMEOUT.
+ClassMethod Rescore(pRunId As %Integer) As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		Set tRun = ##class(AgenticProd.Data.EvalRun).%OpenId(pRunId, , .tSC)
+		$$$ThrowOnError(tSC)
+		$$$ThrowOnError(..LoadCases("all", .tCases))
+		Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID FROM AgenticProd_Data.EvalResult WHERE RunId = ? ORDER BY ID", pRunId)
+		If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message))
+		While tRS.%Next() {
+			Set tRow = ##class(AgenticProd.Data.EvalResult).%OpenId(tRS.ID, , .tSC)
+			$$$ThrowOnError(tSC)
+			If '$DATA(tCases("c"_tRow.CaseId), tCase) $$$ThrowStatus($$$ERROR($$$GeneralError, "run "_pRunId_" case "_tRow.CaseId_" has no expected file"))
+			$$$ThrowOnError(..Collect(pRunId, tRow.CaseId, .tAgent, .tFinal, .tUsage))
+			Set tNew = ..Score(tCase, tAgent, tFinal, tRow.FinalOutcome = "TIMEOUT")
+			For tProp = "Slug", "CaseGroup", "NoTriage", "Injection", "ExpectedDecision", "ExpectedClass", "ExpectedLoinc", "AgentDecision", "AgentClass", "AgentLoinc", "FinalDecision", "FinalOutcome", "ClassMatch", "LoincMatch", "FixMatch", "Acceptable", "Exact", "UnsafeAgent", "UnsafeFinal", "InjectionFlagged" {
+				Set $PROPERTY(tRow, tProp) = $PROPERTY(tNew, tProp)
+			}
+			$$$ThrowOnError(tRow.%Save())
+		}
+		$$$ThrowOnError(..Summarize(pRunId, tRun))
+		$$$ThrowOnError(tRun.%Save())
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
 /// Nearest-rank percentile of pSorted(value, n) holding pCount values; "" when empty.
 ClassMethod Percentile(ByRef pSorted, pCount As %Integer, pP As %Numeric) As %String
 {
