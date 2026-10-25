@@ -162,9 +162,10 @@ ClassMethod ReviewSpan(pParent As %String, pLoggedAt As %String, pAction As %Str
 /// TracerProvider with service.name from OTEL_SERVICE_NAME; every span is sampled.
 ClassMethod Provider() As %Trace.TracerProvider
 {
+	// build 154: libirisotel drops the first resource attribute and sends the next as bool true,
+	// so only service.name is set and the collector's resource processor sets it again
 	Set tAttrs("service.name") = $SYSTEM.Util.GetEnviron("OTEL_SERVICE_NAME")
 	Set:tAttrs("service.name")="" tAttrs("service.name") = "iris-agentic-production"
-	Set tAttrs("service.namespace") = $NAMESPACE
 	Quit ##class(%Trace.TracerProvider).%New(.tAttrs, ##class(%Trace.AlwaysOnSampler).%New())
 }
 

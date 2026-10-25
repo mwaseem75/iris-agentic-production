@@ -25,6 +25,8 @@ services:
     image: otel/opentelemetry-collector:0.111.0
     profiles: ["observability"]
     command: ["--config=/etc/otelcol/config.yaml"]
+    environment:
+      - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-iris-agentic-production}
     volumes:
       - ./otel-collector.yaml:/etc/otelcol/config.yaml:ro
     depends_on:

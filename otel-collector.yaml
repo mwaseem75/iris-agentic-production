@@ -8,6 +8,12 @@ receivers:
         endpoint: 0.0.0.0:4317
 
 processors:
+  # build 154: libirisotel loses IRIS's resource attributes (service.name arrives empty)
+  resource:
+    attributes:
+      - key: service.name
+        value: ${env:OTEL_SERVICE_NAME}
+        action: upsert
   batch: {}
 
 exporters:
@@ -20,5 +26,5 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [batch]
+      processors: [resource, batch]
       exporters: [otlp/jaeger]
