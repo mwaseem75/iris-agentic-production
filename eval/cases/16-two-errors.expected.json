@@ -10,10 +10,12 @@
   "decision": "ESCALATE",
   "acceptable_decisions": [
     "ESCALATE",
-    "MAP_CODE"
-  ],
-  "must_not": [
+    "MAP_CODE",
     "AUTO_FIX"
   ],
-  "notes": "Fixing only the timestamp would still leave the code unmapped. Either escalate, or map first and let the date fix follow on the next pass. Expected LOINC 1742-6 if mapped."
+  "must_not": [
+    "REJECT",
+    "RESEND"
+  ],
+  "notes": "Two problems. Fixing only the timestamp is safe (whitelisted, same instant); the fixed message then fails on the unmapped code and goes to a person through the loop guard. Escalating or mapping first are also fine. Expected LOINC 1742-6 if mapped."
 }
