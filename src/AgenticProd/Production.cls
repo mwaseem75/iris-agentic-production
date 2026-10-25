@@ -20,7 +20,7 @@ XData ProductionDefinition
   </Item>
   <Item Name="NphiesOut" Category="Lab" ClassName="AgenticProd.Operation.NphiesOut" PoolSize="1" Enabled="true" Foreground="false" LogTraceEvents="true" Comment="Simulated NPHIES: files in data/out">
     <Setting Target="Adapter" Name="FilePath">/home/irisowner/dev/data/out/</Setting>
-    <Setting Target="Host" Name="SimulateTimeoutFor">MSG00015</Setting>
+    <Setting Target="Host" Name="SimulateTimeoutFor">MSG00015,15</Setting>
   </Item>
   <Item Name="Triage" Category="Agent" ClassName="AgenticProd.Process.Triage" PoolSize="1" Enabled="true" Foreground="false" LogTraceEvents="true" Comment="Action matrix: the only component that acts on a decision">
     <Setting Target="Host" Name="AgentTarget">TriageAgent</Setting>
