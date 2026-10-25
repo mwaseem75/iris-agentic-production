@@ -26,7 +26,9 @@ body {
   font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 .wrap { max-width: 1280px; margin: 0 auto; padding: 20px 16px 48px; }
-header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; margin-bottom: 18px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; margin-bottom: 4px; }
+.lede { color: var(--muted); margin: 0 0 18px; max-width: 72ch; }
+.toggle { color: var(--muted); display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
 h1 { font-size: 20px; margin: 0; font-weight: 650; }
 h2 { font-size: 15px; margin: 0 0 10px; font-weight: 650; }
 .muted { color: var(--muted); }
@@ -36,7 +38,9 @@ button {
   border-radius: 6px; padding: 4px 12px; cursor: pointer;
 }
 button:hover { border-color: var(--accent); }
-.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; margin-bottom: 22px; }
+.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 22px; }
+.tile.wide { grid-column: 1 / -1; }
+.tile.over .sub { color: var(--bad); }
 .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
 .tile .label { color: var(--muted); font-size: 12px; }
 .tile .value { font-size: 24px; font-weight: 650; margin-top: 2px; font-variant-numeric: tabular-nums; }
@@ -50,6 +54,7 @@ table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nu
 th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 th { color: var(--muted); font-weight: 600; font-size: 12px; }
 td.num, th.num { text-align: right; }
+td .tag + .tag { margin-left: 4px; }
 tbody tr:last-child td { border-bottom: 0; }
 tr.click { cursor: pointer; }
 tr.click:hover td, tr.sel td { background: var(--info-bg); }
@@ -73,17 +78,19 @@ a:hover { text-decoration: underline; }
 <div class="wrap">
   <header>
     <h1>Agentic Production</h1>
-    <span class="muted">Self-healing interoperability, read-only view</span>
     <span class="spacer"></span>
+    <label class="toggle"><input type="checkbox" id="incl-eval"> Include eval runs</label>
     <span class="muted" id="updated"></span>
     <button id="refresh" type="button">Refresh</button>
   </header>
+  <p class="lede">An AI agent triages failed HL7 messages. A deterministic Triage step decides what is applied; a person approves the rest.</p>
   <p class="err hidden" id="error"></p>
 
   <div class="tiles" id="tiles"></div>
 
   <section class="panel">
     <h2>Recent decisions <span class="muted" id="dec-count"></span></h2>
+    <p class="muted hidden" id="dec-note">No live traffic yet. Tick "Include eval runs" to see eval messages.</p>
     <div class="scroll">
       <table>
         <thead><tr>
@@ -127,6 +134,8 @@ a:hover { text-decoration: underline; }
 "use strict";
 var traceUrl = "";
 var selectedRun = null;
+var includeEval = false;
+try { includeEval = localStorage.getItem("agenticprod.includeEval") === "1"; } catch (e) {}
 
 function el(tag, text, cls) {
   var e = document.createElement(tag);
@@ -161,8 +170,8 @@ function get(path) {
   });
 }
 
-function tile(label, value, sub, meter) {
-  var t = el("div", null, "tile");
+function tile(label, value, sub, meter, cls) {
+  var t = el("div", null, "tile" + (cls ? " " + cls : ""));
   t.appendChild(el("div", label, "label"));
   t.appendChild(el("div", value, "value"));
   if (sub) t.appendChild(el("div", sub, "sub"));
@@ -179,34 +188,53 @@ function tile(label, value, sub, meter) {
 function renderSummary(s) {
   traceUrl = s.traceUrl || "";
   var box = document.getElementById("tiles");
+  var budgetSub = !s.dailyTokenBudget ? "no daily budget"
+    : s.tokensPercent + "% of " + num(s.dailyTokenBudget) + " daily budget"
+      + (s.overBudget ? " — over budget: new messages go to a person" : "");
   box.replaceChildren(
     tile("Messages triaged", num(s.triaged)),
     tile("Auto-fixed", num(s.autoFixed), "whitelisted fixes applied"),
     tile("Sent for approval", num(s.sentForApproval), num(s.waiting) + " waiting"),
     tile("Rejected", num(s.rejected), "returned to sender"),
     tile("Mappings learned", num(s.mappingsLearned), "approved by a reviewer"),
+    tile("Changed by Triage", num(s.changedByTriage), "agent proposal not applied as sent"),
     tile("LLM cost today", money(s.costToday), num(s.agentRunsToday) + " agent runs"),
-    tile("Cost per message", money(s.costPerMessage), "all live agent runs"),
-    tile("Tokens today", num(s.tokensToday),
-      s.dailyTokenBudget ? "of " + num(s.dailyTokenBudget) + " daily budget" : "no daily budget",
-      s.dailyTokenBudget ? s.tokensToday / s.dailyTokenBudget : undefined)
+    tile("Cost per message", money(s.costPerMessage), (s.model || "no model") + ", " + num(s.agentRunsModel) + " runs"),
+    // Bar width is capped at 100% in tile(); the text carries the real figure
+    tile("Tokens today", num(s.tokensToday), budgetSub,
+      s.dailyTokenBudget ? s.tokensToday / s.dailyTokenBudget : undefined,
+      "wide" + (s.overBudget ? " over" : ""))
   );
+}
+
+function noAgentText(why) {
+  if (why === "agent error") return "agent gave no decision";
+  return "no agent call" + (why ? " (" + why + ")" : "");
 }
 
 function renderDecisions(rows) {
   var body = document.getElementById("decisions");
   body.replaceChildren();
-  document.getElementById("dec-count").textContent = "(last " + rows.length + ")";
+  document.getElementById("dec-count").textContent = "(" + (includeEval ? "live and eval" : "live") + ", last " + rows.length + ")";
+  document.getElementById("dec-note").classList.toggle("hidden", includeEval || rows.length > 0);
   rows.forEach(function (d) {
     var tr = el("tr");
     cell(tr, d.CreatedAt);
     cell(tr, d.EvalRunId ? "EV" + d.EvalRunId + "-" + d.CaseId : "hdr " + d.HeaderId);
     cell(tr, d.ErrorClass);
-    cell(tr, d.Decision);
-    cell(tr, tag(d.Outcome || "—", outcomeKind(d.Outcome)));
-    cell(tr, d.Confidence == null ? "—" : Number(d.Confidence).toFixed(2), "num");
-    cell(tr, money(d.CostUsd), "num");
-    cell(tr, d.Model, "opt");
+    // No agent run: the logged ESCALATE is Triage's, not the agent's
+    cell(tr, d.AgentDecision || (d.agentCalled ? d.Decision : "—"));
+    var out = cell(tr, tag(d.Outcome || "—", outcomeKind(d.Outcome)));
+    if (d.triageChanged) out.appendChild(tag("Triage changed", "info"));
+    if (d.flagged && d.flagged.length) {
+      var f = tag("flagged", "bad");
+      f.title = "InjectionGuard flagged " + d.flagged.join(", ");
+      out.appendChild(f);
+    }
+    // Without an agent run the logged confidence and cost are placeholders, not measurements
+    cell(tr, !d.agentCalled || d.Confidence == null ? "" : Number(d.Confidence).toFixed(2), "num");
+    cell(tr, d.agentCalled ? money(d.CostUsd) : "", "num");
+    cell(tr, d.agentCalled ? d.Model : noAgentText(d.noAgentReason), "opt" + (d.agentCalled ? "" : " muted"));
     if (d.SessionId && traceUrl) {
       var a = el("a", "Visual Trace");
       a.href = traceUrl + encodeURIComponent(d.SessionId);
@@ -284,9 +312,10 @@ function showError(e) {
 function load() {
   document.getElementById("error").classList.add("hidden");
   // Summary first: it carries the Visual Trace base URL the decisions table links to
-  get("api/summary").then(function (s) {
+  var ev = includeEval ? "eval=1" : "eval=0";
+  get("api/summary?" + ev).then(function (s) {
     renderSummary(s);
-    return Promise.all([get("api/decisions?limit=50"), get("api/evalruns")]);
+    return Promise.all([get("api/decisions?limit=50&" + ev), get("api/evalruns")]);
   }).then(function (res) {
     renderDecisions(res[0]);
     renderRuns(res[1]);
@@ -295,6 +324,13 @@ function load() {
 }
 
 document.getElementById("refresh").addEventListener("click", load);
+var evalBox = document.getElementById("incl-eval");
+evalBox.checked = includeEval;
+evalBox.addEventListener("change", function () {
+  includeEval = evalBox.checked;
+  try { localStorage.setItem("agenticprod.includeEval", includeEval ? "1" : "0"); } catch (e) {}
+  load();
+});
 load();
 setInterval(load, 30000);
 </script>

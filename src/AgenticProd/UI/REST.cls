@@ -33,7 +33,7 @@ ClassMethod Summary() As %Status
 {
 	Set tSC = $$$OK
 	Try {
-		Write ..SummaryData().%ToJSON()
+		Write ..SummaryData(''%request.Get("eval")).%ToJSON()
 	} Catch ex {
 		Set tSC = ex.AsStatus()
 	}
@@ -44,7 +44,7 @@ ClassMethod Decisions() As %Status
 {
 	Set tSC = $$$OK
 	Try {
-		Write ..DecisionsData(%request.Get("limit", ..#DEFAULTLIMIT)).%ToJSON()
+		Write ..DecisionsData(%request.Get("limit", ..#DEFAULTLIMIT), ''%request.Get("eval")).%ToJSON()
 	} Catch ex {
 		Set tSC = ex.AsStatus()
 	}
@@ -79,48 +79,102 @@ ClassMethod EvalResults(pRunId As %String) As %Status
 	Quit tSC
 }
 
-/// KPI tiles. Counts are over all of DecisionLog; cost and tokens are for today (UTC, like
-/// Operation.Agent's budget). costPerMessage is over every live agent run, replays excluded.
-ClassMethod SummaryData() As %DynamicObject
+/// KPI tiles. Live traffic only unless pIncludeEval (eval messages carry EvalRunId, from their
+/// EV* control ID). Counts are over all of DecisionLog; cost is for today (UTC, like
+/// Operation.Agent's budget). costPerMessage covers the agent item's current Model only,
+/// replays excluded. Tokens are the budget's own count, eval included, since the budget
+/// stops eval and live traffic alike.
+ClassMethod SummaryData(pIncludeEval As %Boolean = 0) As %DynamicObject
 {
+	Set tLogWhere = $SELECT(pIncludeEval: "", 1: " WHERE EvalRunId IS NULL")
 	Set tLog = ..Rows("SELECT COUNT(DISTINCT HeaderId) AS Triaged,"
 		_" SUM(CASE WHEN Outcome = 'APPLIED' THEN 1 ELSE 0 END) AS AutoFixed,"
 		_" SUM(CASE WHEN Outcome = 'SENT_FOR_APPROVAL' OR Outcome %STARTSWITH 'DOWNGRADED:' OR Outcome = 'APPROVED' OR Outcome %STARTSWITH 'REVIEW_' THEN 1 ELSE 0 END) AS SentForApproval,"
-		_" SUM(CASE WHEN Outcome = 'SENT_FOR_APPROVAL' OR Outcome %STARTSWITH 'DOWNGRADED:' THEN 1 ELSE 0 END) AS Waiting,"
+		_" SUM(CASE WHEN (Outcome = 'SENT_FOR_APPROVAL' OR Outcome %STARTSWITH 'DOWNGRADED:') AND ReviewedAt IS NULL THEN 1 ELSE 0 END) AS Waiting,"
 		_" SUM(CASE WHEN Outcome = 'REJECTED' THEN 1 ELSE 0 END) AS Rejected,"
 		_" SUM(CASE WHEN Outcome = 'APPROVED' THEN 1 ELSE 0 END) AS MappingsLearned"
-		_" FROM AgenticProd_Data.DecisionLog").%Get(0)
+		_" FROM AgenticProd_Data.DecisionLog"_tLogWhere).%Get(0)
+	// Triage marks its own changes DOWNGRADED:X; an ESCALATE over a different agent proposal counts too
+	Set tChanged = ..Rows("SELECT COUNT(*) AS N FROM AgenticProd_Data.DecisionLog d WHERE (d.Outcome %STARTSWITH 'DOWNGRADED:'"
+		_" OR (d.Decision = 'ESCALATE' AND EXISTS (SELECT 1 FROM AgenticProd_Data.Usage u WHERE u.HeaderId = d.HeaderId AND u.Decision <> 'ESCALATE')))"
+		_$SELECT(pIncludeEval: "", 1: " AND d.EvalRunId IS NULL")).%Get(0)
 	Set tToday = $ZDATE($PIECE($ZTIMESTAMP, ","), 3)_" 00:00:00"
 	// Replay rows repeat a recorded cost; counting them would bill the same run twice
-	Set tLive = "(Replay = 0 OR Replay IS NULL)"
+	Set tLive = "(Replay = 0 OR Replay IS NULL)"_$SELECT(pIncludeEval: "", 1: " AND EvalRunId IS NULL")
 	Set tDay = ..Rows("SELECT SUM(CostUsd) AS Cost, COUNT(*) AS Runs FROM AgenticProd_Data.Usage WHERE CreatedAt >= ? AND "_tLive, tToday).%Get(0)
-	Set tAll = ..Rows("SELECT SUM(CostUsd) AS Cost, COUNT(*) AS Runs FROM AgenticProd_Data.Usage WHERE "_tLive).%Get(0)
 	Set tItem = ##class(AgenticProd.Eval.Runner).#AGENTITEM
-	Set tBudget = ##class(Ens.Director).GetHostSettingValue(tItem, "DailyTokenBudget", .tSC)
-	// Not in the production file means the property's InitialExpression applies
-	Set:$$$ISERR(tSC)||(tBudget="") tBudget = ##class(%Dictionary.CompiledProperty).%OpenId("AgenticProd.Operation.Agent||DailyTokenBudget").InitialExpression
+	Set tModel = ..AgentSetting(tItem, "Model")
+	Set tByModel = ..Rows("SELECT SUM(CostUsd) AS Cost, COUNT(*) AS Runs FROM AgenticProd_Data.Usage WHERE Model = ? AND "_tLive, tModel).%Get(0)
+	Set tBudget = +..AgentSetting(tItem, "DailyTokenBudget")
+	Set tTokens = ##class(AgenticProd.Operation.Agent).TokensUsedToday()
 	Set tOut = {
+		"includeEval": (''pIncludeEval),
 		"triaged": (+tLog.Triaged), "autoFixed": (+tLog.AutoFixed),
 		"sentForApproval": (+tLog.SentForApproval), "waiting": (+tLog.Waiting),
 		"rejected": (+tLog.Rejected), "mappingsLearned": (+tLog.MappingsLearned),
+		"changedByTriage": (+tChanged.N),
 		"costToday": (+tDay.Cost), "agentRunsToday": (+tDay.Runs),
-		"costPerMessage": ($SELECT(tAll.Runs: $NORMALIZE(tAll.Cost / tAll.Runs, 6), 1: "")),
-		"tokensToday": (##class(AgenticProd.Operation.Agent).TokensUsedToday()),
-		"dailyTokenBudget": (+tBudget),
+		"model": (tModel), "agentRunsModel": (+tByModel.Runs),
+		"costPerMessage": ($SELECT(tByModel.Runs: $NORMALIZE(tByModel.Cost / tByModel.Runs, 6), 1: "")),
+		"tokensToday": (tTokens), "dailyTokenBudget": (tBudget),
+		"tokensPercent": ($SELECT(tBudget: $NORMALIZE(tTokens / tBudget * 100, 0), 1: "")),
+		"overBudget": (tBudget && (tTokens >= tBudget)),
 		"traceUrl": ($SYSTEM.CSP.GetDefaultApp($NAMESPACE)_"/EnsPortal.VisualTrace.zen?SESSIONID=")
 	}
-	Do:tOut.costPerMessage="" tOut.%Set("costPerMessage", "", "null")
+	Do tOut.%Set("includeEval", tOut.includeEval, "boolean"), tOut.%Set("overBudget", tOut.overBudget, "boolean")
+	For tKey = "costPerMessage", "tokensPercent" Do:tOut.%Get(tKey)="" tOut.%Set(tKey, "", "null")
 	Quit tOut
 }
 
-/// Latest pLimit DecisionLog rows, newest first. pLimit is clamped to 1..MAXLIMIT.
-ClassMethod DecisionsData(pLimit As %Integer = {..#DEFAULTLIMIT}) As %DynamicArray
+/// Latest pLimit DecisionLog rows, newest first; live traffic only unless pIncludeEval.
+/// pLimit is clamped to 1..MAXLIMIT. Besides the log columns each row has AgentDecision (what the
+/// agent sent Triage), triageChanged, flagged (InjectionGuard field refs, [] when none),
+/// agentCalled and, when no agent run is recorded, noAgentReason: loop guard, budget, replay,
+/// agent error, or "" when the reason is not known.
+ClassMethod DecisionsData(pLimit As %Integer = {..#DEFAULTLIMIT}, pIncludeEval As %Boolean = 0) As %DynamicArray
 {
 	Set pLimit = pLimit \ 1
 	Set:pLimit<1 pLimit = ..#DEFAULTLIMIT
 	Set:pLimit>..#MAXLIMIT pLimit = ..#MAXLIMIT
-	Quit ..Rows("SELECT TOP ? ID, CreatedAt, EvalRunId, CaseId, HeaderId, SessionId, Source, ErrorClass, Decision, Outcome, Confidence, CostUsd, Model"
-		_" FROM AgenticProd_Data.DecisionLog ORDER BY ID DESC", pLimit)
+	Set tRows = ..Rows("SELECT TOP ? d.ID, d.CreatedAt, d.EvalRunId, d.CaseId, d.HeaderId, d.SessionId, d.Source, d.ErrorClass, d.Decision, d.Outcome, d.Confidence, d.CostUsd, d.Model, d.Reason, d.DecisionJSON,"
+		_" (SELECT MAX(u.Decision) FROM AgenticProd_Data.Usage u WHERE u.HeaderId = d.HeaderId) AS AgentDecision,"
+		_" (SELECT COUNT(*) FROM AgenticProd_Data.Usage u WHERE u.HeaderId = d.HeaderId AND (u.Replay = 0 OR u.Replay IS NULL)) AS AgentCalls,"
+		_" (SELECT COUNT(*) FROM AgenticProd_Data.Usage u WHERE u.HeaderId = d.HeaderId AND u.Replay = 1) AS Replays"
+		_" FROM AgenticProd_Data.DecisionLog d"_$SELECT(pIncludeEval: "", 1: " WHERE d.EvalRunId IS NULL")_" ORDER BY d.ID DESC", pLimit)
+	Set tIter = tRows.%GetIterator()
+	While tIter.%GetNext(, .tRow) {
+		Set tFlags = []
+		Set tDecision = $SELECT(tRow.DecisionJSON '= "": ##class(%DynamicObject).%FromJSON(tRow.DecisionJSON), 1: {})
+		If $IsObject(tDecision.evidence) {
+			// Triage.Plan adds "suspicious instruction in <ref>: <matched text>" per InjectionGuard flag
+			Set tEv = tDecision.evidence.%GetIterator()
+			While tEv.%GetNext(, .tLine) {
+				Do:$EXTRACT(tLine, 1, 26)="suspicious instruction in " tFlags.%Push($PIECE($EXTRACT(tLine, 27, *), ": "))
+			}
+		}
+		Do tRow.%Set("flagged", tFlags)
+		Set tChanged = ($EXTRACT(tRow.Outcome, 1, 11) = "DOWNGRADED:") || ((tRow.Decision = "ESCALATE") && (tRow.AgentDecision '= "") && (tRow.AgentDecision '= "ESCALATE"))
+		Do tRow.%Set("triageChanged", tChanged, "boolean")
+		Do tRow.%Set("agentCalled", tRow.AgentCalls > 0, "boolean")
+		If tRow.AgentCalls = 0 {
+			// "agent error": runs from before failed runs got a Usage row (Operation.Agent)
+			Set tWhy = $SELECT(tRow.Replays: "replay", tRow.Reason [ "agent not called a second time": "loop guard",
+				tRow.Reason [ "Daily token budget": "budget", tRow.Reason [ "agent gave no decision": "agent error", 1: "")
+			Do tRow.%Set("noAgentReason", tWhy)
+		}
+		For tKey = "DecisionJSON", "Reason", "AgentCalls", "Replays" Do tRow.%Remove(tKey)
+	}
+	Quit tRows
+}
+
+/// Agent production item setting; the property's InitialExpression when the production file
+/// does not set it.
+ClassMethod AgentSetting(pItem As %String, pName As %String) As %String [ Internal ]
+{
+	Set tValue = ##class(Ens.Director).GetHostSettingValue(pItem, pName, .tSC)
+	Quit:$$$ISOK(tSC)&&(tValue'="") tValue
+	Set tProp = ##class(%Dictionary.CompiledProperty).%OpenId("AgenticProd.Operation.Agent||"_pName)
+	Quit $SELECT($IsObject(tProp): $ZSTRIP(tProp.InitialExpression, "<>", """"), 1: "")
 }
 
 ClassMethod EvalRunsData() As %DynamicArray

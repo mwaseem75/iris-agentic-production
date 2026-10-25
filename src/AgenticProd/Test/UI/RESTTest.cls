@@ -8,13 +8,18 @@ Parameter RUNID = 999903;
 
 Method TestSummaryCountsOutcomes()
 {
-	Set tBefore = ##class(AgenticProd.UI.REST).SummaryData()
+	Set tBefore = ##class(AgenticProd.UI.REST).SummaryData(1)
+	Set tLiveBefore = ##class(AgenticProd.UI.REST).SummaryData(0)
 	Do $$$AssertStatusOK(..AddLogRow(-9301, "AUTO_FIX", "APPLIED"))
 	Do $$$AssertStatusOK(..AddLogRow(-9302, "MAP_CODE", "SENT_FOR_APPROVAL"))
 	Do $$$AssertStatusOK(..AddLogRow(-9303, "ESCALATE", "DOWNGRADED:AUTO_FIX"))
 	Do $$$AssertStatusOK(..AddLogRow(-9304, "MAP_CODE", "APPROVED"))
 	Do $$$AssertStatusOK(..AddLogRow(-9305, "REJECT", "REJECTED"))
-	Set tAfter = ##class(AgenticProd.UI.REST).SummaryData()
+	Set tAfter = ##class(AgenticProd.UI.REST).SummaryData(1)
+	Set tLiveAfter = ##class(AgenticProd.UI.REST).SummaryData(0)
+	Do $$$AssertEquals(tLiveAfter.triaged, tLiveBefore.triaged, "eval rows stay out of the live KPIs")
+	Do $$$AssertEquals(tLiveAfter.includeEval, 0)
+	Do $$$AssertEquals(tAfter.changedByTriage - tBefore.changedByTriage, 1, "the DOWNGRADED row")
 	Do $$$AssertEquals(tAfter.triaged - tBefore.triaged, 5)
 	Do $$$AssertEquals(tAfter.autoFixed - tBefore.autoFixed, 1)
 	Do $$$AssertEquals(tAfter.sentForApproval - tBefore.sentForApproval, 3, "pending, downgraded and approved all went to a person")
@@ -23,14 +28,65 @@ Method TestSummaryCountsOutcomes()
 	Do $$$AssertEquals(tAfter.mappingsLearned - tBefore.mappingsLearned, 1)
 	Do $$$AssertEquals(tAfter.tokensToday, ##class(AgenticProd.Operation.Agent).TokensUsedToday(), "same count the budget uses")
 	Do $$$AssertTrue(tAfter.dailyTokenBudget > 0, "budget from the agent item: "_tAfter.dailyTokenBudget)
+	Do $$$AssertEquals(tAfter.tokensPercent, $NORMALIZE(tAfter.tokensToday / tAfter.dailyTokenBudget * 100, 0))
+	Do $$$AssertEquals(tAfter.overBudget, tAfter.tokensToday >= tAfter.dailyTokenBudget)
 	Do $$$AssertTrue(tAfter.traceUrl [ "EnsPortal.VisualTrace.zen?SESSIONID=", tAfter.traceUrl)
+}
+
+/// Cost per message is for the agent item's current model only, live runs only.
+Method TestCostPerMessageCurrentModel()
+{
+	Set tBefore = ##class(AgenticProd.UI.REST).SummaryData(0)
+	Set tAllBefore = ##class(AgenticProd.UI.REST).SummaryData(1)
+	Do $$$AssertTrue(tBefore.model '= "", "model named: "_tBefore.model)
+	Do $$$AssertStatusOK(..AddUsageRow(-9331, "MAP_CODE", tBefore.model, 0, ""))
+	Do $$$AssertStatusOK(..AddUsageRow(-9332, "MAP_CODE", "some-other-model", 0, ""))
+	Do $$$AssertStatusOK(..AddUsageRow(-9333, "MAP_CODE", tBefore.model, 1, ""))
+	Do $$$AssertStatusOK(..AddUsageRow(-9334, "MAP_CODE", tBefore.model, 0, ..#RUNID))
+	Set tAfter = ##class(AgenticProd.UI.REST).SummaryData(0)
+	Do $$$AssertEquals(tAfter.agentRunsModel - tBefore.agentRunsModel, 1, "other model, replay and eval rows left out")
+	Do $$$AssertEquals(##class(AgenticProd.UI.REST).SummaryData(1).agentRunsModel - tAllBefore.agentRunsModel, 2, "eval row counted with eval included")
+}
+
+/// Live rows: Triage changes, InjectionGuard flags and the reason when no agent ran.
+Method TestDecisionTags()
+{
+	Set tChangedBefore = ##class(AgenticProd.UI.REST).SummaryData(0).changedByTriage
+	Set tFlagged = {"decision":"ESCALATE","evidence":["fix reformats OBX-14","suspicious instruction in OBX(1):5: ignore previous"]}
+	Do $$$AssertStatusOK(..AddLogRow(-9321, "ESCALATE", "DOWNGRADED:AUTO_FIX", "", tFlagged.%ToJSON(), "downgraded from AUTO_FIX"))
+	Do $$$AssertStatusOK(..AddUsageRow(-9321, "AUTO_FIX", "test", 0, ""))
+	Do $$$AssertStatusOK(..AddLogRow(-9322, "ESCALATE", "SENT_FOR_APPROVAL", "", "", "message built by a Triage AUTO_FIX failed again; agent not called a second time"))
+	Do $$$AssertStatusOK(..AddLogRow(-9323, "ESCALATE", "SENT_FOR_APPROVAL", "", "", "Daily token budget used up (10 of 1 tokens); agent not called"))
+	Do $$$AssertStatusOK(..AddLogRow(-9324, "MAP_CODE", "SENT_FOR_APPROVAL", "", "", "replayed"))
+	Do $$$AssertStatusOK(..AddUsageRow(-9324, "MAP_CODE", "test", 1, ""))
+	Do $$$AssertStatusOK(..AddLogRow(-9325, "ESCALATE", "SENT_FOR_APPROVAL", "", "", "over the per-message limit"))
+	Do $$$AssertStatusOK(..AddUsageRow(-9325, "MAP_CODE", "test", 0, ""))
+	Do $$$AssertStatusOK(..AddLogRow(-9326, "AUTO_FIX", "APPLIED"))
+	Set tRows = ##class(AgenticProd.UI.REST).DecisionsData(6, 0)
+	For i = 0:1:tRows.%Size() - 1 Set tRow = tRows.%Get(i), tBy(tRow.HeaderId) = tRow
+	Do $$$AssertTrue('$DATA(tBy(-9326)), "eval row left out of live decisions")
+	Do $$$AssertEquals(tBy(-9321).triageChanged, 1)
+	Do $$$AssertEquals(tBy(-9321).AgentDecision, "AUTO_FIX")
+	Do $$$AssertEquals(tBy(-9321).flagged.%ToJSON(), "[""OBX(1):5""]")
+	Do $$$AssertEquals(tBy(-9321).agentCalled, 1)
+	Do $$$AssertEquals(tBy(-9321).%IsDefined("DecisionJSON"), 0, "raw JSON not sent")
+	Do $$$AssertEquals(tBy(-9322).agentCalled, 0)
+	Do $$$AssertEquals(tBy(-9322).noAgentReason, "loop guard")
+	Do $$$AssertEquals(tBy(-9322).triageChanged, 0)
+	Do $$$AssertEquals(tBy(-9323).noAgentReason, "budget")
+	Do $$$AssertEquals(tBy(-9324).noAgentReason, "replay")
+	Do $$$AssertEquals(tBy(-9325).triageChanged, 1, "ESCALATE over an agent MAP_CODE")
+	Do $$$AssertEquals(tBy(-9325).flagged.%Size(), 0)
+	Do $$$AssertEquals(##class(AgenticProd.UI.REST).SummaryData(0).changedByTriage - tChangedBefore, 2)
+	Set tAll = ##class(AgenticProd.UI.REST).DecisionsData(7, 1)
+	Do $$$AssertEquals(tAll.%Get(0).HeaderId, -9326, "eval row back with eval included")
 }
 
 Method TestDecisionsNewestFirstAndClamped()
 {
 	Do $$$AssertStatusOK(..AddLogRow(-9311, "AUTO_FIX", "APPLIED"))
 	Do $$$AssertStatusOK(..AddLogRow(-9312, "REJECT", "REJECTED"))
-	Set tRows = ##class(AgenticProd.UI.REST).DecisionsData(2)
+	Set tRows = ##class(AgenticProd.UI.REST).DecisionsData(2, 1)
 	Do $$$AssertEquals(tRows.%Size(), 2)
 	Do $$$AssertEquals(tRows.%Get(0).HeaderId, -9312, "newest first")
 	Do $$$AssertEquals(tRows.%Get(0).EvalRunId, ..#RUNID)
@@ -131,17 +187,30 @@ Method Get(pPath As %String, pUser As %String = "", pPass As %String = "") As %N
 	Quit tReq
 }
 
-Method AddLogRow(pHeader As %Integer, pDecision As %String, pOutcome As %String) As %Status
+/// Stub DecisionLog row; an eval row (RUNID) unless pEvalRunId is "".
+Method AddLogRow(pHeader As %Integer, pDecision As %String, pOutcome As %String, pEvalRunId As %String = {..#RUNID}, pJSON As %String = "", pReason As %String = "") As %Status
 {
 	Set tRow = ##class(AgenticProd.Data.DecisionLog).%New()
 	Set tRow.HeaderId = pHeader, tRow.Decision = pDecision, tRow.ErrorClass = "OTHER"
-	Set tRow.EvalRunId = ..#RUNID, tRow.CaseId = "T", tRow.Outcome = pOutcome, tRow.Confidence = .5
+	Set tRow.EvalRunId = pEvalRunId, tRow.CaseId = $SELECT(pEvalRunId '= "": "T", 1: ""), tRow.Outcome = pOutcome, tRow.Confidence = .5
+	Set tRow.DecisionJSON = pJSON, tRow.Reason = pReason
+	Quit tRow.%Save()
+}
+
+/// Stub Usage row with no tokens, so TokensUsedToday is unchanged.
+Method AddUsageRow(pHeader As %Integer, pDecision As %String, pModel As %String, pReplay As %Boolean, pEvalRunId As %String) As %Status
+{
+	Set tRow = ##class(AgenticProd.Data.Usage).%New()
+	Set tRow.HeaderId = pHeader, tRow.Decision = pDecision, tRow.Model = pModel, tRow.Replay = pReplay
+	Set tRow.EvalRunId = pEvalRunId, tRow.PromptTokens = 0, tRow.CompletionTokens = 0, tRow.CostUsd = .001
 	Quit tRow.%Save()
 }
 
 Method OnAfterOneTest() As %Status
 {
-	Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM AgenticProd_Data.DecisionLog WHERE EvalRunId = ?", ..#RUNID)
+	For tTable = "DecisionLog", "Usage" {
+		Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM AgenticProd_Data."_tTable_" WHERE EvalRunId = ? OR HeaderId BETWEEN -9399 AND -9300", ..#RUNID)
+	}
 	Quit $$$OK
 }
 
