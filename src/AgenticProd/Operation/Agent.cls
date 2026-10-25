@@ -16,7 +16,7 @@ Parameter FINALANSWER = "Tool budget used up. Answer now with the decision JSON 
 Property Model As %String(MAXLEN = 100) [ InitialExpression = "gpt-5-nano" ];
 
 /// Upper bound on agent loop iterations (tool rounds) per message.
-Property MaxIterations As %Integer(MAXVAL = 20, MINVAL = 1) [ InitialExpression = 3 ];
+Property MaxIterations As %Integer(MAXVAL = 20, MINVAL = 1) [ InitialExpression = 8 ];
 
 /// Prompt + completion tokens allowed per UTC day across all agent runs (from Data.Usage).
 /// When used up, messages get ESCALATE without an LLM call. 0 = no limit.
@@ -28,11 +28,11 @@ Property RunAsUser As %String(MAXLEN = 128) [ InitialExpression = "agentic_agent
 
 /// Tool calls allowed per message. Checked after the run (build 154 has no per-iteration
 /// hook); above it the decision is forced to ESCALATE. 0 = no limit.
-Property MaxToolCalls As %Integer(MINVAL = 0) [ InitialExpression = 8 ];
+Property MaxToolCalls As %Integer(MINVAL = 0) [ InitialExpression = 10 ];
 
 /// Prompt + completion tokens allowed per message, checked after the run like MaxToolCalls.
 /// 0 = no limit.
-Property MaxTokensPerMessage As %Integer(MINVAL = 0) [ InitialExpression = 20000 ];
+Property MaxTokensPerMessage As %Integer(MINVAL = 0) [ InitialExpression = 50000 ];
 
 /// live calls the LLM. replay answers with the Decision recorded by the latest live run of the
 /// same eval case and Model, no LLM call and no key needed (eval and demo reruns).
