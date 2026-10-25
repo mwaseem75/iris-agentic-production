@@ -10,3 +10,7 @@ docs/TRACKER.md
 # Runtime message folders (synthetic data only); keep the folders
 data/*/*
 !data/*/.gitkeep
+
+# Local logs
+iris-main.log
+data/eval-*.log
