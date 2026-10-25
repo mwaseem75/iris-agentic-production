@@ -7,7 +7,7 @@ Class AgenticProd.Agent.TriageAgent Extends %AI.Agent
 Parameter PROVIDER = "openai";
 
 /// Default only. The agent operation overrides Model from its production setting.
-Parameter MODEL = "gpt-5-nano";
+Parameter MODEL = "gpt-4o-mini";
 
 Parameter APIKEY = "@{env:OPENAI_API_KEY}";
 

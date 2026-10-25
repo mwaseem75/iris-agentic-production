@@ -13,7 +13,7 @@ Parameter INVOCATION = "Queue";
 Parameter FINALANSWER = "Tool budget used up. Answer now with the decision JSON from what you found, no more tool calls.";
 
 /// Model ID passed to the agent; overrides TriageAgent's MODEL parameter.
-Property Model As %String(MAXLEN = 100) [ InitialExpression = "gpt-5-nano" ];
+Property Model As %String(MAXLEN = 100) [ InitialExpression = "gpt-4o-mini" ];
 
 /// Upper bound on agent loop iterations (tool rounds) per message.
 Property MaxIterations As %Integer(MAXVAL = 20, MINVAL = 1) [ InitialExpression = 8 ];
