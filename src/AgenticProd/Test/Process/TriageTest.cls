@@ -354,6 +354,31 @@ Method TestReviewEscalateNoFix()
 	Do $$$AssertEquals(tFixed, "")
 }
 
+/// Eval.Runner closing its own task: the scored outcome stays, nothing is mapped or resent.
+Method TestReviewEvalCloseKeepsOutcome()
+{
+	Do $$$AssertStatusOK(..Case("01", "UNMAPPED_CODE", .tRequest))
+	Set tRequest.ControlId = "EV999905-01"
+	Set tDecision = ..Stub("MAP_CODE", "UNMAPPED_CODE", 0.8, 0)
+	Set tLog = ..Reviewed(tRequest, tDecision, ##class(AgenticProd.Process.Triage).#EVALACTION, "2345-7", .tFixed, .tResend)
+	Do $$$AssertEquals(tLog.EvalRunId, 999905, "row is an eval row")
+	Do $$$AssertEquals(tLog.Outcome, "SENT_FOR_APPROVAL", "outcome as scored")
+	Do $$$AssertEquals(tLog.Reviewer, "eval")
+	Do $$$AssertTrue(tLog.ReviewedAt '= "", "no longer waiting")
+	Do $$$AssertEquals(tResend, "", "nothing resent")
+	Do $$$AssertEquals(..Mapped("GLU-01"), "", "nothing mapped")
+	Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM AgenticProd_Data.DecisionLog WHERE EvalRunId = 999905")
+}
+
+/// The eval action on a live row is not a pass to skip review: it counts as a reject.
+Method TestReviewEvalActionOnLiveRowRejects()
+{
+	Do $$$AssertStatusOK(..Case("17", "UNMAPPED_CODE", .tRequest))
+	Set tLog = ..Reviewed(tRequest, ..Stub("ESCALATE", "UNMAPPED_CODE", 0.4, 0), ##class(AgenticProd.Process.Triage).#EVALACTION, "", .tFixed)
+	Do $$$AssertEquals(tLog.EvalRunId, "")
+	Do $$$AssertEquals(tLog.Outcome, "REVIEW_REJECTED")
+}
+
 /// Log pDecision, then run Triage.Review with a stub Workflow answer from "reviewer".
 /// Returns the reopened DecisionLog row.
 Method Reviewed(pRequest As AgenticProd.Msg.TriageRequest, pDecision As AgenticProd.Msg.Decision, pAction As %String, pLoinc As %String, Output pFixed As %Persistent, Output pResend As %String) As AgenticProd.Data.DecisionLog

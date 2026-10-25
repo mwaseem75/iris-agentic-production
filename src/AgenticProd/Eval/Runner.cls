@@ -95,6 +95,35 @@ ClassMethod RunCase(pRunId As %Integer, pCase As %DynamicObject, Output pResult 
 		Set pResult.ReasoningTokens = tUsage.reasoning, pResult.CostUsd = tUsage.cost
 		Set pResult.AgentSessionId = tUsage.session
 		$$$ThrowOnError(pResult.%Save())
+		// Scored, so the approval task has done its job; the reviewer inbox keeps live tasks only
+		$$$ThrowOnError(..CloseEvalTasks(pRunId, tId))
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// Complete every open Workflow task raised for an eval message (DecisionLog.EvalRunId set) with
+/// Triage's EVALACTION: the task leaves the inbox and Triage.Review keeps the scored outcome.
+/// pRunId and pCaseId narrow it to one run or case; both "" closes all eval tasks.
+ClassMethod CloseEvalTasks(pRunId As %String = "", pCaseId As %String = "", Output pClosed As %Integer) As %Status
+{
+	Set tSC = $$$OK, pClosed = 0
+	Try {
+		Set tSQL = "SELECT DISTINCT r.ID FROM EnsLib_Workflow.TaskResponse r"
+			_" JOIN AgenticProd_Msg.ApprovalTask t ON t.ID = r.TaskStatus_Request"
+			_" JOIN AgenticProd_Data.DecisionLog d ON d.HeaderId = t.HeaderId"
+			_" WHERE r.TaskStatus_IsComplete = 0 AND d.EvalRunId IS NOT NULL"
+			_" AND (? IS NULL OR d.EvalRunId = ?) AND (? IS NULL OR d.CaseId = ?)"
+		// An empty argument is SQL NULL, so "" switches its filter off
+		Set tRS = ##class(%SQL.Statement).%ExecDirect(, tSQL, pRunId, pRunId, pCaseId, pCaseId)
+		If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message))
+		While tRS.%Next() {
+			Set tTask = ##class(EnsLib.Workflow.TaskResponse).%OpenId(tRS.ID, , .tSC)
+			$$$ThrowOnError(tSC)
+			$$$ThrowOnError(tTask.CompleteTask(##class(AgenticProd.Process.Triage).#EVALACTION))
+			Set pClosed = pClosed + 1
+		}
 	} Catch ex {
 		Set tSC = ex.AsStatus()
 	}

@@ -14,6 +14,10 @@ Parameter CHECKERS = "HL7v2=AgenticProd.Tools.HL7";
 /// Error classes only the sender can fix, so REJECT is allowed for them alone.
 Parameter REJECTABLE = ",STRUCTURE_ERROR,ROUTING,";
 
+/// Task action Eval.Runner closes its own approval tasks with. Review then leaves the eval
+/// row's outcome as scored and acts on nothing; on a live row it counts as a reject.
+Parameter EVALACTION = "Eval";
+
 /// Agent operation that answers a TriageRequest with a Decision.
 Property AgentTarget As Ens.DataType.ConfigName [ InitialExpression = "AgenticProd.Operation.Agent" ];
 
@@ -123,8 +127,9 @@ Method OnResponse(request As %Library.Persistent, ByRef response As %Library.Per
 }
 
 /// Act on pAnswer to pTask and record it on DecisionLog row pLogId (Outcome, Reviewer).
-/// Reject: REVIEW_REJECTED. MAP_CODE approved: ApplyMapping with the reviewer's Loinc, APPROVED
-/// and pResend = the failed header to resend; a bad LOINC is REVIEW_BAD_LOINC, nothing written.
+/// EVALACTION on an eval row: Outcome unchanged, nothing done. Reject: REVIEW_REJECTED.
+/// MAP_CODE approved: ApplyMapping with the reviewer's Loinc, APPROVED and pResend = the failed
+/// header to resend; a bad LOINC is REVIEW_BAD_LOINC, nothing written.
 /// ESCALATE approved: with a fix, CheckFix again; on PASS or PASS_NEEDS_REVIEW pFixed is the
 /// new, saved message to send (REVIEW_APPLIED), else REVIEW_FIX_FAILED. Without a fix,
 /// REVIEW_CLOSED. Sends nothing.
@@ -137,7 +142,10 @@ Method Review(pRequest As AgenticProd.Msg.TriageRequest, pTask As AgenticProd.Ms
 		$$$ThrowOnError(tSC)
 		Set tLog.Reviewer = pAnswer.%UserName
 		Set tLog.ReviewedAt = $ZDATETIME($ZTIMESTAMP, 3)
-		If pAnswer.%Action '= "Approve" {
+		If (pAnswer.%Action = ..#EVALACTION) && (tLog.EvalRunId '= "") {
+			// Outcome stays as Eval.Runner scored it, so Rescore gives the same result
+			Set tLog.Reviewer = "eval", tLog.ReviewNote = "eval task closed by Eval.Runner, not reviewed"
+		} ElseIf pAnswer.%Action '= "Approve" {
 			Set tLog.Outcome = "REVIEW_REJECTED"
 		} ElseIf pTask.Decision = "MAP_CODE" {
 			Set tLoinc = $ZSTRIP(pAnswer.%FormValues.GetAt("Loinc"), "<>W")
