@@ -53,6 +53,8 @@ ClassMethod Run() As %Status
 		$$$ThrowOnError(..AgentSecurity())
 		$$$ThrowOnError(..WorkflowSetup())
 		$$$ThrowOnError(..DashboardSetup())
+		// Setup runs at image build with IRIS about to stop, so starting it here would not last
+		$$$ThrowOnError(##class(Ens.Director).SetAutoStart("AgenticProd.Production"))
 	} Catch ex {
 		Set tSC = ex.AsStatus()
 	}

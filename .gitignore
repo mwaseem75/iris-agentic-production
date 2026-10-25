@@ -14,3 +14,6 @@ data/*/*
 # Local logs
 iris-main.log
 data/eval-*.log
+
+# Local durable-data override (see file header)
+docker-compose.override.yml

@@ -95,7 +95,8 @@ Method TestDecisionsNewestFirstAndClamped()
 	Do $$$AssertEquals(tRows.%Get(0).%GetTypeOf("SessionId"), "null", "stub row has no session")
 	Set tMax = ##class(AgenticProd.UI.REST).#MAXLIMIT
 	Do $$$AssertTrue(##class(AgenticProd.UI.REST).DecisionsData(99999).%Size() <= tMax, "limit capped at "_tMax)
-	Do $$$AssertTrue(##class(AgenticProd.UI.REST).DecisionsData("x").%Size() > 0, "bad limit falls back to the default")
+	// Include eval rows: the stub rows are eval rows, and a fresh install has no live traffic
+	Do $$$AssertTrue(##class(AgenticProd.UI.REST).DecisionsData("x", 1).%Size() > 0, "bad limit falls back to the default")
 }
 
 Method TestEvalRunsAndResults()
