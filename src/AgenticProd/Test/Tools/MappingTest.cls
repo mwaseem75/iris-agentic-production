@@ -8,8 +8,10 @@ Parameter TESTCODE = "ZZMAP-01";
 
 Method TestSearchLoincGlucose()
 {
-	Set tHits = [].%FromJSON(##class(AgenticProd.Tools.Mapping).%New().SearchLoinc("Glucose", "serum", "mg/dL"))
+	Set tOut = {}.%FromJSON(##class(AgenticProd.Tools.Mapping).%New().SearchLoinc("Glucose", "serum", "mg/dL"))
+	Set tHits = tOut.candidates
 	Do $$$AssertEquals(tHits.%Size(), 5)
+	Do $$$AssertNotTrue(tOut.%IsDefined("warning"), "specimen given")
 	Do $$$AssertEquals(tHits.%Get(0).loinc, "2345-7", "top hit: "_tHits.%Get(0).%ToJSON())
 	Do $$$AssertEquals(tHits.%Get(0).system, "Ser/Plas")
 }
@@ -18,7 +20,7 @@ Method TestSearchLoincGlucose()
 /// HPLC/electrophoresis codes with their method (case 02).
 Method TestSearchLoincMethod()
 {
-	Set tHits = [].%FromJSON(##class(AgenticProd.Tools.Mapping).%New().SearchLoinc("Hemoglobin A1c", "blood", "%"))
+	Set tHits = {}.%FromJSON(##class(AgenticProd.Tools.Mapping).%New().SearchLoinc("Hemoglobin A1c", "blood", "%")).candidates
 	Set tMethods = ""
 	For i = 0:1:tHits.%Size() - 1 {
 		Set tHit = tHits.%Get(i), tMethods(tHit.loinc) = tHit.method
@@ -34,6 +36,29 @@ Method TestSearchLoincTroponinReturnsBoth()
 	Set tOut = ##class(AgenticProd.Tools.Mapping).%New().SearchLoinc("Troponin", "serum", "ng/L")
 	Do $$$AssertTrue(tOut [ """89579-7""", "troponin I hs: "_tOut)
 	Do $$$AssertTrue(tOut [ """67151-1""", "troponin T hs")
+}
+
+/// Case 39: glucose with no specimen fits blood, urine and serum, so the result carries a warning.
+Method TestSearchLoincNoSpecimenWarns()
+{
+	Set tOut = {}.%FromJSON(##class(AgenticProd.Tools.Mapping).%New().SearchLoinc("Glucose", "", "mg/dL"))
+	Do $$$AssertEquals(tOut.warning, "no specimen given; candidates differ by specimen", tOut.%ToJSON())
+}
+
+/// The rule on fixed candidates: only a same-test rival in another system, in the top 3, warns.
+Method TestSpecimenWarning()
+{
+	Set tBld = {"loinc":"2339-0", "display":"Glucose [Mass/volume] in Blood", "system":"Bld", "method":"none", "units":"mg/dL"}
+	Set tSer = {"loinc":"2345-7", "display":"Glucose [Mass/volume] in Serum or Plasma", "system":"Ser/Plas", "method":"none", "units":"mg/dL"}
+	Set tFasting = {"loinc":"1558-6", "display":"Fasting glucose [Mass/volume] in Serum or Plasma", "system":"Ser/Plas", "method":"none", "units":"mg/dL"}
+	Set tMolar = {"loinc":"15074-8", "display":"Glucose [Moles/volume] in Blood", "system":"Bld", "method":"none", "units":"mmol/L"}
+	Set tWarn = "no specimen given; candidates differ by specimen"
+	Do $$$AssertEquals(##class(AgenticProd.Tools.Mapping).SpecimenWarning("", [(tSer), (tBld)]), tWarn)
+	Do $$$AssertEquals(##class(AgenticProd.Tools.Mapping).SpecimenWarning("serum", [(tSer), (tBld)]), "", "specimen given")
+	Do $$$AssertEquals(##class(AgenticProd.Tools.Mapping).SpecimenWarning("", [(tSer), (tFasting)]), "", "same system, other test")
+	Do $$$AssertEquals(##class(AgenticProd.Tools.Mapping).SpecimenWarning("", [(tSer), (tMolar)]), "", "other property and units")
+	Do $$$AssertEquals(##class(AgenticProd.Tools.Mapping).SpecimenWarning("", [(tSer), (tFasting), (tFasting), (tBld)]), "", "rival outside the top 3")
+	Do $$$AssertEquals(##class(AgenticProd.Tools.Mapping).SpecimenWarning("", [(tSer)]), "")
 }
 
 Method TestLookupCode()

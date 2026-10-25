@@ -29,7 +29,8 @@ Use these steps when a local test code (OBX-3.1) has no LOINC mapping.
    failure is something else: say so and `ESCALATE`.
 3. `similar_past_mappings` with the local code and the test name. An approved mapping for the
    same code is strong evidence.
-4. `search_loinc` with the test name, specimen and units.
+4. `search_loinc` with the test name, specimen and units. If search_loinc returns a
+   `warning`, `ESCALATE` and quote the warning in `evidence`; do not pick a candidate.
 
 ## Choosing
 - Use OBX-3 text, OBX-6 units and the specimen together. The candidate's `system` must match

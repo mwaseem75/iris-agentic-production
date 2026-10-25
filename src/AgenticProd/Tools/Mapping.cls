@@ -22,7 +22,7 @@ XData Definition [ MimeType = application/xml ]
     <Description>Check whether a local test code (OBX-3.1) already has a LOINC mapping in LabCodeMap. localCode is the code exactly as sent, e.g. "GLU-01"; source is the sending application from MSH-3, e.g. "LAB_SIM". Returns the mapping as JSON, or "none" when the code is unmapped.</Description>
   </Tool>
   <Tool Name="search_loinc" Method="SearchLoinc">
-    <Description>Search the LOINC subset for candidate codes. text is the test name from OBX-3.2 (e.g. "Glucose", "Troponin"); specimen is the specimen if known (e.g. "serum", "blood", "urine"); units is OBX-6 (e.g. "mg/dL"). Returns up to 5 candidates as JSON with loinc, display, system (specimen), method, units and score (higher is closer). method "none" is the general code for the test, with no specific lab method; any other method (e.g. "HPLC") is a method-specific code. The score only ranks text similarity: check that system, method and units agree with the message before you choose.</Description>
+    <Description>Search the LOINC subset for candidate codes. text is the test name from OBX-3.2 (e.g. "Glucose", "Troponin"); specimen is the specimen if known (e.g. "serum", "blood", "urine"); units is OBX-6 (e.g. "mg/dL"). Returns JSON {"candidates":[...]} with up to 5 candidates, each with loinc, display, system (specimen), method, units and score (higher is closer). If the result has a "warning", do not pick a candidate: ESCALATE and quote the warning in evidence. method "none" is the general code for the test, with no specific lab method; any other method (e.g. "HPLC") is a method-specific code. The score only ranks text similarity: check that system, method and units agree with the message before you choose.</Description>
   </Tool>
   <Tool Name="similar_past_mappings" Method="SimilarPastMappings">
     <Description>Get mappings a person approved before for the same local code, or for a test name like text (e.g. "Glucose"). localCode and text may be empty, but not both. Returns up to 5 approved mappings as JSON with local_code, loinc, reason and created_at, newest first, or an empty list.</Description>
@@ -41,8 +41,9 @@ Method LookupCode(localCode As %String, source As %String) As %String
 	Quit {"local_code":(localCode), "source":(source), "loinc":($PIECE(tRS.DataValue, "^")), "display":($PIECE(tRS.DataValue, "^", 2))}.%ToJSON()
 }
 
-/// Top candidates from the search_loinc knowledge base. Specimen and units go into the query
-/// text, not filters: "serum" never equals the LOINC system "Ser/Plas".
+/// Top candidates from the search_loinc knowledge base, as {"candidates":[...]} plus "warning"
+/// from SpecimenWarning. Specimen and units go into the query text, not filters: "serum" never
+/// equals the LOINC system "Ser/Plas".
 Method SearchLoinc(text As %String, specimen As %String, units As %String) As %String
 {
 	$$$TRACE("search_loinc text="_text_" specimen="_specimen_" units="_units)
@@ -54,11 +55,33 @@ Method SearchLoinc(text As %String, specimen As %String, units As %String) As %S
 		While tIter.%GetNext(, .tHit) {
 			Do tOut.%Push({"loinc":(tHit.metadata.loinc), "display":($PIECE(tHit.text, " | ")), "system":(tHit.metadata.system), "method":($SELECT(tHit.metadata.method'="": tHit.metadata.method, 1: "none")), "units":(tHit.metadata.units), "score":($NUMBER(tHit.score, 3))})
 		}
-		Set tResult = tOut.%ToJSON()
+		Set tResult = {"candidates":(tOut)}
+		Set tWarning = ..SpecimenWarning(specimen, tOut)
+		Set:tWarning'="" tResult.warning = tWarning
+		Set tResult = tResult.%ToJSON()
 	} Catch ex {
 		Set tResult = ##class(AgenticProd.Tools.Base).ErrorText(ex.AsStatus())
 	}
 	Quit tResult
+}
+
+/// "no specimen given; candidates differ by specimen" when pSpecimen is empty and another of the
+/// top 3 pCandidates is the top one's test in a different system (same analyte, method, units),
+/// else "". Case 39: glucose with no specimen is 2339-0 Bld, 2350-7 Urine or 2345-7 Ser/Plas.
+ClassMethod SpecimenWarning(pSpecimen As %String, pCandidates As %DynamicArray) As %String
+{
+	Quit:($ZSTRIP(pSpecimen, "<>W") '= "")||(pCandidates.%Size() < 2) ""
+	Set tTop = pCandidates.%Get(0)
+	// LOINC display names end with " in <system>"; the part before it is analyte and property
+	Set tAnalyte = $PIECE(tTop.display, " in ")
+	Set tLast = $SELECT(pCandidates.%Size() < 3: pCandidates.%Size(), 1: 3) - 1
+	For i = 1:1:tLast {
+		Set tHit = pCandidates.%Get(i)
+		If (tHit.system '= tTop.system) && ($PIECE(tHit.display, " in ") = tAnalyte) && (tHit.method = tTop.method) && (tHit.units = tTop.units) {
+			Return "no specimen given; candidates differ by specimen"
+		}
+	}
+	Quit ""
 }
 
 /// Approved MAP_CODE decisions from DecisionLog (Outcome APPROVED, set by the Workflow step).
