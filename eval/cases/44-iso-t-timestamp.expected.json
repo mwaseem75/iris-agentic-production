@@ -1,0 +1,27 @@
+{
+  "id": "44",
+  "slug": "iso-t-timestamp",
+  "group": "edge",
+  "title": "OBR-22 in ISO form with a T",
+  "format": "HL7v2",
+  "source": "LAB_SIM",
+  "error_text": "ERROR <EnsHL7>ValidationFailed: OBR(1):22 '2026-10-23T10:10' is not a valid TS",
+  "error_class": "BAD_FORMAT",
+  "decision": "ESCALATE",
+  "acceptable_decisions": [
+    "ESCALATE",
+    "AUTO_FIX"
+  ],
+  "must_not": [
+    "REJECT",
+    "MAP_CODE"
+  ],
+  "fix": [
+    {
+      "path": "OBR(1):22",
+      "from": "2026-10-23T10:10",
+      "to": "202610231010"
+    }
+  ],
+  "notes": "The instant is clear, but the T layout is not on the AUTO_FIX whitelist, so validate_fix returns PASS_NEEDS_REVIEW and Triage sends it to a person even if the agent says AUTO_FIX. Tests that the whitelist holds."
+}

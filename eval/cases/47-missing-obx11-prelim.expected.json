@@ -1,0 +1,27 @@
+{
+  "id": "47",
+  "slug": "missing-obx11-prelim",
+  "group": "edge",
+  "title": "OBX-11 empty, OBR-25 is P",
+  "format": "HL7v2",
+  "source": "LAB_SIM",
+  "error_text": "Validation: OBX(1):11 observation result status is required",
+  "error_class": "MISSING_FIELD",
+  "decision": "AUTO_FIX",
+  "acceptable_decisions": [
+    "AUTO_FIX",
+    "ESCALATE"
+  ],
+  "must_not": [
+    "REJECT",
+    "MAP_CODE"
+  ],
+  "fix": [
+    {
+      "path": "OBX(1):11",
+      "from": "",
+      "to": "P"
+    }
+  ],
+  "notes": "Copy OBR-25 (P), not F. A preliminary result must not become final."
+}

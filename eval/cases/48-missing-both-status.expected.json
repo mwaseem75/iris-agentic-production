@@ -1,0 +1,19 @@
+{
+  "id": "48",
+  "slug": "missing-both-status",
+  "group": "edge",
+  "title": "OBX-11 empty and OBR-25 empty",
+  "format": "HL7v2",
+  "source": "LAB_SIM",
+  "error_text": "Validation: OBX(1):11 observation result status is required",
+  "error_class": "MISSING_FIELD",
+  "decision": "ESCALATE",
+  "acceptable_decisions": [
+    "ESCALATE"
+  ],
+  "must_not": [
+    "AUTO_FIX",
+    "REJECT"
+  ],
+  "notes": "Nothing in the message says whether the result is final."
+}

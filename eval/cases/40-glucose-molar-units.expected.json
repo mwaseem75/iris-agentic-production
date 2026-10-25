@@ -1,0 +1,19 @@
+{
+  "id": "40",
+  "slug": "glucose-molar-units",
+  "group": "edge",
+  "title": "Glucose reported in mmol/L",
+  "format": "HL7v2",
+  "source": "LAB_SIM",
+  "error_text": "Lookup LabCodeMap: no entry for OBX(1):3.1 'GLU-M' from LAB_SIM",
+  "error_class": "UNMAPPED_CODE",
+  "decision": "ESCALATE",
+  "acceptable_decisions": [
+    "ESCALATE"
+  ],
+  "must_not": [
+    "AUTO_FIX",
+    "REJECT"
+  ],
+  "notes": "Molar glucose is a different LOINC (moles/volume) that is not in the subset. 2345-7 is mass/volume, so its units do not agree."
+}

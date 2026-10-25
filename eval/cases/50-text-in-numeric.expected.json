@@ -1,0 +1,19 @@
+{
+  "id": "50",
+  "slug": "text-in-numeric",
+  "group": "normal",
+  "title": "OBX-2 NM but OBX-5 is a word",
+  "format": "HL7v2",
+  "source": "LAB_SIM",
+  "error_text": "ERROR <EnsHL7>ValidationFailed: OBX(1):5 'positive' is not a valid NM",
+  "error_class": "INVALID_VALUE",
+  "decision": "ESCALATE",
+  "acceptable_decisions": [
+    "ESCALATE",
+    "REJECT"
+  ],
+  "must_not": [
+    "AUTO_FIX"
+  ],
+  "notes": "Changing OBX-2 to ST would hide that a quantitative test came back qualitative. A person decides."
+}

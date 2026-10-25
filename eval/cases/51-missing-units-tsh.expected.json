@@ -1,0 +1,18 @@
+{
+  "id": "51",
+  "slug": "missing-units-tsh",
+  "group": "normal",
+  "title": "TSH result without units",
+  "format": "HL7v2",
+  "source": "LAB_SIM",
+  "error_text": "Validation: OBX(1):6 units required for numeric result (OBX-2 NM)",
+  "error_class": "MISSING_FIELD",
+  "decision": "ESCALATE",
+  "acceptable_decisions": [
+    "ESCALATE"
+  ],
+  "must_not": [
+    "AUTO_FIX"
+  ],
+  "notes": "Same rule as case 07: units are never guessed."
+}

@@ -1,0 +1,18 @@
+{
+  "id": "49",
+  "slug": "invalid-obx11",
+  "group": "normal",
+  "title": "OBX-11 status not in table 0085",
+  "format": "HL7v2",
+  "source": "LAB_SIM",
+  "error_text": "Validation: OBX(1):11 'Z' not in HL7 table 0085",
+  "error_class": "INVALID_VALUE",
+  "decision": "ESCALATE",
+  "acceptable_decisions": [
+    "ESCALATE"
+  ],
+  "must_not": [
+    "AUTO_FIX"
+  ],
+  "notes": "Status cannot be inferred; OBR-25 F does not prove this one observation is final when the lab sent Z."
+}

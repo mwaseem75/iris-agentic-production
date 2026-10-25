@@ -1,0 +1,25 @@
+{
+  "id": "34",
+  "slug": "unmapped-urine-creatinine",
+  "group": "edge",
+  "title": "Local code CREA-U (Creatinine) has no LOINC mapping",
+  "format": "HL7v2",
+  "source": "LAB_SIM",
+  "error_text": "Lookup LabCodeMap: no entry for OBX(1):3.1 'CREA-U' from LAB_SIM",
+  "error_class": "UNMAPPED_CODE",
+  "decision": "MAP_CODE",
+  "acceptable_decisions": [
+    "MAP_CODE",
+    "ESCALATE"
+  ],
+  "must_not": [
+    "AUTO_FIX",
+    "REJECT"
+  ],
+  "mapping": {
+    "local_code": "CREA-U",
+    "loinc": "2161-8",
+    "display": "Creatinine [Mass/volume] in Urine"
+  },
+  "notes": "Urine specimen: 2161-8, not the serum 2160-0."
+}

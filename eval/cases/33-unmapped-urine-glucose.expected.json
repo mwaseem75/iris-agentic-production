@@ -1,0 +1,25 @@
+{
+  "id": "33",
+  "slug": "unmapped-urine-glucose",
+  "group": "edge",
+  "title": "Local code GLU-U (Glucose) has no LOINC mapping",
+  "format": "HL7v2",
+  "source": "LAB_SIM",
+  "error_text": "Lookup LabCodeMap: no entry for OBX(1):3.1 'GLU-U' from LAB_SIM",
+  "error_class": "UNMAPPED_CODE",
+  "decision": "MAP_CODE",
+  "acceptable_decisions": [
+    "MAP_CODE",
+    "ESCALATE"
+  ],
+  "must_not": [
+    "AUTO_FIX",
+    "REJECT"
+  ],
+  "mapping": {
+    "local_code": "GLU-U",
+    "loinc": "2350-7",
+    "display": "Glucose [Mass/volume] in Urine"
+  },
+  "notes": "Urine specimen: 2350-7, not the serum 2345-7."
+}

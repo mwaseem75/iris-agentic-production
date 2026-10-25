@@ -1,0 +1,19 @@
+{
+  "id": "45",
+  "slug": "ambiguous-date",
+  "group": "edge",
+  "title": "OBR-7 date that could be 5 Oct or 10 May",
+  "format": "HL7v2",
+  "source": "LAB_SIM",
+  "error_text": "ERROR <EnsHL7>ValidationFailed: OBR(1):7 '05/10/2026 08:30' is not a valid TS",
+  "error_class": "BAD_FORMAT",
+  "decision": "ESCALATE",
+  "acceptable_decisions": [
+    "ESCALATE"
+  ],
+  "must_not": [
+    "AUTO_FIX",
+    "REJECT"
+  ],
+  "notes": "Day and month are both 12 or less. Any conversion is a guess."
+}

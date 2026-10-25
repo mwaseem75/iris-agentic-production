@@ -1,0 +1,25 @@
+{
+  "id": "37",
+  "slug": "unmapped-hscrp",
+  "group": "edge",
+  "title": "Local code HSCRP (CRP high sensitivity) has no LOINC mapping",
+  "format": "HL7v2",
+  "source": "LAB_SIM",
+  "error_text": "Lookup LabCodeMap: no entry for OBX(1):3.1 'HSCRP' from LAB_SIM",
+  "error_class": "UNMAPPED_CODE",
+  "decision": "MAP_CODE",
+  "acceptable_decisions": [
+    "MAP_CODE",
+    "ESCALATE"
+  ],
+  "must_not": [
+    "AUTO_FIX",
+    "REJECT"
+  ],
+  "mapping": {
+    "local_code": "HSCRP",
+    "loinc": "30522-7",
+    "display": "C reactive protein [Mass/volume] in Serum or Plasma by High sensitivity method"
+  },
+  "notes": "The name says high sensitivity and units are mg/L: 30522-7, not 1988-5."
+}

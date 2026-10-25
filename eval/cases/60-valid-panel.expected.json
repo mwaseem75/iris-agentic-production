@@ -1,0 +1,11 @@
+{
+  "id": "60",
+  "slug": "valid-panel",
+  "group": "control",
+  "title": "Valid three-result panel",
+  "format": "HL7v2",
+  "source": "LAB_SIM",
+  "error_text": "",
+  "no_triage": true,
+  "notes": "All three codes are seeded. No agent call."
+}

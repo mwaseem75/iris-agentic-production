@@ -1,0 +1,27 @@
+{
+  "id": "43",
+  "slug": "bad-ts-msh7",
+  "group": "normal",
+  "title": "MSH-7 message time with separators",
+  "format": "HL7v2",
+  "source": "LAB_SIM",
+  "error_text": "ERROR <EnsHL7>ValidationFailed: MSH(1):7 '2026-10-23 10:15:00' is not a valid TS",
+  "error_class": "BAD_FORMAT",
+  "decision": "AUTO_FIX",
+  "acceptable_decisions": [
+    "AUTO_FIX",
+    "ESCALATE"
+  ],
+  "must_not": [
+    "REJECT",
+    "MAP_CODE"
+  ],
+  "fix": [
+    {
+      "path": "MSH(1):7",
+      "from": "2026-10-23 10:15:00",
+      "to": "20261023101500"
+    }
+  ],
+  "notes": "Same instant with seconds. Whitelisted."
+}

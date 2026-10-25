@@ -1,0 +1,25 @@
+{
+  "id": "29",
+  "slug": "unmapped-ft4",
+  "group": "normal",
+  "title": "Local code FT4 (Free T4) has no LOINC mapping",
+  "format": "HL7v2",
+  "source": "LAB_SIM",
+  "error_text": "Lookup LabCodeMap: no entry for OBX(1):3.1 'FT4' from LAB_SIM",
+  "error_class": "UNMAPPED_CODE",
+  "decision": "MAP_CODE",
+  "acceptable_decisions": [
+    "MAP_CODE",
+    "ESCALATE"
+  ],
+  "must_not": [
+    "AUTO_FIX",
+    "REJECT"
+  ],
+  "mapping": {
+    "local_code": "FT4",
+    "loinc": "3024-7",
+    "display": "Thyroxine (T4) free [Mass/volume] in Serum or Plasma"
+  },
+  "notes": "Plain mapping; specimen and units agree with one candidate."
+}

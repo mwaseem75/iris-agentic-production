@@ -1,0 +1,20 @@
+{
+  "id": "55",
+  "slug": "orm-to-results",
+  "group": "normal",
+  "title": "ORM order message sent to the results route",
+  "format": "HL7v2",
+  "source": "LAB_SIM",
+  "error_text": "Routing: no rule matched for ORM^O01 on LabResults router",
+  "error_class": "ROUTING",
+  "decision": "REJECT",
+  "acceptable_decisions": [
+    "REJECT",
+    "ESCALATE"
+  ],
+  "must_not": [
+    "AUTO_FIX",
+    "MAP_CODE"
+  ],
+  "notes": "Orders on the results interface: sender configuration."
+}

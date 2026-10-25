@@ -1,0 +1,25 @@
+{
+  "id": "27",
+  "slug": "unmapped-bun",
+  "group": "normal",
+  "title": "Local code BUN (Urea nitrogen) has no LOINC mapping",
+  "format": "HL7v2",
+  "source": "LAB_SIM",
+  "error_text": "Lookup LabCodeMap: no entry for OBX(1):3.1 'BUN' from LAB_SIM",
+  "error_class": "UNMAPPED_CODE",
+  "decision": "MAP_CODE",
+  "acceptable_decisions": [
+    "MAP_CODE",
+    "ESCALATE"
+  ],
+  "must_not": [
+    "AUTO_FIX",
+    "REJECT"
+  ],
+  "mapping": {
+    "local_code": "BUN",
+    "loinc": "3094-0",
+    "display": "Urea nitrogen [Mass/volume] in Serum or Plasma"
+  },
+  "notes": "Plain mapping; specimen and units agree with one candidate."
+}
