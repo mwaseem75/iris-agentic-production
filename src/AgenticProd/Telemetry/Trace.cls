@@ -82,52 +82,66 @@ ClassMethod TriageRoot(pRequest As AgenticProd.Msg.TriageRequest) As %Trace.Abst
 	Quit tRoot
 }
 
-/// Start span "agent run" under the Triage root carried in pRequest.TraceParent.
-ClassMethod AgentStart(pRequest As AgenticProd.Msg.TriageRequest, pModel As %String, pMode As %String) As %Trace.AbstractSpan
+/// "agent run" span from pStart to pEnd ($ZTS: Triage's wait for the agent), built after the run
+/// from pDecision and the run's Data.Usage row, plus one "execute_tool <name>" span per Data.ToolCall
+/// row of that session. Built here, not in the agent job, so the agent job loads no OTel library.
+/// pError is set when the agent gave no decision. A replay ran no tools, so it gets no tool spans.
+ClassMethod AgentSpans(pParent As %String, pRequest As AgenticProd.Msg.TriageRequest, pDecision As AgenticProd.Msg.Decision, pStart As %String, pEnd As %String, pError As %String = "")
 {
-	Set tAttrs("gen_ai.operation.name") = "invoke_agent"
-	Set tAttrs("gen_ai.provider.name") = ##class(AgenticProd.Agent.TriageAgent).#PROVIDER
-	Set tAttrs("gen_ai.agent.name") = "TriageAgent"
-	Set tAttrs("gen_ai.request.model") = pModel
-	Set tAttrs("agentic.mode") = pMode
-	Set tAttrs("agentic.header_id") = pRequest.HeaderId
-	Set tAttrs("agentic.injection_flagged") = ''pRequest.Flags.Count()
-	Quit ..Start("agent run", pRequest.TraceParent, .tAttrs, , "Client")
+	Quit:pParent=""
+	Try {
+		Set tAttrs("gen_ai.operation.name") = "invoke_agent"
+		Set tAttrs("gen_ai.provider.name") = ##class(AgenticProd.Agent.TriageAgent).#PROVIDER
+		Set tAttrs("gen_ai.agent.name") = "TriageAgent"
+		Set tAttrs("agentic.header_id") = pRequest.HeaderId
+		Set tAttrs("agentic.injection_flagged") = ''pRequest.Flags.Count()
+		If $IsObject(pDecision) {
+			Set tAttrs("agentic.decision") = pDecision.Decision
+			Set tAttrs("agentic.error_class") = pDecision.ErrorClass
+			Set tAttrs("agentic.confidence") = pDecision.Confidence
+			Set:pDecision.Model'="" tAttrs("gen_ai.request.model") = pDecision.Model
+		}
+		// Usage rows are written by the agent job for this header; the latest one is this run's
+		Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 1 Model, PromptTokens, CompletionTokens, ReasoningTokens, ToolCalls, CostUsd, Replay, AgentSessionId FROM AgenticProd_Data.Usage WHERE HeaderId = ? AND CreatedAt >= ? ORDER BY ID DESC", pRequest.HeaderId, $ZDATETIME($PIECE(..ZtsAdd(pStart, -1000), "."), 3))
+		Set tSession = "", tReplay = 0
+		If tRS.%Next() {
+			Set tAttrs("gen_ai.request.model") = tRS.Model
+			Set tAttrs("gen_ai.usage.input_tokens") = +tRS.PromptTokens
+			Set tAttrs("gen_ai.usage.output_tokens") = +tRS.CompletionTokens
+			Set tAttrs("agentic.reasoning_tokens") = +tRS.ReasoningTokens
+			Set tAttrs("agentic.tool_calls") = +tRS.ToolCalls
+			Set tAttrs("agentic.cost_usd") = +tRS.CostUsd
+			Set tReplay = +tRS.Replay, tAttrs("agentic.replay") = tReplay
+			Set tSession = tRS.AgentSessionId
+			Set:tSession'="" tAttrs("gen_ai.conversation.id") = tSession
+		}
+		Set:pError'="" tAttrs("error.type") = "agent_error"
+		Set tSpan = ..Start("agent run", pParent, .tAttrs, pStart, "Client")
+		Set tAgent = ..Context(tSpan)
+		If (tAgent '= "") && (tSession '= "") && 'tReplay {
+			Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT Tool, Status, DurationMs, ResultLength, CreatedAt FROM AgenticProd_Data.ToolCall WHERE AgentSessionId = ? ORDER BY ID", tSession)
+			While tRS.%Next() {
+				Do ..ToolSpan(tAgent, tRS.Tool, +tRS.DurationMs, tRS.Status, tRS.ResultLength, ..Clamp($ZDATETIMEH(tRS.CreatedAt, 3), pStart, pEnd), pStart)
+			}
+		}
+		Do ..End(tSpan, $SELECT(pError '= "": "Error", 1: "Ok"), , pEnd)
+	} Catch ex {
+	}
 }
 
-/// End the "agent run" span with the decision's usage. pUsage may be "" (budget skip, error).
-ClassMethod AgentEnd(pSpan As %Trace.AbstractSpan, pDecision As AgenticProd.Msg.Decision, pUsage As AgenticProd.Data.Usage, pError As %String = "")
-{
-	Quit:'$IsObject(pSpan)
-	If $IsObject(pDecision) {
-		Set tAttrs("agentic.decision") = pDecision.Decision
-		Set tAttrs("agentic.error_class") = pDecision.ErrorClass
-		Set tAttrs("agentic.confidence") = pDecision.Confidence
-		Set tAttrs("gen_ai.usage.input_tokens") = +pDecision.PromptTokens
-		Set tAttrs("gen_ai.usage.output_tokens") = +pDecision.CompletionTokens
-		Set tAttrs("agentic.cost_usd") = +pDecision.CostUsd
-		Set:pDecision.AgentSessionId'="" tAttrs("gen_ai.conversation.id") = pDecision.AgentSessionId
-	}
-	If $IsObject($GET(pUsage)) {
-		Set tAttrs("agentic.reasoning_tokens") = +pUsage.ReasoningTokens
-		Set tAttrs("agentic.tool_calls") = +pUsage.ToolCalls
-		Set tAttrs("agentic.replay") = +pUsage.Replay
-	}
-	Set:pError'="" tAttrs("error.type") = "agent_error"
-	Do ..End(pSpan, $SELECT(pError '= "": "Error", 1: "Ok"), .tAttrs)
-}
-
-/// One finished tool call under the "agent run" span: pDurationMs before now.
-/// pStatus is Policy.Audit's OK, ERROR or DENIED.
-ClassMethod ToolSpan(pParent As %String, pTool As %String, pDurationMs As %Integer, pStatus As %String, pResultLength As %Integer = "")
+/// One finished tool call under the "agent run" span, ending at pEnd ($ZTS) and starting pDurationMs
+/// before it, but not before pFloor. pStatus is Policy.Audit's OK, ERROR or DENIED.
+ClassMethod ToolSpan(pParent As %String, pTool As %String, pDurationMs As %Integer, pStatus As %String, pResultLength As %Integer = "", pEnd As %String, pFloor As %String = "")
 {
 	Quit:pParent=""
 	Set tAttrs("gen_ai.operation.name") = "execute_tool"
 	Set tAttrs("gen_ai.tool.name") = pTool
 	Set tAttrs("agentic.tool_status") = pStatus
 	Set:pResultLength'="" tAttrs("agentic.result_length") = pResultLength
-	Set tSpan = ..Start("execute_tool "_pTool, pParent, .tAttrs, ..ZtsBefore(+pDurationMs))
-	Do ..End(tSpan, $SELECT(pStatus = "OK": "Ok", 1: "Error"))
+	Set tStart = ..ZtsAdd(pEnd, -pDurationMs)
+	Set:(pFloor'="")&&(..ZtsDiff(tStart, pFloor)<0) tStart = pFloor
+	Set tSpan = ..Start("execute_tool "_pTool, pParent, .tAttrs, tStart)
+	Do ..End(tSpan, $SELECT(pStatus = "OK": "Ok", 1: "Error"), , pEnd)
 }
 
 /// "triage decision" span from pStart to now: the action matrix and what Triage did.
@@ -172,12 +186,35 @@ ClassMethod Provider() As %Trace.TracerProvider
 /// $ZTS format, pMs milliseconds before now.
 ClassMethod ZtsBefore(pMs As %Integer) As %String
 {
-	Set tNow = $ZTIMESTAMP
-	Set tDay = +tNow, tSec = $PIECE(tNow, ",", 2) - (pMs / 1000)
+	Quit ..ZtsAdd($ZTIMESTAMP, -pMs)
+}
+
+/// pZts ($ZTS format) plus pMs milliseconds (may be negative).
+ClassMethod ZtsAdd(pZts As %String, pMs As %Numeric) As %String
+{
+	Set tDay = +pZts, tSec = $PIECE(pZts, ",", 2) + (pMs / 1000)
 	While tSec < 0 {
 		Set tSec = tSec + 86400, tDay = tDay - 1
 	}
+	While tSec >= 86400 {
+		Set tSec = tSec - 86400, tDay = tDay + 1
+	}
 	Quit tDay_","_$JUSTIFY(tSec, 0, 3)
+}
+
+/// pA - pB in seconds, both $ZTS format.
+ClassMethod ZtsDiff(pA As %String, pB As %String) As %Numeric
+{
+	Quit ((+pA - +pB) * 86400) + $PIECE(pA, ",", 2) - $PIECE(pB, ",", 2)
+}
+
+/// pZts moved inside pLow..pHigh. ToolCall.CreatedAt has whole seconds, so it can fall just
+/// outside the agent span.
+ClassMethod Clamp(pZts As %String, pLow As %String, pHigh As %String) As %String
+{
+	Quit:..ZtsDiff(pZts, pLow)<0 pLow
+	Quit:..ZtsDiff(pZts, pHigh)>0 pHigh
+	Quit pZts
 }
 
 /// Unit tests: with capture on, End records spans in ^||AgenticProd.Trace instead of exporting.

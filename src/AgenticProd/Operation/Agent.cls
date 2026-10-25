@@ -38,10 +38,7 @@ Property MaxTokensPerMessage As %Integer(MINVAL = 0) [ InitialExpression = 50000
 /// same eval case and Model, no LLM call and no key needed (eval and demo reruns).
 Property Mode As %String(VALUELIST = ",live,replay") [ InitialExpression = "live" ];
 
-/// "agent run" span plus one span per tool call, under Triage's trace (Telemetry.Trace).
-Property TracingEnabled As %Boolean [ InitialExpression = 0 ];
-
-Parameter SETTINGS = "Model:Agent,Mode:Agent,MaxIterations:Agent,MaxToolCalls:Agent,MaxTokensPerMessage:Agent,DailyTokenBudget:Agent,RunAsUser:Agent,TracingEnabled:Tracing";
+Parameter SETTINGS = "Model:Agent,Mode:Agent,MaxIterations:Agent,MaxToolCalls:Agent,MaxTokensPerMessage:Agent,DailyTokenBudget:Agent,RunAsUser:Agent";
 
 /// Fail closed: if the switch fails the item does not start, rather than run the agent with %All.
 /// The switch lasts for the job's life, so this item must keep its own pool (no shared jobs).
@@ -66,12 +63,11 @@ Method OnInit() As %Status
 Method Triage(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As AgenticProd.Msg.Decision) As %Status
 {
 	Set tSC = $$$OK
-	Set (tSession, tUsage, tSpan) = ""
+	Set tSession = ""
 	Set tStart = $ZHOROLOG
 	Try {
-		Set:..TracingEnabled tSpan = ##class(AgenticProd.Telemetry.Trace).AgentStart(pRequest, ..Model, ..Mode)
 		If ..Mode = "replay" {
-			$$$ThrowOnError(..Replay(pRequest, .pResponse, .tUsage))
+			$$$ThrowOnError(..Replay(pRequest, .pResponse))
 			Quit
 		}
 		// Never drop the message: over budget it still goes to Triage, as ESCALATE
@@ -92,7 +88,6 @@ Method Triage(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As Age
 		Set tAudit = ##class(AgenticProd.Policy.Audit).%New()
 		Set tAudit.HeaderId = pRequest.HeaderId
 		Set tAudit.AgentSessionId = tSession.%Id()
-		Set tAudit.TraceParent = ##class(AgenticProd.Telemetry.Trace).Context(tSpan)
 		$$$ThrowOnError(tAgent.ToolManager.SetAuthPolicy(##class(AgenticProd.Policy.ReadOnly).%New()))
 		$$$ThrowOnError(tAgent.ToolManager.SetAuditPolicy(tAudit))
 
@@ -126,16 +121,14 @@ Method Triage(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As Age
 		// Keep the failed conversation for diagnosis.
 		If $IsObject(tSession) Do tSession.%Save()
 	}
-	Do ##class(AgenticProd.Telemetry.Trace).AgentEnd(tSpan, $GET(pResponse), tUsage, $SELECT($$$ISERR(tSC): $SYSTEM.Status.GetErrorText(tSC), 1: ""))
 	Quit tSC
 }
 
 /// Replay mode: the Decision of the latest live Usage row for the request's eval case and Model,
-/// or ESCALATE "no recorded run". Writes a Usage row (pUsage) marked Replay, tokens and cost 0.
-Method Replay(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As AgenticProd.Msg.Decision, Output pUsage As AgenticProd.Data.Usage) As %Status
+/// or ESCALATE "no recorded run". Writes a Usage row marked Replay, tokens and cost 0.
+Method Replay(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As AgenticProd.Msg.Decision) As %Status
 {
 	Set tSC = $$$OK
-	Set pUsage = ""
 	Try {
 		Set tStart = $ZHOROLOG
 		Set tCase = ##class(AgenticProd.Eval.Runner).CaseOf(pRequest.ControlId, .tRunId)
@@ -171,7 +164,6 @@ Method Replay(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As Age
 		Set tUsage.DecisionJSON = tOut
 		Set tUsage.TotalMs = ($ZHOROLOG - tStart) * 1000 \ 1
 		$$$ThrowOnError(tUsage.%Save())
-		Set pUsage = tUsage
 		$$$TRACE("Replay decision="_pResponse.Decision_" case="_tCase_" model="_..Model_" recordedSession="_tAgentSession)
 	} Catch ex {
 		Set tSC = ex.AsStatus()

@@ -10,9 +10,6 @@ Property HeaderId As %Integer;
 
 Property AgentSessionId As %String(MAXLEN = 50);
 
-/// traceparent of the "agent run" span; "" when tracing is off. Each call becomes a child span.
-Property TraceParent As %String(MAXLEN = 60);
-
 Method %LogExecution(call As %DynamicObject, metadata As %DynamicObject, result As %DynamicObject, duration As %Integer, status As %Status) As %Status
 {
 	Set tResultLength = ""
@@ -24,7 +21,6 @@ Method %LogExecution(call As %DynamicObject, metadata As %DynamicObject, result 
 	}
 	Set tStatus = $SELECT($$$ISERR(status): "ERROR", 1: "OK")
 	$$$TRACE("Tool "_call.name_" "_tStatus_" ms="_duration_" resultLength="_tResultLength_$SELECT(tError '= "": " "_tError, 1: ""))
-	Do ##class(AgenticProd.Telemetry.Trace).ToolSpan(..TraceParent, call.name, duration, tStatus, tResultLength)
 	Quit ##class(AgenticProd.Data.ToolCall).Log(call.name, call.arguments, tStatus, duration, tResultLength, tError, ..HeaderId, ..AgentSessionId)
 }
 
@@ -32,7 +28,6 @@ Method %LogDenial(call As %DynamicObject, metadata As %DynamicObject, status As 
 {
 	Set tError = $SYSTEM.Status.GetErrorText(status)
 	$$$TRACE("Tool "_call.name_" DENIED: "_tError)
-	Do ##class(AgenticProd.Telemetry.Trace).ToolSpan(..TraceParent, call.name, 0, "DENIED")
 	Quit ##class(AgenticProd.Data.ToolCall).Log(call.name, call.arguments, "DENIED", "", "", tError, ..HeaderId, ..AgentSessionId)
 }
 

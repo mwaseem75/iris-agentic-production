@@ -51,7 +51,7 @@ Method OnRequest(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As 
 		If ..TracingEnabled {
 			Set tRoot = ##class(AgenticProd.Telemetry.Trace).TriageRoot(pRequest)
 			Set pRequest.TraceParent = ##class(AgenticProd.Telemetry.Trace).Context(tRoot)
-			// Saved so the agent job and a later workflow answer find the trace
+			// Saved so the workflow answer, which may come in another job, joins the trace
 			If pRequest.TraceParent '= "" $$$ThrowOnError(pRequest.%Save())
 		}
 		Set tDecision = ""
@@ -59,13 +59,20 @@ Method OnRequest(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As 
 			// Our own fix failed again: another agent round could loop, so a person decides
 			Set tDecision = ##class(AgenticProd.Operation.Agent).EscalateDecision(pRequest, "message built by a Triage AUTO_FIX failed again; agent not called a second time")
 		} Else {
+			Set tAgentStart = $ZTIMESTAMP
 			Set tSC = ..SendRequestSync(..AgentTarget, pRequest, .tDecision, ..AgentTimeout)
+			Set tAgentEnd = $ZTIMESTAMP
 		}
+		Set tNoAnswer = ""
 		If $$$ISERR(tSC) || '$IsObject(tDecision) {
+			Set tNoAnswer = $SELECT($$$ISERR(tSC): $SYSTEM.Status.GetErrorText(tSC), 1: "timed out after "_..AgentTimeout_" s")
 			// No answer still ends with a person looking at the message, never a drop
-			Set tDecision = ##class(AgenticProd.Operation.Agent).EscalateDecision(pRequest, "agent gave no decision: "_$SELECT($$$ISERR(tSC): $SYSTEM.Status.GetErrorText(tSC), 1: "timed out after "_..AgentTimeout_" s"))
+			Set tDecision = ##class(AgenticProd.Operation.Agent).EscalateDecision(pRequest, "agent gave no decision: "_tNoAnswer)
 			Set tSC = $$$OK
 		}
+		// Agent and tool spans come from the run's Usage and ToolCall rows: the agent job itself
+		// loads no OTel library (a live run with spans in that job ended in a segfault once)
+		If $DATA(tAgentStart) Do ##class(AgenticProd.Telemetry.Trace).AgentSpans(pRequest.TraceParent, pRequest, $SELECT(tNoAnswer = "": tDecision, 1: ""), tAgentStart, tAgentEnd, tNoAnswer)
 		Set tPlanStart = $ZTIMESTAMP
 		$$$ThrowOnError(..Plan(pRequest, tDecision, .pResponse, .tOutcome, .tFixed))
 		// Logged before the send: the row ID is the approval task's completion key

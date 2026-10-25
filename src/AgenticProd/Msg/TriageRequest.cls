@@ -29,7 +29,7 @@ Property ErrorClass As AgenticProd.Msg.ErrorClass(%JSONFIELDNAME = "error_class"
 /// Any hit means no AUTO_FIX; Triage copies them into the decision evidence for the reviewer.
 Property Flags As list Of %String(%JSONFIELDNAME = "flags", MAXLEN = 500);
 
-/// W3C traceparent of Triage's root span, so the agent job's spans join the same trace.
+/// W3C traceparent of Triage's root span, so the workflow review span joins the same trace.
 /// Set by Triage only when its TracingEnabled is on.
 Property TraceParent As %String(%JSONINCLUDE = "none", MAXLEN = 60);
 

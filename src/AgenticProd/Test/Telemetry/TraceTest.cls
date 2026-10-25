@@ -6,9 +6,15 @@ Class AgenticProd.Test.Telemetry.TraceTest Extends %UnitTest.TestCase
 /// Planted in the error text; no attribute may carry it.
 Parameter MARKER = "PHI-MARKER-7731";
 
+Parameter HEADER = -9301;
+
+Parameter SESSION = "test-trace-9301";
+
 Method OnAfterOneTest() As %Status
 {
 	Do ##class(AgenticProd.Telemetry.Trace).Capture(0)
+	Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM AgenticProd_Data.Usage WHERE HeaderId = ?", ..#HEADER)
+	Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM AgenticProd_Data.ToolCall WHERE HeaderId = ?", ..#HEADER)
 	Quit $$$OK
 }
 
@@ -21,16 +27,15 @@ Method TestTriageTraceTree()
 	Set tRequest.TraceParent = ##class(AgenticProd.Telemetry.Trace).Context(tRoot)
 	Do $$$AssertTrue(tRequest.TraceParent ? 1"00-"32AN1"-"16AN1"-0"1N, "root traceparent is W3C: "_tRequest.TraceParent)
 
-	Set tAgent = ##class(AgenticProd.Telemetry.Trace).AgentStart(tRequest, "gpt-4o-mini", "replay")
-	Do ##class(AgenticProd.Telemetry.Trace).ToolSpan(##class(AgenticProd.Telemetry.Trace).Context(tAgent), "get_failed_message", 40, "OK", 812)
-	Do ##class(AgenticProd.Telemetry.Trace).ToolSpan(##class(AgenticProd.Telemetry.Trace).Context(tAgent), "apply_fix", 0, "DENIED")
+	// What the agent job leaves behind for one live run; Triage builds the spans from it afterwards
+	Set tAgentStart = ##class(AgenticProd.Telemetry.Trace).ZtsBefore(3000)
+	Do $$$AssertStatusOK(..AddUsage(0))
+	Do $$$AssertStatusOK(##class(AgenticProd.Data.ToolCall).Log("get_failed_message", {}, "OK", 40, 812, "", ..#HEADER, ..#SESSION))
+	Do $$$AssertStatusOK(##class(AgenticProd.Data.ToolCall).Log("apply_fix", {}, "DENIED", "", "", "read-only", ..#HEADER, ..#SESSION))
 	Set tDecision = ##class(AgenticProd.Msg.Decision).%New()
 	Set tDecision.Decision = "AUTO_FIX", tDecision.ErrorClass = "BAD_FORMAT", tDecision.Confidence = .92
-	Set tDecision.PromptTokens = 1200, tDecision.CompletionTokens = 150, tDecision.CostUsd = .00027
 	Set tDecision.Reason = ..#MARKER
-	Set tUsage = ##class(AgenticProd.Data.Usage).%New()
-	Set tUsage.ReasoningTokens = 64, tUsage.ToolCalls = 2
-	Do ##class(AgenticProd.Telemetry.Trace).AgentEnd(tAgent, tDecision, tUsage)
+	Do ##class(AgenticProd.Telemetry.Trace).AgentSpans(tRequest.TraceParent, tRequest, tDecision, tAgentStart, $ZTIMESTAMP)
 
 	Set tFinal = tDecision.Escalated("downgraded from AUTO_FIX: suspicious instruction")
 	Do ##class(AgenticProd.Telemetry.Trace).DecisionSpan(tRequest.TraceParent, tDecision, tFinal, "DOWNGRADED:AUTO_FIX", $ZTIMESTAMP)
@@ -51,6 +56,9 @@ Method TestTriageTraceTree()
 		Do $$$AssertEquals(tByName(tName)."parent_span_id", tRootSpan."span_id", tName_" is a child of the root")
 	}
 	Do $$$AssertEquals(tByName("execute_tool get_failed_message")."parent_span_id", tAgentSpan."span_id", "tool span is a child of agent run")
+	Set tTool = tByName("execute_tool get_failed_message")
+	Do $$$AssertTrue(##class(AgenticProd.Telemetry.Trace).ZtsDiff(tTool.start, tAgentSpan.start) >= 0, "tool span starts inside agent run")
+	Do $$$AssertTrue(##class(AgenticProd.Telemetry.Trace).ZtsDiff(tAgentSpan.end, tTool.end) >= 0, "tool span ends inside agent run")
 	For i = 0:1:tSpans.%Size() - 1 Do $$$AssertEquals(tSpans.%Get(i)."trace_id", tRootSpan."trace_id", "one trace: "_tSpans.%Get(i).name)
 
 	Set tA = tAgentSpan.attributes
@@ -63,8 +71,10 @@ Method TestTriageTraceTree()
 	Do $$$AssertEquals(tA.%Get("agentic.cost_usd"), .00027)
 	Do $$$AssertEquals(tA.%Get("agentic.reasoning_tokens"), 64)
 	Do $$$AssertEquals(tA.%Get("agentic.injection_flagged"), 1)
+	Do $$$AssertEquals(tA.%Get("agentic.tool_calls"), 2)
+	Do $$$AssertEquals(tA.%Get("gen_ai.conversation.id"), ..#SESSION)
 
-	Set tTool = tByName("execute_tool get_failed_message").attributes
+	Set tTool = tTool.attributes
 	Do $$$AssertEquals(tTool.%Get("gen_ai.tool.name"), "get_failed_message")
 	Do $$$AssertEquals(tTool.%Get("gen_ai.operation.name"), "execute_tool")
 	Do $$$AssertEquals(tByName("execute_tool apply_fix").status, "Error", "denied call is an error span")
@@ -87,10 +97,10 @@ Method TestTriageTraceTree()
 Method TestNoParentNoSpan()
 {
 	Do ##class(AgenticProd.Telemetry.Trace).Capture(1)
-	Do ##class(AgenticProd.Telemetry.Trace).ToolSpan("", "get_failed_message", 10, "OK")
+	Do ##class(AgenticProd.Telemetry.Trace).ToolSpan("", "get_failed_message", 10, "OK", "", $ZTIMESTAMP)
 	Do ##class(AgenticProd.Telemetry.Trace).DecisionSpan("", "", "", "APPLIED", $ZTIMESTAMP)
 	Do ##class(AgenticProd.Telemetry.Trace).ReviewSpan("", "", "Approve", "APPROVED", "MAP_CODE")
-	Do ##class(AgenticProd.Telemetry.Trace).AgentEnd("", "", "")
+	Do ##class(AgenticProd.Telemetry.Trace).AgentSpans("", ..Request(), "", $ZTIMESTAMP, $ZTIMESTAMP)
 	Do ##class(AgenticProd.Telemetry.Trace).End("")
 	Do $$$AssertEquals(##class(AgenticProd.Telemetry.Trace).Captured().%Size(), 0, "nothing recorded")
 	Do $$$AssertEquals(##class(AgenticProd.Telemetry.Trace).Context(""), "")
@@ -104,10 +114,44 @@ Method TestZtsBefore()
 	Do $$$AssertTrue((tDiff >= 1.4) && (tDiff < 1.6), "1500 ms earlier, got "_tDiff_" s")
 }
 
+/// A replay ran no tools: its agent span is marked replay and has no tool spans, even though the
+/// recorded session's ToolCall rows exist.
+Method TestReplayHasNoToolSpans()
+{
+	Do ##class(AgenticProd.Telemetry.Trace).Capture(1)
+	Set tRequest = ..Request()
+	Set tRoot = ##class(AgenticProd.Telemetry.Trace).TriageRoot(tRequest)
+	Set tStart = ##class(AgenticProd.Telemetry.Trace).ZtsBefore(500)
+	Do $$$AssertStatusOK(..AddUsage(1))
+	Do $$$AssertStatusOK(##class(AgenticProd.Data.ToolCall).Log("get_failed_message", {}, "OK", 40, 812, "", ..#HEADER, ..#SESSION))
+	Do ##class(AgenticProd.Telemetry.Trace).AgentSpans(##class(AgenticProd.Telemetry.Trace).Context(tRoot), tRequest, "", tStart, $ZTIMESTAMP, "timed out after 120 s")
+	Set tSpans = ##class(AgenticProd.Telemetry.Trace).Captured(), tAgent = ""
+	For i = 0:1:tSpans.%Size() - 1 {
+		Do $$$AssertNotTrue(tSpans.%Get(i).name [ "execute_tool", "no tool span in a replay: "_tSpans.%Get(i).name)
+		Set:tSpans.%Get(i).name="agent run" tAgent = tSpans.%Get(i)
+	}
+	Do $$$AssertTrue($IsObject(tAgent), "agent run recorded")
+	Quit:'$IsObject(tAgent)
+	Do $$$AssertEquals(tAgent.attributes.%Get("agentic.replay"), 1)
+	Do $$$AssertEquals(tAgent.status, "Error", "no answer is an error span")
+	Do $$$AssertEquals(tAgent.attributes.%Get("error.type"), "agent_error")
+}
+
+/// Stub Usage row for HEADER/SESSION as Operation.Agent writes it.
+ClassMethod AddUsage(pReplay As %Boolean) As %Status
+{
+	Set tUsage = ##class(AgenticProd.Data.Usage).%New()
+	Set tUsage.HeaderId = ..#HEADER, tUsage.AgentSessionId = ..#SESSION, tUsage.Replay = pReplay
+	Set tUsage.Provider = "openai", tUsage.Model = "gpt-4o-mini"
+	Set tUsage.PromptTokens = 1200, tUsage.CompletionTokens = 150, tUsage.ReasoningTokens = 64
+	Set tUsage.ToolCalls = 2, tUsage.CostUsd = .00027
+	Quit tUsage.%Save()
+}
+
 ClassMethod Request() As AgenticProd.Msg.TriageRequest
 {
 	Set tRequest = ##class(AgenticProd.Msg.TriageRequest).%New()
-	Set tRequest.HeaderId = -9301, tRequest.SessionId = -9301
+	Set tRequest.HeaderId = ..#HEADER, tRequest.SessionId = ..#HEADER
 	Set tRequest.Format = "HL7v2", tRequest.ControlId = "EV1-05"
 	Set tRequest.ErrorClass = "BAD_FORMAT"
 	Set tRequest.ErrorText = "Validation: OBX(1):14 '"_..#MARKER_"' is not a valid TS; Validation: OBR(1):7 required"
