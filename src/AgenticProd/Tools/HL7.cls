@@ -63,7 +63,8 @@ the comparator changes the result and is not allowed.
 
 ## Structure
 ORU^R01 order: MSH, PID, then each OBR followed by its OBX and NTE segments. Messages with
-segments out of order are rejected back to the sender, not reordered.
+segments out of order are rejected back to the sender, not reordered. PID is required: a result
+with no patient segment is rejected back to the sender.
 }
 
 /// Return one segment, masked, with numbered fields, inside an untrusted_data block.
@@ -336,6 +337,9 @@ ClassMethod ProfileErrors(pMsg As EnsLib.HL7.Message, pErrors As %DynamicArray)
 			}
 		}
 	}
+	// 2.5.1 ORU_R01 makes the PATIENT group optional, so the IRIS validator passes a result with no patient.
+	// No segment reference in the text: ClassOf makes it STRUCTURE_ERROR, not IDENTITY_ISSUE
+	If '$DATA(tOcc("PID")) Do pErrors.%Push("Missing segment PID: required by NPHIES_SIM profile for ORU^R01")
 }
 
 ClassMethod CheckTS(pSeg As EnsLib.HL7.Segment, pRef As %String, pField As %Integer, pErrors As %DynamicArray) [ Internal ]

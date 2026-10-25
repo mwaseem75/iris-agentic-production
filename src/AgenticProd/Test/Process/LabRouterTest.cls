@@ -33,6 +33,14 @@ Method TestErrorClasses()
 	Do $$$AssertTrue((tText [ "OBX(1):14") && (tText [ "'ALT-S'"), tText)
 }
 
+/// 54 has no PID. The 2.5.1 schema allows that, so without the profile rule it went straight out.
+Method TestMissingPID54()
+{
+	Do ..CheckCase("54", .tClass, .tText)
+	Do $$$AssertEquals(tClass, "STRUCTURE_ERROR", tText)
+	Do $$$AssertTrue(tText [ "Missing segment PID", tText)
+}
+
 /// 18 (NTE) and 19 (TX OBX-5) carry instructions aimed at the agent; 05 has none.
 Method TestInjectionFlags()
 {
