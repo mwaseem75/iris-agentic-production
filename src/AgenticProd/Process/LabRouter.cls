@@ -18,11 +18,15 @@ Property TriageTarget As Ens.DataType.ConfigName [ InitialExpression = "Triage" 
 /// Seconds to wait for TargetConfigName before the send counts as TRANSIENT.
 Property SendTimeout As %Integer(MINVAL = 1) [ InitialExpression = 30 ];
 
-Parameter SETTINGS = "TargetConfigName:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},TriageTarget:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},SendTimeout:Basic";
+/// Stamp the check's start and end on the TriageRequest, so Triage's trace gets a "router check" span.
+Property TracingEnabled As %Boolean [ InitialExpression = 0 ];
+
+Parameter SETTINGS = "TargetConfigName:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},TriageTarget:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},SendTimeout:Basic,TracingEnabled:Tracing";
 
 Method OnRequest(pRequest As EnsLib.HL7.Message, Output pResponse As %Library.Persistent) As %Status
 {
 	Set tSC = $$$OK
+	Set tStart = $ZTIMESTAMP
 	Try {
 		$$$ThrowOnError(..Check(pRequest, .tClass, .tText))
 		If tClass = "" {
@@ -38,7 +42,9 @@ Method OnRequest(pRequest As EnsLib.HL7.Message, Output pResponse As %Library.Pe
 		}
 		Quit:tClass=""
 		$$$TRACE("LabRouter to "_..TriageTarget_": "_tClass_" "_tText)
-		$$$ThrowOnError(..SendRequestAsync(..TriageTarget, ..TriageRequest(pRequest, tClass, tText), 0))
+		Set tTriage = ..TriageRequest(pRequest, tClass, tText)
+		Set:..TracingEnabled tTriage.RouterStart = tStart, tTriage.RouterEnd = $ZTIMESTAMP
+		$$$ThrowOnError(..SendRequestAsync(..TriageTarget, tTriage, 0))
 	} Catch ex {
 		Set tSC = ex.AsStatus()
 	}
@@ -140,6 +146,9 @@ Storage Default
 </Value>
 <Value name="3">
 <Value>SendTimeout</Value>
+</Value>
+<Value name="4">
+<Value>TracingEnabled</Value>
 </Value>
 </Data>
 <DefaultData>LabRouterDefaultData</DefaultData>

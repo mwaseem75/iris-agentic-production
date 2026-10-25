@@ -29,6 +29,16 @@ Property ErrorClass As AgenticProd.Msg.ErrorClass(%JSONFIELDNAME = "error_class"
 /// Any hit means no AUTO_FIX; Triage copies them into the decision evidence for the reviewer.
 Property Flags As list Of %String(%JSONFIELDNAME = "flags", MAXLEN = 500);
 
+/// W3C traceparent of Triage's root span, so the agent job's spans join the same trace.
+/// Set by Triage only when its TracingEnabled is on.
+Property TraceParent As %String(%JSONINCLUDE = "none", MAXLEN = 60);
+
+/// $ZTS when LabRouter started and finished its checks, for the "router check" span.
+/// Set only when LabRouter's TracingEnabled is on.
+Property RouterStart As %String(%JSONINCLUDE = "none", MAXLEN = 30);
+
+Property RouterEnd As %String(%JSONINCLUDE = "none", MAXLEN = 30);
+
 Storage Default
 {
 <Data name="TriageRequestDefaultData">
@@ -56,6 +66,15 @@ Storage Default
 </Value>
 <Value name="8">
 <Value>ControlId</Value>
+</Value>
+<Value name="9">
+<Value>TraceParent</Value>
+</Value>
+<Value name="10">
+<Value>RouterStart</Value>
+</Value>
+<Value name="11">
+<Value>RouterEnd</Value>
 </Value>
 </Data>
 <DefaultData>TriageRequestDefaultData</DefaultData>

@@ -36,14 +36,24 @@ Property AutoFixThreshold As %Numeric(MAXVAL = 1, MINVAL = 0) [ InitialExpressio
 /// Folder for rejected messages and their reason files.
 Property RejectPath As %String(MAXLEN = 500) [ InitialExpression = "/home/irisowner/dev/data/rejected/" ];
 
-Parameter SETTINGS = "AgentTarget:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},TargetConfigName:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},ApprovalTarget:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},AutoFixThreshold:Triage,AgentTimeout:Triage,RejectPath:Triage";
+/// One OpenTelemetry trace per failed message, rooted here (see Telemetry.Trace).
+Property TracingEnabled As %Boolean [ InitialExpression = 0 ];
+
+Parameter SETTINGS = "AgentTarget:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},TargetConfigName:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},ApprovalTarget:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},AutoFixThreshold:Triage,AgentTimeout:Triage,RejectPath:Triage,TracingEnabled:Tracing";
 
 /// Ask the agent, apply the action matrix, act, and log what was done in Data.DecisionLog.
 /// pResponse is the decision Triage acted on (the agent's, or its ESCALATE downgrade).
 Method OnRequest(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As AgenticProd.Msg.Decision) As %Status
 {
 	Set tSC = $$$OK
+	Set (tRoot, tOutcome) = ""
 	Try {
+		If ..TracingEnabled {
+			Set tRoot = ##class(AgenticProd.Telemetry.Trace).TriageRoot(pRequest)
+			Set pRequest.TraceParent = ##class(AgenticProd.Telemetry.Trace).Context(tRoot)
+			// Saved so the agent job and a later workflow answer find the trace
+			If pRequest.TraceParent '= "" $$$ThrowOnError(pRequest.%Save())
+		}
 		Set tDecision = ""
 		If ..FixedByTriage(pRequest.HeaderId) {
 			// Our own fix failed again: another agent round could loop, so a person decides
@@ -56,15 +66,22 @@ Method OnRequest(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As 
 			Set tDecision = ##class(AgenticProd.Operation.Agent).EscalateDecision(pRequest, "agent gave no decision: "_$SELECT($$$ISERR(tSC): $SYSTEM.Status.GetErrorText(tSC), 1: "timed out after "_..AgentTimeout_" s"))
 			Set tSC = $$$OK
 		}
+		Set tPlanStart = $ZTIMESTAMP
 		$$$ThrowOnError(..Plan(pRequest, tDecision, .pResponse, .tOutcome, .tFixed))
 		// Logged before the send: the row ID is the approval task's completion key
 		$$$ThrowOnError(##class(AgenticProd.Data.DecisionLog).Record(pRequest, pResponse, .tLogId, tOutcome, $SELECT(tOutcome = "APPLIED": tFixed, 1: "")))
 		Set tSendSC = ..Dispatch(pRequest, pResponse, tOutcome, tFixed, tLogId)
 		If $$$ISERR(tSendSC) $$$ThrowOnError(..SetOutcome(tLogId, "ERROR:"_tOutcome))
+		Do ##class(AgenticProd.Telemetry.Trace).DecisionSpan(pRequest.TraceParent, tDecision, pResponse, tOutcome, tPlanStart, $$$ISERR(tSendSC))
 		$$$TRACE("Triage header "_pRequest.HeaderId_": agent "_tDecision.Decision_", outcome "_tOutcome)
 		$$$ThrowOnError(tSendSC)
 	} Catch ex {
 		Set tSC = ex.AsStatus()
+	}
+	If $IsObject(tRoot) {
+		Set tAttrs("agentic.final_outcome") = tOutcome
+		Set:$IsObject($GET(pResponse)) tAttrs("agentic.decision") = pResponse.Decision
+		Do ##class(AgenticProd.Telemetry.Trace).End(tRoot, $SELECT($$$ISERR(tSC): "Error", 1: "Ok"), .tAttrs)
 	}
 	Quit tSC
 }
@@ -118,6 +135,10 @@ Method OnResponse(request As %Library.Persistent, ByRef response As %Library.Per
 		Quit:'$IsObject(callresponse)
 		Quit:'callrequest.%Extends("AgenticProd.Msg.ApprovalTask")
 		$$$ThrowOnError(..Review(request, callrequest, callresponse, pCompletionKey, .tFixed, .tResend))
+		If ..TracingEnabled, request.TraceParent '= "" {
+			Set tLog = ##class(AgenticProd.Data.DecisionLog).%OpenId(pCompletionKey)
+			If $IsObject(tLog) Do ##class(AgenticProd.Telemetry.Trace).ReviewSpan(request.TraceParent, tLog.CreatedAt, callresponse.%Action, tLog.Outcome, callrequest.Decision)
+		}
 		If $IsObject(tFixed) $$$ThrowOnError(..SendRequestAsync(..TargetConfigName, tFixed, 0))
 		If tResend '= "" $$$ThrowOnError(..ResendOriginal(tResend))
 	} Catch ex {
@@ -386,6 +407,9 @@ Storage Default
 </Value>
 <Value name="6">
 <Value>RejectPath</Value>
+</Value>
+<Value name="7">
+<Value>TracingEnabled</Value>
 </Value>
 </Data>
 <DefaultData>TriageDefaultData</DefaultData>
