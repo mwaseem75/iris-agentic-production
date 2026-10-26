@@ -261,14 +261,19 @@ ClassMethod MonitorSetup() As %Status
 	Quit tSC
 }
 
-/// Portal home page Favorite for the dashboard, for SuperUser and the demo reviewer.
+/// Portal home page Favorite for the dashboard, for SuperUser, _SYSTEM and the demo reviewer.
+/// A user that does not exist or is disabled is skipped.
 /// %CSP.Portal.Utils.%AddFavorite only writes for $USERNAME, so each user gets a child job that
 /// logs in as that user first; this process keeps its own user.
 ClassMethod PortalFavorites() As %Status
 {
 	Set tSC = $$$OK
 	Try {
-		For tUser = "SuperUser", ..#REVIEWUSER {
+		For tUser = "SuperUser", "_SYSTEM", ..#REVIEWUSER {
+			If '..UserEnabled(tUser) {
+				Write "Portal favorite skipped: user ",tUser," does not exist or is disabled",!
+				Continue
+			}
 			Kill ^IRIS.Temp.AgenticProdFavorite(tUser)
 			Job ..AddFavoriteAs(tUser)::10
 			If '$TEST $$$ThrowStatus($$$ERROR($$$GeneralError, "Could not start the job that adds the portal favorite for "_tUser))
@@ -281,6 +286,15 @@ ClassMethod PortalFavorites() As %Status
 		Set tSC = ex.AsStatus()
 	}
 	Quit tSC
+}
+
+/// 1 when IRIS user pUser exists and is enabled.
+ClassMethod UserEnabled(pUser As %String) As %Boolean [ Internal ]
+{
+	New $NAMESPACE
+	Set $NAMESPACE = "%SYS"
+	Quit:'##class(Security.Users).Exists(pUser, .tUser) 0
+	Quit ''tUser.Enabled
 }
 
 /// Child job of PortalFavorites: 1 in ^IRIS.Temp.AgenticProdFavorite(pUser), or why not.
