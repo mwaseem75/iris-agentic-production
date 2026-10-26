@@ -71,7 +71,8 @@ Method TestTriageTraceTree()
 	Do $$$AssertEquals(tA.%Get("agentic.cost_usd"), .00027)
 	Do $$$AssertEquals(tA.%Get("agentic.reasoning_tokens"), 64)
 	Do $$$AssertEquals(tA.%Get("agentic.injection_flagged"), 1)
-	Do $$$AssertEquals(tA.%Get("agentic.tool_calls"), 2)
+	Do $$$AssertEquals(tA.%Get("agentic.tool_calls"), 3)
+	Do $$$AssertEquals(tA.%Get("agentic.unaudited_tool_calls"), 1, "load_skill has no ToolCall row")
 	Do $$$AssertEquals(tA.%Get("gen_ai.conversation.id"), ..#SESSION)
 
 	Set tTool = tTool.attributes
@@ -144,7 +145,8 @@ ClassMethod AddUsage(pReplay As %Boolean) As %Status
 	Set tUsage.HeaderId = ..#HEADER, tUsage.AgentSessionId = ..#SESSION, tUsage.Replay = pReplay
 	Set tUsage.Provider = "openai", tUsage.Model = "gpt-4o-mini"
 	Set tUsage.PromptTokens = 1200, tUsage.CompletionTokens = 150, tUsage.ReasoningTokens = 64
-	Set tUsage.ToolCalls = 2, tUsage.CostUsd = .00027
+	// 3 calls, 2 audited: AI Hub's load_skill is not seen by the audit policy
+	Set tUsage.ToolCalls = 3, tUsage.CostUsd = .00027
 	Quit tUsage.%Save()
 }
 

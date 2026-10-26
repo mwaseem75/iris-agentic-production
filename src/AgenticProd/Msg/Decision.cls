@@ -1,4 +1,5 @@
-/// The agent's decision for one failed message (see the decision contract in CLAUDE.md).
+/// The agent's decision for one failed message, the only agent output Triage accepts: decision,
+/// error_class, confidence, fix, mapping, validated, evidence and reason.
 /// Build it from the agent's text with <method>FromAgentText</method>; never trust the text directly.
 Class AgenticProd.Msg.Decision Extends (Ens.Response, %JSON.Adaptor)
 {

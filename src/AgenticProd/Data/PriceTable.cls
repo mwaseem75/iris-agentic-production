@@ -12,14 +12,14 @@ Property InputPer1M As %Numeric(MINVAL = 0, SCALE = 6) [ Required ];
 
 Property OutputPer1M As %Numeric(MINVAL = 0, SCALE = 6) [ Required ];
 
-/// Rate for prompt tokens served from the provider cache.
+/// Rate for prompt tokens served from the provider cache; providers bill cached tokens at a lower rate.
 Property CacheReadPer1M As %Numeric(MINVAL = 0, SCALE = 6);
 
-/// Rate for tokens written to the cache (Anthropic bills these; OpenAI does not).
+/// Rate for tokens written to the cache; some providers bill these, others do not (0).
 Property CacheWritePer1M As %Numeric(MINVAL = 0, SCALE = 6);
 
-/// 1 = the provider counts cache reads inside prompt_tokens (OpenAI), so they are subtracted
-/// before charging the input rate. 0 = cache tokens are reported separately (Anthropic).
+/// 1 = the provider counts cache reads inside prompt_tokens, so they are subtracted before
+/// charging the input rate. 0 = the provider reports cache tokens separately.
 Property PromptIncludesCache As %Boolean [ InitialExpression = 1 ];
 
 /// Where the rate came from and when it was checked.

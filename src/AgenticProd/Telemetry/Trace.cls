@@ -103,13 +103,13 @@ ClassMethod AgentSpans(pParent As %String, pRequest As AgenticProd.Msg.TriageReq
 		}
 		// Usage rows are written by the agent job for this header; the latest one is this run's
 		Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 1 Model, PromptTokens, CompletionTokens, ReasoningTokens, ToolCalls, CostUsd, Replay, AgentSessionId FROM AgenticProd_Data.Usage WHERE HeaderId = ? AND CreatedAt >= ? ORDER BY ID DESC", pRequest.HeaderId, $ZDATETIME($PIECE(..ZtsAdd(pStart, -1000), "."), 3))
-		Set tSession = "", tReplay = 0
+		Set tSession = "", tReplay = 0, tToolCalls = 0
 		If tRS.%Next() {
 			Set tAttrs("gen_ai.request.model") = tRS.Model
 			Set tAttrs("gen_ai.usage.input_tokens") = +tRS.PromptTokens
 			Set tAttrs("gen_ai.usage.output_tokens") = +tRS.CompletionTokens
 			Set tAttrs("agentic.reasoning_tokens") = +tRS.ReasoningTokens
-			Set tAttrs("agentic.tool_calls") = +tRS.ToolCalls
+			Set tToolCalls = +tRS.ToolCalls, tAttrs("agentic.tool_calls") = tToolCalls
 			Set tAttrs("agentic.cost_usd") = +tRS.CostUsd
 			Set tReplay = +tRS.Replay, tAttrs("agentic.replay") = tReplay
 			Set tSession = tRS.AgentSessionId
@@ -120,11 +120,15 @@ ClassMethod AgentSpans(pParent As %String, pRequest As AgenticProd.Msg.TriageReq
 		Set tAgent = ..Context(tSpan)
 		If (tAgent '= "") && (tSession '= "") && 'tReplay {
 			Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT Tool, Status, DurationMs, ResultLength, CreatedAt FROM AgenticProd_Data.ToolCall WHERE AgentSessionId = ? ORDER BY ID", tSession)
+			Set tAudited = 0
 			While tRS.%Next() {
+				Set tAudited = tAudited + 1
 				Do ..ToolSpan(tAgent, tRS.Tool, +tRS.DurationMs, tRS.Status, tRS.ResultLength, ..Clamp($ZDATETIMEH(tRS.CreatedAt, 3), pStart, pEnd), pStart)
 			}
+			// AI Hub's built-in load_skill runs outside the audit policy, so it has no ToolCall row
+			Set tEnd("agentic.unaudited_tool_calls") = tToolCalls - tAudited
 		}
-		Do ..End(tSpan, $SELECT(pError '= "": "Error", 1: "Ok"), , pEnd)
+		Do ..End(tSpan, $SELECT(pError '= "": "Error", 1: "Ok"), .tEnd, pEnd)
 	} Catch ex {
 	}
 }
