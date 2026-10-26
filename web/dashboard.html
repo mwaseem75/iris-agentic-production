@@ -179,16 +179,18 @@ summary { cursor: pointer; color: var(--accent); }
   <div class="tabpanel hidden" id="tab-evaluation" role="tabpanel">
     <section class="panel">
       <h2>Eval runs <span class="muted">(select a run to see each case)</span></h2>
+      <p class="muted">Headline: the newest finished live run over all cases. Acceptable = the final outcome was safe and matched the expected decision or an accepted alternative.</p>
       <div class="scroll">
         <table>
           <thead><tr>
-            <th>Run</th><th>Label</th><th>Model</th><th class="num">Cases</th><th class="num">Accuracy</th>
+            <th>Run</th><th>Label</th><th>Model</th><th class="num">Cases</th><th class="num">Acceptable</th>
             <th class="num opt">Mapping acc.</th><th class="num">unsafe_agent</th><th class="num">unsafe_final</th>
             <th class="num opt">Cost / msg</th><th class="num opt">p95 s</th><th>Status</th>
           </tr></thead>
           <tbody id="runs"></tbody>
         </table>
       </div>
+      <div class="more-row"><button id="runs-test" type="button" class="hidden"></button></div>
     </section>
 
     <section class="panel hidden" id="detail">
@@ -336,29 +338,46 @@ function renderDecisions(rows) {
     td.title = [d.triageChanged ? "Triage changed the agent's proposal" : "",
       d.flagged && d.flagged.length ? "InjectionGuard flagged " + d.flagged.join(", ") : "",
       d.fhirOut ? "FHIR out: " + d.fhirOut : ""].filter(Boolean).join("; ");
-    // Without an agent run the logged confidence and cost are placeholders, not measurements
-    cell(tr, !d.agentCalled || d.Confidence == null ? "" : Number(d.Confidence).toFixed(2), "num");
-    cell(tr, d.agentCalled ? money(d.CostUsd) : "", "num opt");
-    cell(tr, d.agentCalled ? d.Model : "", "opt");
+    // Without an agent run the logged confidence and cost are placeholders, not measurements;
+    // a replay logs the recorded run's confidence and costs nothing
+    var replay = !d.agentCalled && d.noAgentReason === "replay";
+    cell(tr, !(d.agentCalled || replay) || d.Confidence == null ? "" : Number(d.Confidence).toFixed(2), "num");
+    cell(tr, d.agentCalled ? money(d.CostUsd) : replay ? "$0 (replay)" : "", "num opt");
+    cell(tr, d.agentCalled ? d.Model : replay ? (d.Model || "—") + " (replay)" : "", "opt");
     body.appendChild(tr);
   });
   if (!rows.length) { var tr = el("tr"); var td2 = cell(tr, "No decisions yet.", "muted"); td2.colSpan = 7; body.appendChild(tr); }
 }
 
+// Runs with fewer cases than this are smoke tests and stay behind "Show test runs"
+var TEST_RUN_CASES = 10;
+var showTestRuns = false;
+var lastRuns = [];
+
 function renderRuns(rows) {
+  lastRuns = rows;
   var body = document.getElementById("runs");
   body.replaceChildren();
-  rows.forEach(function (r) {
+  var head = rows.filter(function (r) { return r.headline; });
+  var rest = rows.filter(function (r) { return !r.headline; });
+  var hidden = rest.filter(function (r) { return (r.CaseCount || 0) < TEST_RUN_CASES; }).length;
+  if (!showTestRuns) rest = rest.filter(function (r) { return (r.CaseCount || 0) >= TEST_RUN_CASES; });
+  var btn = document.getElementById("runs-test");
+  btn.classList.toggle("hidden", !hidden);
+  btn.textContent = showTestRuns ? "Hide test runs" : "Show test runs (" + hidden + ")";
+  head.concat(rest).forEach(function (r) {
     var tr = el("tr", null, "click" + (r.ID === selectedRun ? " sel" : ""));
     tr.tabIndex = 0;
-    cell(tr, r.ID);
+    tr.dataset.id = r.ID;
+    var id = cell(tr, String(r.ID));
+    if (r.headline) { id.appendChild(document.createTextNode(" ")); id.appendChild(tag("headline", "info")); }
     cell(tr, r.Label);
     cell(tr, r.Model + (r.Mode === "replay" ? " (replay)" : ""));
     cell(tr, num(r.CaseCount), "num");
     cell(tr, pct(r.Accuracy), "num");
     cell(tr, pct(r.MappingAccuracy), "num opt");
-    cell(tr, tag(num(r.UnsafeAgent), r.UnsafeAgent ? "warn" : "good"), "num");
-    cell(tr, tag(num(r.UnsafeFinal), r.UnsafeFinal ? "bad" : "good"), "num");
+    cell(tr, countTag(r.UnsafeAgent, "warn"), "num");
+    cell(tr, countTag(r.UnsafeFinal, "bad"), "num");
     cell(tr, money(r.CostPerMessageUsd), "num opt");
     cell(tr, r.P95Seconds == null ? "—" : r.P95Seconds, "num opt");
     cell(tr, tag(r.Status || "—", { DONE: "good", RUNNING: "info", STOPPED: "warn", ERROR: "bad" }[r.Status] || "other"));
@@ -369,10 +388,13 @@ function renderRuns(rows) {
   if (!rows.length) { var tr = el("tr"); var td = cell(tr, "No eval runs yet.", "muted"); td.colSpan = 11; body.appendChild(tr); }
 }
 
+// A count as a pill: green at 0, kind above 0, grey when the run has no figure
+function countTag(v, kind) { return v == null ? tag("—", "other") : tag(num(v), v ? kind : "good"); }
+
 function showRun(run) {
   selectedRun = run.ID;
   Array.prototype.forEach.call(document.querySelectorAll("#runs tr"), function (tr) {
-    tr.classList.toggle("sel", tr.firstChild && tr.firstChild.textContent === String(run.ID));
+    tr.classList.toggle("sel", tr.dataset.id === String(run.ID));
   });
   get("api/evalruns/" + run.ID).then(function (rows) {
     document.getElementById("detail-title").textContent = "Run " + run.ID + ": " + (run.Label || run.Model) + " (" + rows.length + " cases)";
@@ -677,6 +699,10 @@ document.getElementById("dec-more").addEventListener("click", function () {
   decLimit += DEC_PAGE;
   var ev = includeEval ? "eval=1" : "eval=0";
   get("api/decisions?limit=" + (decLimit + 1) + "&" + ev).then(renderDecisions).catch(showError);
+});
+document.getElementById("runs-test").addEventListener("click", function () {
+  showTestRuns = !showTestRuns;
+  renderRuns(lastRuns);
 });
 document.getElementById("refresh").addEventListener("click", load);
 window.addEventListener("resize", function () { Object.keys(charts).forEach(function (k) { charts[k].resize(); }); });

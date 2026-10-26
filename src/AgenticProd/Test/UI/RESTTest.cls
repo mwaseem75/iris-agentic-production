@@ -147,6 +147,13 @@ Method TestStaleRunShowsStopped()
 	}
 	Do $$$AssertEquals($GET(tFresh), "RUNNING")
 	Do $$$AssertEquals($GET(tStale), "STOPPED")
+	Set tHeadlines = 0, tIter = ##class(AgenticProd.UI.REST).EvalRunsData().%GetIterator()
+	While tIter.%GetNext(, .tR) {
+		Continue:'tR.headline
+		Set tHeadlines = tHeadlines + 1
+		Do $$$AssertTrue((tR.Mode = "live") && (tR.Cases = "all") && (tR.Status = "DONE"), "headline run "_tR.ID)
+	}
+	Do $$$AssertTrue(tHeadlines <= 1, "at most one headline")
 	For tAge = 60, 1200 Do ##class(AgenticProd.Data.EvalRun).%DeleteId(tId(tAge))
 }
 

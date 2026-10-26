@@ -1,5 +1,8 @@
+Include Ensemble
+
 /// Drops eval cases into LabFileIn's folder so the production picks them up like any lab file.
 /// Every case that fails the LabCodeMap lookup or validation goes to Triage, i.e. a live agent call.
+/// Reset() clears live traffic for a clean demo or recording.
 Class AgenticProd.Demo
 {
 
@@ -48,6 +51,104 @@ ClassMethod SendBatch(pCases As %String, pDir As %String = {..#INDIR}) As %Statu
 		Quit:$$$ISERR(tSC)
 	}
 	Quit tSC
+}
+
+/// Folders Reset empties (the .gitkeep files stay).
+Parameter RESETDIRS = "/home/irisowner/dev/data/in/,/home/irisowner/dev/data/out/,/home/irisowner/dev/data/out-fhir/,/home/irisowner/dev/data/rejected/";
+
+/// Clean state for a demo or a recording, without asking: deletes live (non-eval) DecisionLog,
+/// Usage, ToolCall, Span, SavedCall and FHIRResult rows and their Workflow tasks, purges every
+/// production message, resets LabCodeMap to the Setup seed and empties RESETDIRS. EvalRun,
+/// EvalResult, eval Usage rows and the live runs replay reads (Usage rows with a CaseId) stay.
+/// Writes and logs what it removed.
+ClassMethod Reset() As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		$$$ThrowOnError(..DeleteLiveRows(0, .tCount))
+		// Bodies too and no integrity check: the point is an empty message archive, open sessions included
+		$$$ThrowOnError(##class(Ens.Purge).PurgeMessagesByDate(0, .tPurged, 0, 1))
+		Set tCount("messages") = +$GET(tPurged)
+		Do ##class(Ens.Util.LookupTable).%ClearTable("LabCodeMap")
+		$$$ThrowOnError(##class(AgenticProd.Setup).SeedLabCodeMap())
+		Set tCount("files") = ..ClearFolders(..#RESETDIRS)
+		Set tText = "", tKey = ""
+		For {
+			Set tKey = $ORDER(tCount(tKey))
+			Quit:tKey=""
+			Set tText = tText_$SELECT(tText '= "": ", ", 1: "")_tKey_" "_tCount(tKey)
+		}
+		Set tText = "Demo.Reset removed "_tText_"; LabCodeMap back to the Setup seed"
+		Write tText, !
+		$$$LOGINFO(tText)
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// Delete live rows and their Workflow tasks; pCount(table) = rows deleted. pStubOnly limits
+/// every delete to test rows (HeaderId < 0, FHIRResult ControlId STUB*) so the unit test can run
+/// on a database that holds real data.
+ClassMethod DeleteLiveRows(pStubOnly As %Boolean, Output pCount) As %Status
+{
+	Set tSC = $$$OK
+	Kill pCount
+	Try {
+		Set tStub = $SELECT(pStubOnly: " AND HeaderId < 0", 1: "")
+		// Tasks first: they are found through the DecisionLog rows deleted below
+		Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT r.ID, r.TaskStatus_Request AS TaskId FROM EnsLib_Workflow.TaskResponse r"
+			_" JOIN AgenticProd_Msg.ApprovalTask t ON t.ID = r.TaskStatus_Request JOIN AgenticProd_Data.DecisionLog d ON d.HeaderId = t.HeaderId"
+			_" WHERE d.EvalRunId IS NULL"_$SELECT(pStubOnly: " AND d.HeaderId < 0", 1: ""))
+		If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message))
+		Set pCount("workflow tasks") = 0
+		While tRS.%Next() {
+			Do ..Exec("DELETE FROM EnsLib_Workflow.Worklist WHERE Task = ?", tRS.ID)
+			$$$ThrowOnError(##class(EnsLib.Workflow.TaskResponse).%DeleteId(tRS.ID))
+			Do ##class(AgenticProd.Msg.ApprovalTask).%DeleteId(tRS.TaskId)
+			Set pCount("workflow tasks") = pCount("workflow tasks") + 1
+		}
+		Set pCount("DecisionLog") = ..Exec("DELETE FROM AgenticProd_Data.DecisionLog WHERE EvalRunId IS NULL"_tStub)
+		// A live row with a CaseId is a recorded run that replay may still read
+		Set pCount("Usage") = ..Exec("DELETE FROM AgenticProd_Data.Usage WHERE EvalRunId IS NULL AND (CaseId IS NULL OR CaseId = '')"_tStub)
+		// ToolCall has no EvalRunId: a call goes when no remaining Usage row has its session
+		Set pCount("ToolCall") = ..Exec("DELETE FROM AgenticProd_Data.ToolCall WHERE (AgentSessionId IS NULL"
+			_" OR AgentSessionId NOT IN (SELECT AgentSessionId FROM AgenticProd_Data.Usage WHERE AgentSessionId IS NOT NULL))"_tStub)
+		Set pCount("Span") = ..Exec("DELETE FROM AgenticProd_Data.Span WHERE EvalRunId IS NULL"_tStub)
+		Set pCount("SavedCall") = ..Exec("DELETE FROM AgenticProd_Data.SavedCall WHERE EvalRunId IS NULL"_tStub)
+		Set pCount("FHIRResult") = ..Exec("DELETE FROM AgenticProd_Msg.FHIRResult WHERE (ControlId IS NULL OR ControlId NOT LIKE 'EV%-%')"
+			_$SELECT(pStubOnly: " AND ControlId %STARTSWITH 'STUB'", 1: ""))
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// Rows affected by pSQL; throws on an SQL error.
+ClassMethod Exec(pSQL As %String, pArgs...) As %Integer [ Internal ]
+{
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, pSQL, pArgs...)
+	If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message))
+	Quit +tRS.%ROWCOUNT
+}
+
+/// Delete every file but .gitkeep in each folder of the comma list pDirs; returns how many.
+ClassMethod ClearFolders(pDirs As %String) As %Integer
+{
+	Set tCount = 0
+	For i = 1:1:$LENGTH(pDirs, ",") {
+		Set tDir = $PIECE(pDirs, ",", i)
+		Continue:(tDir="")||'##class(%File).DirectoryExists(tDir)
+		Set tFile = $ZSEARCH(##class(%File).NormalizeDirectory(tDir)_"*")
+		While tFile '= "" {
+			Set tName = ##class(%File).GetFilename(tFile)
+			If (tName '= ".gitkeep") && (tName '= ".") && (tName '= "..") && '##class(%File).DirectoryExists(tFile) {
+				Set:##class(%File).Delete(tFile) tCount = tCount + 1
+			}
+			Set tFile = $ZSEARCH("")
+		}
+	}
+	Quit tCount
 }
 
 /// Path of eval/cases/<pCase>-*.hl7, "" when there is none.

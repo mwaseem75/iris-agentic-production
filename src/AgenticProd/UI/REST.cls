@@ -596,19 +596,23 @@ ClassMethod AgentSetting(pItem As %String, pName As %String) As %String [ Intern
 
 /// Eval runs, newest first. A RUNNING run with no result for STALESECONDS shows as STOPPED: a run
 /// whose job died (container restart, terminal closed) never gets to set DONE or ERROR itself.
+/// headline is true on the newest finished live run over all cases, the one the README quotes.
 ClassMethod EvalRunsData() As %DynamicArray
 {
-	Set tRows = ..Rows("SELECT r.ID, r.Label, r.Model, r.Mode, r.Status, r.StartedAt, r.CaseCount, r.Accuracy, r.ExactAccuracy, r.MappingAccuracy,"
+	Set tRows = ..Rows("SELECT r.ID, r.Label, r.Model, r.Mode, r.Cases, r.Status, r.StartedAt, r.CaseCount, r.Accuracy, r.ExactAccuracy, r.MappingAccuracy,"
 		_" r.UnsafeAgent, r.UnsafeFinal, r.TimedOut, r.CostPerMessageUsd, r.P95Seconds,"
 		_" (SELECT MAX(e.CreatedAt) FROM AgenticProd_Data.EvalResult e WHERE e.RunId = r.ID) AS LastResultAt"
 		_" FROM AgenticProd_Data.EvalRun r ORDER BY r.ID DESC")
-	Set tIter = tRows.%GetIterator()
+	Set tIter = tRows.%GetIterator(), tHeadSeen = 0
 	While tIter.%GetNext(, .tRow) {
 		If tRow.Status = "RUNNING" {
 			Set tLast = $SELECT(tRow.LastResultAt '= "": tRow.LastResultAt, 1: tRow.StartedAt)
 			Set:(##class(AgenticProd.Telemetry.Trace).ZtsDiff($ZTIMESTAMP, $ZDATETIMEH(tLast, 3)) > ..#STALESECONDS) tRow.Status = "STOPPED"
 		}
 		Do tRow.%Remove("LastResultAt")
+		Set tHead = 'tHeadSeen && (tRow.Mode = "live") && (tRow.Cases = "all") && (tRow.Status = "DONE")
+		Set:tHead tHeadSeen = 1
+		Do tRow.%Set("headline", tHead, "boolean")
 	}
 	Quit tRows
 }

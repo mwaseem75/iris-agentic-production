@@ -112,6 +112,17 @@ do ##class(AgenticProd.Demo).SendCase("01", "MSG90001")
 do ##class(AgenticProd.Eval.Runner).Run("gpt-4o-mini", "replay demo", "all", "replay")
 ```
 
+To start a demo or a recording from a clean state:
+
+```objectscript
+do ##class(AgenticProd.Demo).Reset()
+```
+
+It deletes all live (non-eval) decisions, usage, tool calls, spans and Workflow tasks, purges
+every production message, sets LabCodeMap back to the seed codes and empties `data/in`,
+`data/out`, `data/out-fhir` and `data/rejected`. It does not ask first. Eval runs, their results
+and the recorded runs that replay uses are kept.
+
 Then open Visual Trace for the session to see each step: router, Triage, every agent tool call, the decision and its cost.
 
 ## FHIR output
