@@ -4,6 +4,8 @@ An IRIS AI Hub agent that runs inside an IRIS interoperability production, repai
 
 Entry for the InterSystems Programming Contest "AI Agents in Interoperability Workflows". Implements the Ideas Portal idea [DPI-I-627: AI assisted debug](https://ideas.intersystems.com/ideas/DPI-I-627), with parts of [DPI-I-863](https://ideas.intersystems.com/ideas/DPI-I-863) (errors to a Workflow task list) and [DPI-I-574](https://ideas.intersystems.com/ideas/DPI-I-574) (AI analysis of errors).
 
+New to IRIS AI Hub? [TUTORIAL.md](TUTORIAL.md) walks through how this agent is built, step by step, using this repo's code.
+
 ## The problem
 
 When a lab result fails in an interface engine, someone with HL7 and terminology skills has to open the message, find the cause and fix or resend it. Until then the result does not reach the clinician.
@@ -45,12 +47,23 @@ The agent proposes. A deterministic business process (`AgenticProd.Process.Triag
 4. The mapping goes into the `LabCodeMap` lookup table and the original message is sent again.
 5. The next message with that code goes straight through. No LLM call, no cost.
 
+![A MAP_CODE task in the Workflow inbox](images/workflow-approval.png)
+
+## What changed recently
+
+- **FHIR R4 output.** Valid lab results also go out as FHIR R4: HL7 v2 → SDA → FHIR R4, with the LOINC coding taken from `LabCodeMap`. Bundles are checked against the US Core lab profile, which stands in for the NPHIES profiles. See [FHIR output](#fhir-output).
+- **Dashboard tabs.** The dashboard now has three tabs: Overview, Messages and Evaluation. Click a message to open its story view: the steps in plain words, a timeline of its spans and the masked message.
+- **Spans stored in IRIS.** Every failed message gets one trace in `Data.Span`. Export to an OpenTelemetry collector (OTLP) is optional.
+- **Prometheus metrics.** `/api/monitor/metrics` also serves the agent's metrics. Like IRIS's own metrics on that URL, it can be read without a login. It returns totals only, never message content.
+- **Clean demo state.** `AgenticProd.Demo.Reset()` clears live data before a demo or a recording. See [Try it](#try-it).
+
 ## Architecture
 
 ```
 LabFileIn (HL7 file service)
    │
-LabRouter ── valid ──► DTL (local code → LOINC) ──► NphiesOut (simulated receiver)
+LabRouter ── valid ──► DTL (local code → LOINC) ──► NphiesOut (simulated receiver, HL7 v2)
+   │                └──► NphiesFHIROut (HL7 v2 → SDA → FHIR R4, LOINC from LabCodeMap, profile check)
    │ error
    ▼
 Triage ◄──► TriageAgent operation (%AI.Agent + skills + tools, runs as agentic_agent)
@@ -58,6 +71,8 @@ Triage ◄──► TriageAgent operation (%AI.Agent + skills + tools, runs as a
    ├─ AUTO_FIX ─► re-check ─► new message ─► LabRouter
    ├─ RESEND / REJECT
    └─ MAP_CODE / ESCALATE ─► IntegrationSupport (EnsLib.Workflow) ─► approve ─► LabCodeMap
+
+Records ─► Data.Span (traces) ─► dashboard (UI.REST) · /api/monitor/metrics (Monitor.Metrics, Monitor.GenAI) · OTLP (optional)
 ```
 
 | Part | Classes |
@@ -65,14 +80,18 @@ Triage ◄──► TriageAgent operation (%AI.Agent + skills + tools, runs as a
 | Agent | `Agent.TriageAgent` (declarative `%AI.Agent`), skills `Skill.HL7Repair`, `Skill.CodeMapping` |
 | Tools | `Tools.Base` (format-neutral), `Tools.HL7`, `Tools.Mapping` |
 | Policies | `Policy.ReadOnly`, `Policy.Audit`, `Policy.InjectionGuard` |
-| Production | `Process.LabRouter`, `Process.Triage`, `Operation.Agent`, `Operation.NphiesOut`, `DTL.LabToNphies` |
-| Records | `Data.DecisionLog`, `Data.Usage`, `Data.ToolCall`, `Data.PriceTable`, `Data.EvalRun`, `Data.EvalResult` |
+| Production | `Process.LabRouter`, `Process.Triage`, `Operation.Agent`, `Operation.NphiesOut`, `Operation.NphiesFHIROut`, `DTL.LabToNphies` |
+| Records | `Data.DecisionLog`, `Data.Usage`, `Data.ToolCall`, `Data.Span`, `Data.PriceTable`, `Data.EvalRun`, `Data.EvalResult` |
+| Monitoring | `Telemetry.Trace` (spans), `Monitor.Metrics` and `Monitor.GenAI` (Prometheus metrics on `/api/monitor/metrics`) |
+| Dashboard | `UI.REST` (read-only JSON at `/agenticprod/api`), `UI.Home` (login page), `web/dashboard.html` |
 
 The core is format-neutral: error classes, decisions, Triage and the stores do not depend on HL7. HL7 v2 is the first format; fix checking is looked up per format.
 
 ## Install
 
 You need Docker and access to the IRIS AI Hub early access image (build 154).
+
+Memory: leave about 4 GB free for Docker. IRIS needs extra memory while it starts. On Windows, use a system-managed page file, and give WSL enough memory in `%UserProfile%\.wslconfig` (for example `memory=6GB` under `[wsl2]`). With too little, Windows can stop the WSL VM during the build.
 
 ```bash
 git clone https://github.com/mwaseem75/iris-agentic-production.git
@@ -91,6 +110,13 @@ Setup runs on install: it seeds the price table and `LabCodeMap`, builds the LOI
 - Management Portal: http://localhost:52773/csp/sys/UtilHome.csp (`SuperUser` / `SYS`)
 - Production: Interoperability → IRISAPP → `AgenticProd.Production`
 - Reviewer inbox: Interoperability → Workflow Inbox, log in as `reviewer` / `Review-Demo-2026` (demo only)
+- Dashboard: http://localhost:52773/agenticprod/AgenticProd.UI.Home.cls, log in as `reviewer` / `Review-Demo-2026` (or `SuperUser`)
+
+Optional: to also run an OpenTelemetry Collector and Jaeger for traces, start the `observability` profile:
+
+```bash
+docker compose --profile observability up -d
+```
 
 ## Try it
 
@@ -154,9 +180,13 @@ The most important number is **unsafe_final**: how often the system carried out 
 
 Every agent run records prompt, completion, reasoning and cache tokens from the AI Hub session stats, with cost from `Data.PriceTable`. Every tool call is logged by the audit policy, including the verdict of each `validate_fix`. Agent sessions are saved, so any run can be opened later or replayed.
 
-- **Dashboard** (`/agenticprod`, reviewer login): KPI tiles, recent decisions, eval runs and an **Agent metrics** section: tokens by type per model, agent latency p50/p95, step durations from spans (router, agent, Triage), tool calls per tool with average time, `validate_fix` results, the decision mix per hour, approval wait time, and LLM calls saved by learned mappings. Live traffic by default; tick "Include eval runs" to add eval messages. The same numbers are at `/agenticprod/api/metrics/summary`.
-- **Traces stored in IRIS**: every failed message gets one trace (router check, agent run, each tool call, the Triage decision, the review) in `Data.Span`. Click a row in Recent decisions to see the message's story in plain steps, a timeline of its spans and the masked message.
-- **Prometheus / Grafana**: `/api/monitor/metrics` (IRIS SAM) also serves `gen_ai_client_token_usage{model,type}`, `gen_ai_client_operation_duration_seconds{model}` (summary, p50/p95), `agentic_decisions_total{decision,outcome}`, `agentic_tool_calls_total{tool}`, `agentic_unsafe_blocked_total`, `agentic_llm_calls_saved_total` and `agentic_approval_waiting` (`AgenticProd.Monitor.Metrics`, registered by `Setup`). These are totals over the stored tables, eval traffic included.
+![Dashboard overview](images/dashboard-overview.png)
+
+- **Dashboard** (`/agenticprod`, reviewer login): three tabs. **Overview** has KPI tiles and charts, **Messages** lists recent decisions, **Evaluation** lists eval runs. It shows KPI tiles, recent decisions, eval runs and an **Agent metrics** section: tokens by type per model, agent latency p50/p95, step durations from spans (router, agent, Triage), tool calls per tool with average time, `validate_fix` results, the decision mix per hour, approval wait time, and LLM calls saved by learned mappings. Live traffic by default; tick "Include eval runs" to add eval messages. The same numbers are at `/agenticprod/api/metrics/summary`.
+- **Traces stored in IRIS**: every failed message gets one trace (router check, agent run, each tool call, the Triage decision, the review) in `Data.Span`. Click a row in Recent decisions to see the message's story in plain steps, a timeline of its spans and the masked message. Export over OTLP is optional (see Jaeger below).
+
+![Story view of one message](images/story-view.png)
+- **Prometheus / Grafana**: `/api/monitor/metrics` (IRIS SAM) also serves `gen_ai_client_token_usage{model,type}`, `gen_ai_client_operation_duration_seconds{model}` (summary, p50/p95), `agentic_decisions_total{decision,outcome}`, `agentic_tool_calls_total{tool}`, `agentic_unsafe_blocked_total`, `agentic_llm_calls_saved_total` and `agentic_approval_waiting` (`AgenticProd.Monitor.Metrics`, registered by `Setup`). These are totals over the stored tables, eval traffic included. Like the rest of IRIS's metrics on this URL, they can be read without a login. They are counts and timings only; no message content is served.
 - **Visual Trace**: each decision links to the message session in the Management Portal.
 - **Jaeger (optional)**: `docker compose --profile observability up -d`, then turn on `TracingEnabled` on the Triage item to also export spans over OTLP; Jaeger UI at http://localhost:16686.
 
