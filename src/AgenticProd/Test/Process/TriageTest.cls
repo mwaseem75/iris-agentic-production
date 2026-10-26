@@ -283,6 +283,7 @@ Method TestLearningLoop01()
 
 	Set tOutDir = "/home/irisowner/dev/data/out/"
 	Set tBefore = ..OutFiles(tOutDir, "MSG00001_*")
+	Set tFHIRBefore = ..OutFiles("/home/irisowner/dev/data/out-fhir/", "MSG00001_*")
 	Set tTriage = ..Triage()
 	Set tTriage.TargetConfigName = "LabRouter"
 	If '$$$AssertStatusOK(tTriage.ResendOriginal(tResend, .tNewId)) Quit
@@ -299,6 +300,26 @@ Method TestLearningLoop01()
 		Hang 0.5
 	}
 	If $$$AssertNotEquals(tNew, "", "resent message reached data/out") {
+		Do ##class(%File).Delete(tNew)
+	}
+	// FHIR output runs after the HL7 send, in the same LabRouter call; a cold validator takes ~35 s
+	Set tFHIRDir = "/home/irisowner/dev/data/out-fhir/", tNew = ""
+	For i = 1:1:90 {
+		Set tAfter = ..OutFiles(tFHIRDir, "MSG00001_*")
+		Set tPtr = 0
+		While $LISTNEXT(tAfter, tPtr, tFile) {
+			If '$LISTFIND(tFHIRBefore, tFile) Set tNew = tFile  Quit
+		}
+		Quit:tNew'=""
+		Hang 0.5
+	}
+	If $$$AssertNotEquals(tNew, "", "resent message reached data/out-fhir") {
+		Set tStream = ##class(%Stream.FileCharacter).%New()
+		Do tStream.LinkToFile(tNew)
+		Set tBundle = ##class(%DynamicObject).%FromJSON(tStream)
+		Set tObs = ##class(AgenticProd.Test.Operation.NphiesFHIROutTest).First(tBundle, "Observation")
+		Do $$$AssertEquals($SELECT($IsObject(tObs): tObs.code.coding.%Get(0).code, 1: ""), "2345-7", "GLU-01 Observation carries the approved LOINC")
+		Kill tStream
 		Do ##class(%File).Delete(tNew)
 	}
 	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT COUNT(*) AS N FROM Ens.MessageHeader WHERE SessionId = ? AND TargetConfigName IN ('Triage', 'TriageAgent')", tSession)

@@ -210,7 +210,7 @@ ClassMethod DashboardSetup() As %Status
 	Set tSC = $$$OK
 	Try {
 		$$$ThrowOnError(..CreateDashboardApp($NAMESPACE))
-		Set tSql = "GRANT SELECT ON AgenticProd_Data.DecisionLog, AgenticProd_Data.Usage, AgenticProd_Data.EvalRun, AgenticProd_Data.EvalResult, AgenticProd_Data.ToolCall, AgenticProd_Data.Span, AgenticProd_Data.SavedCall, AgenticProd_Msg.ApprovalTask, EnsLib_Workflow.TaskResponse TO "_..#DASHROLE
+		Set tSql = "GRANT SELECT ON AgenticProd_Data.DecisionLog, AgenticProd_Data.Usage, AgenticProd_Data.EvalRun, AgenticProd_Data.EvalResult, AgenticProd_Data.ToolCall, AgenticProd_Data.Span, AgenticProd_Data.SavedCall, AgenticProd_Msg.ApprovalTask, AgenticProd_Msg.FHIRResult, Ens.MessageHeader, EnsLib_Workflow.TaskResponse TO "_..#DASHROLE
 		Set tRS = ##class(%SQL.Statement).%ExecDirect(, tSql)
 		If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message_" ("_tSql_")"))
 	} Catch ex {

@@ -114,6 +114,18 @@ do ##class(AgenticProd.Eval.Runner).Run("gpt-4o-mini", "replay demo", "all", "re
 
 Then open Visual Trace for the session to see each step: router, Triage, every agent tool call, the decision and its cost.
 
+## FHIR output
+
+Every lab result that passes LabRouter also goes out as FHIR R4, built with the converters that
+ship with IRIS for Health: HL7 v2 → SDA3 (`HS.Gateway.HL7.HL7ToSDA3`) → FHIR R4 bundle
+(`HS.FHIR.DTL.Util.API.Transform.SDA3ToFHIR`). `NphiesFHIROut` adds the LOINC coding from
+LabCodeMap to each Observation (the local code stays as a second coding), checks every resource
+against the R4 base structure and every Observation against US Core `us-core-observation-lab`
+3.1.0, which stands in for the NPHIES profiles. Valid bundles land in `data/out-fhir/`. An invalid
+bundle is not sent: its issues go to Triage as a `FHIR` problem, and until there is a FHIR fix
+checker Triage hands it to a person without calling the agent. LabRouter's `FHIROutput` setting
+turns this off; the HL7 output to `data/out/` is unchanged.
+
 ## Evaluation
 
 60 synthetic test cases in [`eval/cases`](eval/cases): normal errors, look-alike LOINC codes (serum vs blood vs urine, fasting, high-sensitivity, calculated), identity traps, structure and routing errors, a simulated timeout, prompt injection attempts and valid controls. Each case lists the expected decision, the other acceptable decisions, and the decisions that would be unsafe.
@@ -141,7 +153,7 @@ Charts use [Apache ECharts](https://echarts.apache.org/) 5.5.1, vendored in `web
 
 ## Limits
 
-- HL7 v2 lab results only for now; FHIR would be the next format.
+- HL7 v2 lab results in. FHIR R4 goes out, but the agent cannot repair FHIR yet.
 - The LOINC knowledge base is a 46-code demonstration subset. See [`kb/LOINC_NOTICE.md`](kb/LOINC_NOTICE.md).
 - IRIS AI Hub is pre-release (build 154). A few workarounds are noted in the code.
 - All data is synthetic. No real patients.

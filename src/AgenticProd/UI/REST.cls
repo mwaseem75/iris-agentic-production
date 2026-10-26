@@ -189,9 +189,11 @@ ClassMethod DecisionsData(pLimit As %Integer = {..#DEFAULTLIMIT}, pIncludeEval A
 		If tRow.AgentCalls = 0 {
 			// "agent error": runs from before failed runs got a Usage row (Operation.Agent)
 			Set tWhy = $SELECT(tRow.Replays: "replay", tRow.Reason [ "agent not called a second time": "loop guard",
-				tRow.Reason [ "Daily token budget": "budget", tRow.Reason [ "agent gave no decision": "agent error", 1: "")
+				tRow.Reason [ "Daily token budget": "budget", tRow.Reason [ "agent gave no decision": "agent error",
+				tRow.Reason [ "no fix checker for format": "no checker for format", 1: "")
 			Do tRow.%Set("noAgentReason", tWhy)
 		}
+		Do tRow.%Set("fhirOut", ..FHIRStatus(tRow.SessionId))
 		For tKey = "DecisionJSON", "Reason", "AgentCalls", "Replays" Do tRow.%Remove(tKey)
 	}
 	Quit tRows
@@ -240,6 +242,9 @@ ClassMethod StoryData(pId As %String) As %DynamicObject
 
 	Do tSteps.%Push(..ReviewStep(tLog, ..TriageOutcome(tLog, tTriage), .tSecrets))
 
+	Set tFHIR = ..FHIRStatus(tLog.SessionId)
+	Do:tFHIR'="" tSteps.%Push({"step":"fhir", "title":"FHIR out", "text":("FHIR R4 bundle "_tFHIR_$SELECT(tFHIR = "valid": ", written to the simulated NPHIES FHIR endpoint.", 1: ", not sent; the issues went to Triage."))})
+
 	Set tN = 0, tIter = tSteps.%GetIterator()
 	While tIter.%GetNext(, .tStep) {
 		Do tStep.%Set("n", $INCREMENT(tN))
@@ -251,6 +256,17 @@ ClassMethod StoryData(pId As %String) As %DynamicObject
 	Do:tOut.message="" tOut.%Set("message", "", "null")
 	Do:tLog.SessionId="" tOut.%Set("sessionId", "", "null")
 	Quit tOut
+}
+
+/// "valid" or "invalid (n issues)" for the latest NphiesFHIROut result in session pSessionId,
+/// "" when the session has none (FHIR output off, or the message never got that far).
+ClassMethod FHIRStatus(pSessionId As %Integer) As %String
+{
+	Quit:pSessionId="" ""
+	Set tRow = ..Rows("SELECT TOP 1 r.Valid, r.IssueCount FROM Ens.MessageHeader h JOIN AgenticProd_Msg.FHIRResult r ON r.ID = h.MessageBodyId"
+		_" WHERE h.SessionId = ? AND h.MessageBodyClassName = 'AgenticProd.Msg.FHIRResult' ORDER BY h.ID DESC", pSessionId).%Get(0)
+	Quit:'$IsObject(tRow) ""
+	Quit $SELECT(tRow.Valid: "valid", 1: "invalid ("_tRow.IssueCount_" issue"_$SELECT(tRow.IssueCount = 1: "", 1: "s")_")")
 }
 
 /// The agent's step: what it proposed, or why it was not called, and its tool calls in order.

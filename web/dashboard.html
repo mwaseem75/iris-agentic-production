@@ -282,6 +282,7 @@ function renderDecisions(rows) {
     cell(tr, d.AgentDecision || (d.agentCalled ? d.Decision : "—"));
     var out = cell(tr, tag(d.Outcome || "—", outcomeKind(d.Outcome)));
     if (d.triageChanged) out.appendChild(tag("Triage changed", "info"));
+    if (d.fhirOut) out.appendChild(tag("FHIR " + d.fhirOut, d.fhirOut === "valid" ? "good" : "bad"));
     if (d.flagged && d.flagged.length) {
       var f = tag("flagged", "bad");
       f.title = "InjectionGuard flagged " + d.flagged.join(", ");

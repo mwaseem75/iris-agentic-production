@@ -58,6 +58,9 @@ Method OnRequest(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As 
 		If ..FixedByTriage(pRequest.HeaderId) {
 			// Our own fix failed again: another agent round could loop, so a person decides
 			Set tDecision = ##class(AgenticProd.Operation.Agent).EscalateDecision(pRequest, "message built by a Triage AUTO_FIX failed again; agent not called a second time")
+		} ElseIf ..CheckerFor(pRequest.Format) = "" {
+			// No skill or fix checker for this format yet (FHIR until F2): an agent run would be spent for nothing
+			Set tDecision = ##class(AgenticProd.Operation.Agent).EscalateDecision(pRequest, "no fix checker for format '"_pRequest.Format_"'; agent not called")
 		} Else {
 			Set tAgentStart = $ZTIMESTAMP
 			Set tSC = ..SendRequestSync(..AgentTarget, pRequest, .tDecision, ..AgentTimeout)

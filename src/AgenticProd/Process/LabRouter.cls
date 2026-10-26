@@ -18,12 +18,21 @@ Property TriageTarget As Ens.DataType.ConfigName [ InitialExpression = "Triage" 
 /// Seconds to wait for TargetConfigName before the send counts as TRANSIENT.
 Property SendTimeout As %Integer(MINVAL = 1) [ InitialExpression = 30 ];
 
-Parameter SETTINGS = "TargetConfigName:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},TriageTarget:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},SendTimeout:Basic";
+/// Also send each delivered message to FHIRTarget as a validated FHIR R4 bundle.
+Property FHIROutput As %Boolean [ InitialExpression = 1 ];
+
+/// Receiver of the original HL7 message for FHIR output.
+Property FHIRTarget As Ens.DataType.ConfigName [ InitialExpression = "NphiesFHIROut" ];
+
+/// Seconds to wait for FHIRTarget; validation of a cold Java validator takes about 35 s.
+Property FHIRTimeout As %Integer(MINVAL = 1) [ InitialExpression = 60 ];
+
+Parameter SETTINGS = "TargetConfigName:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},TriageTarget:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},SendTimeout:Basic,FHIROutput:FHIR,FHIRTarget:FHIR:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},FHIRTimeout:FHIR";
 
 Method OnRequest(pRequest As EnsLib.HL7.Message, Output pResponse As %Library.Persistent) As %Status
 {
 	Set tSC = $$$OK
-	Set tStart = $ZTIMESTAMP
+	Set tStart = $ZTIMESTAMP, tFormat = "HL7v2"
 	Try {
 		$$$ThrowOnError(..Check(pRequest, .tClass, .tText))
 		If tClass = "" {
@@ -41,16 +50,41 @@ Method OnRequest(pRequest As EnsLib.HL7.Message, Output pResponse As %Library.Pe
 			// A metric only: a failure to record it must not fail a message that was sent
 			Set tNote = ##class(AgenticProd.Data.SavedCall).Note(pRequest, ..%PrimaryRequestHeader.%Id())
 			If $$$ISERR(tNote) $$$LOGWARNING("SavedCall not recorded: "_$SYSTEM.Status.GetErrorText(tNote))
+			If ..FHIROutput Do ..FHIROut(pRequest, .tClass, .tText)  Set:tClass'="" tFormat = "FHIR"
 		}
 		Quit:tClass=""
 		$$$TRACE("LabRouter to "_..TriageTarget_": "_tClass_" "_tText)
-		Set tTriage = ..TriageRequest(pRequest, tClass, tText)
+		Set tTriage = ..TriageRequest(pRequest, tClass, tText, tFormat)
 		Set tTriage.RouterStart = tStart, tTriage.RouterEnd = $ZTIMESTAMP
 		$$$ThrowOnError(..SendRequestAsync(..TriageTarget, tTriage, 0))
 	} Catch ex {
 		Set tSC = ex.AsStatus()
 	}
 	Quit tSC
+}
+
+/// Send pMsg to FHIRTarget. pClass is "" when the bundle was valid and written; otherwise the
+/// HL7 message has already gone out, so Triage gets it as a FHIR problem.
+Method FHIROut(pMsg As EnsLib.HL7.Message, Output pClass As %String, Output pText As %String)
+{
+	Set (pClass, pText) = ""
+	Set tSC = ..SendRequestSync(..FHIRTarget, pMsg, .tResult, ..FHIRTimeout)
+	If $$$ISERR(tSC) || '$IsObject($GET(tResult)) {
+		Set pClass = "OTHER", pText = "FHIR: "_..FHIRTarget_" failed: "_$SELECT($$$ISERR(tSC): $SYSTEM.Status.GetErrorText(tSC), 1: "no response in "_..FHIRTimeout_" s")
+		Quit
+	}
+	Do ..FHIRProblem(tResult, .pClass, .pText)
+}
+
+/// pClass and pText for an invalid FHIRResult, from its first issue; both "" when it is valid.
+ClassMethod FHIRProblem(pResult As AgenticProd.Msg.FHIRResult, Output pClass As %String, Output pText As %String)
+{
+	Set (pClass, pText) = ""
+	Quit:pResult.Valid
+	Set pText = "FHIR: "_pResult.IssueCount_" validation issue(s): "_pResult.Issues
+	Set tFirst = $PIECE(pResult.Issues, "; ")
+	Set pClass = $SELECT((tFirst["WrongJsonType")||(tFirst["not a valid"): "BAD_FORMAT",
+		tFirst["required": "MISSING_FIELD", tFirst["profile check failed": "STRUCTURE_ERROR", 1: "INVALID_VALUE")
 }
 
 /// Run every check on pMsg. pClass is "" when it may be sent, else the first class found in
@@ -101,13 +135,13 @@ ClassMethod ClassOf(pError As %String) As %String
 
 /// HeaderId is the header of the message this router received, so Triage, the agent tools
 /// and a RESEND all work on the original body.
-Method TriageRequest(pMsg As EnsLib.HL7.Message, pClass As %String, pText As %String) As AgenticProd.Msg.TriageRequest
+Method TriageRequest(pMsg As EnsLib.HL7.Message, pClass As %String, pText As %String, pFormat As %String = "HL7v2") As AgenticProd.Msg.TriageRequest
 {
 	Set tRequest = ##class(AgenticProd.Msg.TriageRequest).%New()
 	Set tRequest.HeaderId = ..%PrimaryRequestHeader.%Id()
 	Set tRequest.SessionId = ..%SessionId
 	Set tRequest.Source = pMsg.GetValueAt("1:3.1")
-	Set tRequest.Format = "HL7v2"
+	Set tRequest.Format = pFormat
 	Set tRequest.ControlId = pMsg.GetValueAt("1:10")
 	Set tRequest.ErrorText = pText
 	Set tRequest.ErrorClass = pClass
@@ -151,6 +185,15 @@ Storage Default
 </Value>
 <Value name="4">
 <Value>TracingEnabled</Value>
+</Value>
+<Value name="5">
+<Value>FHIROutput</Value>
+</Value>
+<Value name="6">
+<Value>FHIRTarget</Value>
+</Value>
+<Value name="7">
+<Value>FHIRTimeout</Value>
 </Value>
 </Data>
 <DefaultData>LabRouterDefaultData</DefaultData>
