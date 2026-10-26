@@ -26,6 +26,9 @@ Parameter DASHAPI = "/agenticprod/api";
 /// Vendored chart library (web/vendor), served under the page app's login.
 Parameter DASHVENDOR = "/agenticprod/vendor";
 
+/// Name of the Management Portal home page Favorite that opens the dashboard.
+Parameter FAVORITENAME = "Agentic Production dashboard";
+
 Parameter DASHDIR = "/home/irisowner/dev/web/";
 
 /// Login group shared by DASHAPP and DASHAPI, so one login covers the page and its API calls.
@@ -62,6 +65,7 @@ ClassMethod Run() As %Status
 		$$$ThrowOnError(..WorkflowSetup())
 		$$$ThrowOnError(..DashboardSetup())
 		$$$ThrowOnError(..MonitorSetup())
+		$$$ThrowOnError(..PortalFavorites())
 		// Setup runs at image build with IRIS about to stop, so starting it here would not last
 		$$$ThrowOnError(##class(Ens.Director).SetAutoStart("AgenticProd.Production"))
 	} Catch ex {
@@ -255,6 +259,40 @@ ClassMethod MonitorSetup() As %Status
 		Set tSC = ex.AsStatus()
 	}
 	Quit tSC
+}
+
+/// Portal home page Favorite for the dashboard, for SuperUser and the demo reviewer.
+/// %CSP.Portal.Utils.%AddFavorite only writes for $USERNAME, so each user gets a child job that
+/// logs in as that user first; this process keeps its own user.
+ClassMethod PortalFavorites() As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		For tUser = "SuperUser", ..#REVIEWUSER {
+			Kill ^IRIS.Temp.AgenticProdFavorite(tUser)
+			Job ..AddFavoriteAs(tUser)::10
+			If '$TEST $$$ThrowStatus($$$ERROR($$$GeneralError, "Could not start the job that adds the portal favorite for "_tUser))
+			For i = 1:1:100 { Quit:$DATA(^IRIS.Temp.AgenticProdFavorite(tUser))  Hang 0.1 }
+			Set tResult = $GET(^IRIS.Temp.AgenticProdFavorite(tUser), "no answer after 10 s")
+			Kill ^IRIS.Temp.AgenticProdFavorite(tUser)
+			If tResult '= 1 $$$ThrowStatus($$$ERROR($$$GeneralError, "Portal favorite for "_tUser_": "_tResult))
+		}
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// Child job of PortalFavorites: 1 in ^IRIS.Temp.AgenticProdFavorite(pUser), or why not.
+ClassMethod AddFavoriteAs(pUser As %String) [ Internal ]
+{
+	Try {
+		If '$SYSTEM.Security.Login(pUser) Set ^IRIS.Temp.AgenticProdFavorite(pUser) = "login as "_pUser_" failed" Quit
+		Set tSC = ##class(%CSP.Portal.Utils).%AddFavorite(..#FAVORITENAME, ..#DASHAPP_"/AgenticProd.UI.Home.cls")
+		Set ^IRIS.Temp.AgenticProdFavorite(pUser) = $SELECT($$$ISOK(tSC): 1, 1: $SYSTEM.Status.GetErrorText(tSC))
+	} Catch ex {
+		Set ^IRIS.Temp.AgenticProdFavorite(pUser) = ex.DisplayString()
+	}
 }
 
 ClassMethod CreateDashboardApp(pNamespace As %String) As %Status [ Private ]

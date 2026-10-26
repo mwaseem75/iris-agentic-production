@@ -156,7 +156,10 @@ ClassMethod SummaryData(pIncludeEval As %Boolean = 0) As %DynamicObject
 		"tokensToday": (tTokens), "dailyTokenBudget": (tBudget),
 		"tokensPercent": ($SELECT(tBudget: $NORMALIZE(tTokens / tBudget * 100, 0), 1: "")),
 		"overBudget": (tBudget && (tTokens >= tBudget)),
-		"traceUrl": ($SYSTEM.CSP.GetDefaultApp($NAMESPACE)_"/EnsPortal.VisualTrace.zen?SESSIONID=")
+		"traceUrl": ($SYSTEM.CSP.GetDefaultApp($NAMESPACE)_"/EnsPortal.VisualTrace.zen?SESSIONID="),
+		"productionUrl": ($SYSTEM.CSP.GetDefaultApp($NAMESPACE)_"/EnsPortal.ProductionConfig.zen?PRODUCTION="_##class(AgenticProd.Production).%ClassName(1)),
+		// the portal's Workflow Inbox menu entry opens this User Portal page
+		"inboxUrl": ($SYSTEM.CSP.GetDefaultApp($NAMESPACE)_"/_DeepSee.UserPortal.Workflow.zen")
 	}
 	Do tOut.%Set("includeEval", tOut.includeEval, "boolean"), tOut.%Set("overBudget", tOut.overBudget, "boolean")
 	For tKey = "costPerMessage", "tokensPercent" Do:tOut.%Get(tKey)="" tOut.%Set(tKey, "", "null")

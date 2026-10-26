@@ -31,7 +31,8 @@ button {
   font: inherit; color: var(--accent); background: transparent; border: 1px solid var(--line);
   border-radius: 6px; padding: 4px 12px; cursor: pointer;
 }
-button:hover { border-color: var(--accent); }
+button:hover, a.btn:hover { border-color: var(--accent); }
+a.btn { color: var(--accent); border: 1px solid var(--line); border-radius: 6px; padding: 4px 12px; text-decoration: none; }
 .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 22px; }
 .tiles.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .row-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin: 0 0 6px; }
@@ -106,6 +107,8 @@ summary { cursor: pointer; color: var(--accent); }
     <span class="spacer"></span>
     <label class="toggle"><input type="checkbox" id="incl-eval"> Include eval runs</label>
     <span class="muted" id="updated"></span>
+    <a class="btn hidden" id="prod-link" target="_blank" rel="noopener">Production</a>
+    <a class="btn hidden" id="inbox-link" target="_blank" rel="noopener">Workflow inbox</a>
     <button id="refresh" type="button">Refresh</button>
   </header>
   <p class="lede">An AI agent triages failed HL7 messages. A deterministic Triage step decides what is applied; a person approves the rest.</p>
@@ -280,6 +283,10 @@ function tile(label, value, sub, meter, cls) {
 
 function renderSummary(s, m) {
   traceUrl = s.traceUrl || "";
+  [["prod-link", s.productionUrl], ["inbox-link", s.inboxUrl]].forEach(function (p) {
+    var a = document.getElementById(p[0]);
+    if (p[1]) { a.href = p[1]; a.classList.remove("hidden"); }
+  });
   var sv = m.saved;
   var budgetSub = !s.dailyTokenBudget ? "no daily budget"
     : s.tokensPercent + "% of " + num(s.dailyTokenBudget) + " daily budget"

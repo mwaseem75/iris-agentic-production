@@ -111,6 +111,7 @@ Setup runs on install: it seeds the price table and `LabCodeMap`, builds the LOI
 - Production: Interoperability → IRISAPP → `AgenticProd.Production`
 - Reviewer inbox: Interoperability → Workflow Inbox, log in as `reviewer` / `Review-Demo-2026` (demo only)
 - Dashboard: http://localhost:52773/agenticprod/AgenticProd.UI.Home.cls, log in as `reviewer` / `Review-Demo-2026` (or `SuperUser`)
+  Setup also adds it as the Favorite "Agentic Production dashboard" on the Management Portal home page for both users. The dashboard header has **Production** and **Workflow inbox** buttons that go back to the portal.
 
 Optional: to also run an OpenTelemetry Collector and Jaeger for traces, start the `observability` profile:
 

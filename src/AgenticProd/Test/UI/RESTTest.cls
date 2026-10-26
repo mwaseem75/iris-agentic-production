@@ -31,6 +31,8 @@ Method TestSummaryCountsOutcomes()
 	Do $$$AssertEquals(tAfter.tokensPercent, $NORMALIZE(tAfter.tokensToday / tAfter.dailyTokenBudget * 100, 0))
 	Do $$$AssertEquals(tAfter.overBudget, tAfter.tokensToday >= tAfter.dailyTokenBudget)
 	Do $$$AssertTrue(tAfter.traceUrl [ "EnsPortal.VisualTrace.zen?SESSIONID=", tAfter.traceUrl)
+	Do $$$AssertTrue(tAfter.productionUrl [ "EnsPortal.ProductionConfig.zen?PRODUCTION=AgenticProd.Production", tAfter.productionUrl)
+	Do $$$AssertTrue(tAfter.inboxUrl [ "_DeepSee.UserPortal.Workflow.zen", tAfter.inboxUrl)
 }
 
 /// Cost per message is for the agent item's current model only, live runs only.
