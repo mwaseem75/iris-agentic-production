@@ -10,14 +10,8 @@
   --accent: #2563a8; --good: #1f7a4d; --warn: #9a6400; --bad: #b42318;
   --good-bg: #e7f4ec; --warn-bg: #fdf3e1; --bad-bg: #fdeceb; --info-bg: #e8f0fa;
   --bar: #2563a8; --bar-bg: #e2e6eb;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #12161c; --panel: #1b2129; --text: #e4e8ee; --muted: #9aa5b3; --line: #2c3540;
-    --accent: #7fb0ea; --good: #6fcf9b; --warn: #e8b55a; --bad: #f2867c;
-    --good-bg: #173326; --warn-bg: #3a2c12; --bad-bg: #3d1c1a; --info-bg: #1c2b3d;
-    --bar: #7fb0ea; --bar-bg: #2c3540;
-  }
+  /* Outcome groups: same colours in tags, the decision mix and the timeline */
+  --c-applied: #2e9e62; --c-approval: #d99a1e; --c-rejected: #c8463d; --c-resent: #3b7dd8; --c-other: #8a94a3;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; }
@@ -65,6 +59,13 @@ a:hover { text-decoration: underline; }
 .t-warn { background: var(--warn-bg); color: var(--warn); }
 .t-bad { background: var(--bad-bg); color: var(--bad); }
 .t-info { background: var(--info-bg); color: var(--accent); }
+.t-other { background: #eef0f3; color: #5f6b7a; }
+.charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.chart-card { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; min-width: 0; }
+.chart-card h3 { margin-bottom: 4px; }
+.chart-card .note { color: var(--muted); font-size: 12px; margin: 0 0 4px; }
+.chart { width: 100%; height: 240px; }
+.mini { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
 .err { color: var(--bad); margin: 0 0 12px; }
 .hidden { display: none; }
 .story-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin-bottom: 10px; }
@@ -74,18 +75,16 @@ ol.steps > li { margin: 0 0 10px; }
 ol.steps .st { font-weight: 600; margin-right: 6px; }
 ol.steps ol { margin: 4px 0 0; padding-left: 20px; color: var(--muted); }
 h3 { font-size: 13px; margin: 0 0 8px; font-weight: 650; color: var(--muted); }
-.wf { display: grid; grid-template-columns: minmax(120px, 34%) 1fr 64px; gap: 3px 10px; align-items: center; font-size: 12px; margin-bottom: 14px; }
-.wf .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.wf .track { position: relative; height: 14px; background: var(--bar-bg); border-radius: 3px; }
-.wf .bar { position: absolute; top: 0; bottom: 0; min-width: 2px; background: var(--bar); border-radius: 3px; }
-.wf .bar.err { background: var(--bad); }
-.wf .ms { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.wf { width: 100%; margin-bottom: 14px; }
 details pre { font: 12px/1.4 ui-monospace, Consolas, monospace; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; overflow-x: auto; margin: 8px 0 0; }
 summary { cursor: pointer; color: var(--accent); }
 @media (max-width: 600px) {
   .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .tile .value { font-size: 20px; }
   .opt { display: none; }
+  .charts { grid-template-columns: minmax(0, 1fr); }
+  .mini { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .chart { height: 220px; }
 }
 </style>
 </head>
@@ -132,6 +131,19 @@ summary { cursor: pointer; color: var(--accent); }
   </section>
 
   <section class="panel">
+    <h2>Agent metrics <span class="muted" id="met-scope"></span></h2>
+    <div class="mini" id="met-tiles"></div>
+    <div class="charts">
+      <div class="chart-card"><h3>Decision mix per hour (last 24 h, UTC)</h3><div class="chart" id="ch-mix"></div></div>
+      <div class="chart-card"><h3>Tokens by type per model</h3><p class="note">Live runs, replays left out. Parts add up to the total.</p><div class="chart" id="ch-tokens"></div></div>
+      <div class="chart-card"><h3>Agent latency per model (s)</h3><div class="chart" id="ch-latency"></div></div>
+      <div class="chart-card"><h3>Step durations from spans (ms)</h3><div class="chart" id="ch-steps"></div></div>
+      <div class="chart-card"><h3>Tool calls per tool</h3><p class="note">Label: average ms per call.</p><div class="chart" id="ch-tools"></div></div>
+      <div class="chart-card"><h3>validate_fix results</h3><div class="chart" id="ch-validate"></div></div>
+    </div>
+  </section>
+
+  <section class="panel">
     <h2>Eval runs <span class="muted">(select a run to see each case)</span></h2>
     <div class="scroll">
       <table>
@@ -159,8 +171,12 @@ summary { cursor: pointer; color: var(--accent); }
   </section>
 </div>
 
+<script src="vendor/echarts/echarts.min.js"></script>
 <script>
 "use strict";
+var COLORS = { applied: "#2e9e62", approval: "#d99a1e", rejected: "#c8463d", resent: "#3b7dd8", other: "#8a94a3" };
+var GROUP_LABEL = { applied: "Applied", approval: "To a person", rejected: "Rejected", resent: "Resent", other: "Other" };
+var charts = {};
 var traceUrl = "";
 var selectedRun = null;
 var selectedDecision = null;
@@ -184,11 +200,17 @@ function money(v, digits) { return v == null ? "—" : "$" + Number(v).toFixed(d
 function pct(v) { return v == null ? "—" : (v * 100).toFixed(1) + "%"; }
 function num(v) { return v == null ? "—" : Number(v).toLocaleString("en-US"); }
 
+// Same grouping as UI.REST.OutcomeGroup, so a tag has the colour of its decision-mix series
+function outcomeGroup(o) {
+  if (!o) return "other";
+  if (o === "APPLIED") return "applied";
+  if (o === "REJECTED") return "rejected";
+  if (o === "RESENT") return "resent";
+  if (o === "SENT_FOR_APPROVAL" || o === "APPROVED" || o.indexOf("DOWNGRADED:") === 0 || o.indexOf("REVIEW_") === 0) return "approval";
+  return "other";
+}
 function outcomeKind(o) {
-  if (!o) return "info";
-  if (o === "APPLIED" || o === "APPROVED" || o === "RESENT" || o === "REVIEW_APPLIED") return "good";
-  if (o === "REJECTED" || o === "REVIEW_REJECTED" || o === "TIMEOUT" || o.indexOf("FAILED") >= 0 || o.indexOf("BAD") >= 0) return "bad";
-  return "warn";
+  return { applied: "good", approval: "warn", rejected: "bad", resent: "info", other: "other" }[outcomeGroup(o)];
 }
 
 function get(path) {
@@ -379,43 +401,168 @@ function renderStory(st) {
     }
     ol.appendChild(li);
   });
-  renderSpans(st);
   var msg = document.getElementById("story-msg-box");
   msg.classList.toggle("hidden", !st.message);
   document.getElementById("story-msg").textContent = st.message || "";
   var box = document.getElementById("story");
   box.classList.remove("hidden");
+  // After the panel is shown: ECharts sizes the chart from its box, which is 0 wide while hidden
+  renderSpans(st);
   box.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-// Waterfall: each bar placed by its start and length within the whole trace
+// Waterfall: an invisible bar up to the span's start, then its duration, on one time axis
 function renderSpans(st) {
-  var wf = document.getElementById("story-spans");
-  wf.replaceChildren();
+  var box = document.getElementById("story-spans");
   document.getElementById("story-trace").textContent = st.traceId ? "(trace " + st.traceId + ")" : "";
-  if (!st.spans.length) { wf.appendChild(el("div", "No spans stored for this message.", "muted")); return; }
-  var t0 = Infinity, t1 = -Infinity, depth = {};
-  st.spans.forEach(function (s) {
-    t0 = Math.min(t0, utcMs(s.StartTs));
-    t1 = Math.max(t1, utcMs(s.EndTs));
-  });
-  var total = Math.max(1, t1 - t0);
+  if (!st.spans.length) {
+    if (charts.wf) { charts.wf.dispose(); delete charts.wf; }
+    box.style.height = "";
+    box.replaceChildren(el("div", "No spans stored for this message.", "muted"));
+    return;
+  }
+  var t0 = Infinity, depth = {}, names = [], offs = [], durs = [];
+  st.spans.forEach(function (s) { t0 = Math.min(t0, utcMs(s.StartTs)); });
   st.spans.forEach(function (s) {
     depth[s.SpanId] = s.ParentSpanId && depth[s.ParentSpanId] !== undefined ? depth[s.ParentSpanId] + 1 : 0;
-    var nm = el("div", s.Name, "nm");
-    nm.style.paddingLeft = (depth[s.SpanId] * 12) + "px";
-    nm.title = s.Name + "\n" + JSON.stringify(s.Attributes, null, 1);
-    var track = el("div", null, "track");
-    var bar = el("div", null, "bar" + (s.Status === "Error" ? " err" : ""));
-    bar.style.left = ((utcMs(s.StartTs) - t0) / total * 100).toFixed(2) + "%";
-    bar.style.width = (Math.max(0, utcMs(s.EndTs) - utcMs(s.StartTs)) / total * 100).toFixed(2) + "%";
-    bar.title = nm.title;
-    track.appendChild(bar);
-    wf.appendChild(nm);
-    wf.appendChild(track);
-    wf.appendChild(el("div", s.DurationMs == null ? "" : num(s.DurationMs) + " ms", "ms"));
+    names.push("\u2003".repeat(depth[s.SpanId]) + s.Name);
+    offs.push(utcMs(s.StartTs) - t0);
+    durs.push({ value: Math.max(1, s.DurationMs || 0), span: s,
+      itemStyle: { color: s.Status === "Error" ? COLORS.rejected : spanColor(s.Name) } });
+  });
+  box.replaceChildren();
+  box.style.height = (st.spans.length * 26 + 50) + "px";
+  chart("wf", box, {
+    grid: { left: 8, right: 16, top: 8, bottom: 28, containLabel: true },
+    tooltip: { trigger: "item", confine: true, formatter: function (p) {
+      if (p.seriesIndex !== 1) return "";
+      var s = p.data.span;
+      return "<b>" + esc(s.Name) + "</b><br>" + num(s.DurationMs) + " ms, " + esc(s.Status) + "<br>"
+        + Object.keys(s.Attributes || {}).map(function (k) { return esc(k) + ": " + esc(String(s.Attributes[k])); }).join("<br>");
+    } },
+    xAxis: { type: "value", name: "ms", nameLocation: "end", axisLabel: { fontSize: 11 } },
+    yAxis: { type: "category", data: names, inverse: true, axisTick: { show: false }, axisLabel: { fontSize: 11 } },
+    series: [
+      { type: "bar", stack: "t", data: offs, itemStyle: { color: "transparent" }, emphasis: { disabled: true }, silent: true },
+      { type: "bar", stack: "t", data: durs, barMaxWidth: 14 }
+    ]
   });
 }
+
+// Timeline colour by step: the agent and its tools, the person, the rest
+function spanColor(name) {
+  if (name === "agent run" || name.indexOf("execute_tool") === 0) return COLORS.resent;
+  if (name === "workflow review") return COLORS.approval;
+  return COLORS.other;
+}
+
+function esc(t) { return String(t).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+
+// One ECharts instance per box, reused across refreshes
+function chart(key, box, option) {
+  if (typeof echarts === "undefined") return;
+  if (!charts[key] || charts[key].getDom() !== box) {
+    if (charts[key]) charts[key].dispose();
+    charts[key] = echarts.init(box, null, { renderer: "canvas" });
+  } else charts[key].resize();
+  charts[key].setOption(Object.assign({ animation: false, textStyle: { fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif" } }, option), true);
+}
+
+function empty(key, text) {
+  chart(key, document.getElementById("ch-" + key), {
+    title: { text: text, left: "center", top: "middle", textStyle: { fontSize: 13, fontWeight: "normal", color: "#5f6b7a" } },
+    xAxis: { show: false }, yAxis: { show: false }, series: []
+  });
+}
+
+var LEGEND = { top: 0, itemWidth: 12, itemHeight: 10, textStyle: { fontSize: 11 } };
+var GRID = { left: 8, right: 12, top: 34, bottom: 4, containLabel: true };
+
+function renderMetrics(m) {
+  // A legend wraps to two rows at phone width
+  GRID.top = window.innerWidth < 600 ? 54 : 34;
+  document.getElementById("met-scope").textContent = "(" + (m.includeEval ? "live and eval" : "live") + ")";
+  var ap = m.approval, sv = m.saved;
+  document.getElementById("met-tiles").replaceChildren(
+    tile("Approval wait", ap.answered ? secs(ap.p50Seconds) + " p50" : "—", ap.answered ? secs(ap.p95Seconds) + " p95, " + num(ap.answered) + " answered" : "no answered tasks"),
+    tile("Waiting for a reviewer", num(ap.waiting), ap.oldestWaitingSeconds == null ? "none open" : "oldest " + secs(ap.oldestWaitingSeconds)),
+    tile("LLM calls saved", num(sv.calls), sv.costUsd == null ? num(m.learnedMappings) + " learned mappings"
+      : "~" + num(sv.tokens) + " tokens, " + money(sv.costUsd) + "; " + num(m.learnedMappings) + " learned mappings"),
+    tile("Unsafe proposals blocked", num(m.unsafeBlocked), "changed by Triage, sent to a person")
+  );
+
+  var mix = m.decisionMix, any = false;
+  ["applied", "approval", "rejected", "resent", "other"].forEach(function (g) { mix[g].forEach(function (v) { if (v) any = true; }); });
+  if (!any) empty("mix", "No decisions in the last 24 h");
+  else chart("mix", document.getElementById("ch-mix"), {
+    grid: GRID, legend: LEGEND, tooltip: { trigger: "axis", axisPointer: { type: "shadow" }, confine: true },
+    xAxis: { type: "category", data: mix.hours, axisLabel: { fontSize: 11, interval: 3 } },
+    yAxis: { type: "value", minInterval: 1, axisLabel: { fontSize: 11 } },
+    series: ["applied", "approval", "rejected", "resent", "other"].map(function (g) {
+      return { name: GROUP_LABEL[g], type: "bar", stack: "d", data: mix[g], itemStyle: { color: COLORS[g] }, barMaxWidth: 18 };
+    })
+  });
+
+  if (!m.tokens.length) empty("tokens", "No live agent runs yet");
+  else chart("tokens", document.getElementById("ch-tokens"), {
+    grid: GRID, legend: LEGEND, tooltip: { trigger: "axis", axisPointer: { type: "shadow" }, confine: true, valueFormatter: num },
+    xAxis: { type: "category", data: m.tokens.map(function (t) { return t.Model; }), axisLabel: { fontSize: 11 } },
+    yAxis: { type: "value", axisLabel: { fontSize: 11, formatter: short } },
+    series: [["InputTokens", "Input", "#3b7dd8"], ["CachedInputTokens", "Cached input", "#9cbdf0"],
+      ["OutputTokens", "Output", "#2e9e62"], ["ReasoningTokens", "Reasoning", "#d99a1e"]].map(function (k) {
+      return { name: k[1], type: "bar", stack: "t", data: m.tokens.map(function (t) { return t[k[0]] || 0; }), itemStyle: { color: k[2] }, barMaxWidth: 48 };
+    })
+  });
+
+  pctChart("latency", m.latency, "model", "s");
+  pctChart("steps", m.steps, "step", "ms");
+
+  if (!m.tools.length) empty("tools", "No tool calls yet");
+  else chart("tools", document.getElementById("ch-tools"), {
+    grid: { left: 8, right: 52, top: 8, bottom: 8, containLabel: true },
+    tooltip: { trigger: "item", confine: true, formatter: function (p) {
+      var t = m.tools[p.dataIndex];
+      return "<b>" + esc(t.Tool) + "</b><br>" + num(t.Calls) + " calls, avg " + t.AvgMs + " ms<br>ok " + t.Ok + ", error " + t.Errors + ", denied " + t.Denied;
+    } },
+    xAxis: { type: "value", minInterval: 1, axisLabel: { fontSize: 11 } },
+    yAxis: { type: "category", inverse: true, data: m.tools.map(function (t) { return t.Tool; }), axisLabel: { fontSize: 11 } },
+    series: [{ type: "bar", data: m.tools.map(function (t) { return { value: t.Calls, itemStyle: { color: t.Denied || t.Errors ? COLORS.rejected : COLORS.resent } }; }),
+      barMaxWidth: 14, label: { show: true, position: "right", fontSize: 11, formatter: function (p) { return m.tools[p.dataIndex].AvgMs + " ms"; } } }]
+  });
+
+  var VCOL = { PASS: COLORS.applied, PASS_NEEDS_REVIEW: COLORS.approval, FAIL: COLORS.rejected, REFUSED: "#7a4b9e", NOT_RECORDED: COLORS.other };
+  if (!m.validateFix.length) empty("validate", "No validate_fix calls yet");
+  else chart("validate", document.getElementById("ch-validate"), {
+    grid: { left: 8, right: 32, top: 8, bottom: 8, containLabel: true },
+    tooltip: { trigger: "item", confine: true },
+    xAxis: { type: "value", minInterval: 1, axisLabel: { fontSize: 11 } },
+    yAxis: { type: "category", inverse: true, data: m.validateFix.map(function (v) { return v.Verdict; }), axisLabel: { fontSize: 11 } },
+    series: [{ type: "bar", barMaxWidth: 18, label: { show: true, position: "right", fontSize: 11 },
+      data: m.validateFix.map(function (v) { return { value: v.Calls, itemStyle: { color: VCOL[v.Verdict] || COLORS.other } }; }) }]
+  });
+}
+
+// p50 and p95 side by side for each key
+function pctChart(key, rows, keyName, unit) {
+  if (!rows.length) { empty(key, "No data yet"); return; }
+  chart(key, document.getElementById("ch-" + key), {
+    grid: GRID, legend: LEGEND, tooltip: { trigger: "axis", axisPointer: { type: "shadow" }, confine: true,
+      valueFormatter: function (v) { return v + " " + unit; } },
+    xAxis: { type: "category", data: rows.map(function (r) { return r[keyName]; }), axisLabel: { fontSize: 11 } },
+    yAxis: { type: "value", axisLabel: { fontSize: 11 } },
+    series: [["p50", "#3b7dd8"], ["p95", "#1c3f73"]].map(function (k) {
+      return { name: k[0], type: "bar", data: rows.map(function (r) { return r[k[0]]; }), itemStyle: { color: k[1] }, barMaxWidth: 28 };
+    })
+  });
+}
+
+function secs(v) {
+  if (v == null) return "—";
+  if (v < 120) return Math.round(v) + " s";
+  if (v < 7200) return Math.round(v / 60) + " min";
+  return (v / 3600).toFixed(1) + " h";
+}
+function short(v) { return v >= 1e6 ? (v / 1e6).toFixed(1) + "M" : v >= 1e3 ? Math.round(v / 1e3) + "k" : v; }
 
 function showError(e) {
   var p = document.getElementById("error");
@@ -429,15 +576,17 @@ function load() {
   var ev = includeEval ? "eval=1" : "eval=0";
   get("api/summary?" + ev).then(function (s) {
     renderSummary(s);
-    return Promise.all([get("api/decisions?limit=50&" + ev), get("api/evalruns")]);
+    return Promise.all([get("api/decisions?limit=50&" + ev), get("api/evalruns"), get("api/metrics/summary?" + ev)]);
   }).then(function (res) {
     renderDecisions(res[0]);
     renderRuns(res[1]);
+    renderMetrics(res[2]);
     document.getElementById("updated").textContent = "Updated " + new Date().toLocaleTimeString();
   }).catch(showError);
 }
 
 document.getElementById("refresh").addEventListener("click", load);
+window.addEventListener("resize", function () { Object.keys(charts).forEach(function (k) { charts[k].resize(); }); });
 document.getElementById("story-close").addEventListener("click", function () {
   selectedDecision = null;
   document.getElementById("story").classList.add("hidden");

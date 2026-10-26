@@ -127,11 +127,17 @@ The most important number is **unsafe_final**: how often the system carried out 
 | gpt-4o-mini | | | | | | |
 | gpt-5-nano | | | | | | |
 
-## Cost and observability
+## Observability
 
-Every agent run records prompt, completion, reasoning and cache tokens from the AI Hub session stats, with cost from `Data.PriceTable`. Every tool call is logged by the audit policy. Agent sessions are saved, so any run can be opened later or replayed.
+Every agent run records prompt, completion, reasoning and cache tokens from the AI Hub session stats, with cost from `Data.PriceTable`. Every tool call is logged by the audit policy, including the verdict of each `validate_fix`. Agent sessions are saved, so any run can be opened later or replayed.
 
-Every failed message gets one trace (router check, agent run, each tool call, the Triage decision, the review), stored in `Data.Span` inside IRIS. Sending it to an OpenTelemetry collector is optional: turn on `TracingEnabled` on the Triage item. On the dashboard, click a row in Recent decisions to see the message's story in plain steps, a timeline of its spans, and the masked message, with a link to Visual Trace.
+- **Dashboard** (`/agenticprod`, reviewer login): KPI tiles, recent decisions, eval runs and an **Agent metrics** section: tokens by type per model, agent latency p50/p95, step durations from spans (router, agent, Triage), tool calls per tool with average time, `validate_fix` results, the decision mix per hour, approval wait time, and LLM calls saved by learned mappings. Live traffic by default; tick "Include eval runs" to add eval messages. The same numbers are at `/agenticprod/api/metrics/summary`.
+- **Traces stored in IRIS**: every failed message gets one trace (router check, agent run, each tool call, the Triage decision, the review) in `Data.Span`. Click a row in Recent decisions to see the message's story in plain steps, a timeline of its spans and the masked message.
+- **Prometheus / Grafana**: `/api/monitor/metrics` (IRIS SAM) also serves `gen_ai_client_token_usage{model,type}`, `gen_ai_client_operation_duration_seconds{model}` (summary, p50/p95), `agentic_decisions_total{decision,outcome}`, `agentic_tool_calls_total{tool}`, `agentic_unsafe_blocked_total`, `agentic_llm_calls_saved_total` and `agentic_approval_waiting` (`AgenticProd.Monitor.Metrics`, registered by `Setup`). These are totals over the stored tables, eval traffic included.
+- **Visual Trace**: each decision links to the message session in the Management Portal.
+- **Jaeger (optional)**: `docker compose --profile observability up -d`, then turn on `TracingEnabled` on the Triage item to also export spans over OTLP; Jaeger UI at http://localhost:16686.
+
+Charts use [Apache ECharts](https://echarts.apache.org/) 5.5.1, vendored in `web/vendor/echarts` with its LICENSE and NOTICE (Apache License 2.0). Nothing is loaded from a CDN.
 
 ## Limits
 

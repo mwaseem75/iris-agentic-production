@@ -21,7 +21,8 @@ Method %LogExecution(call As %DynamicObject, metadata As %DynamicObject, result 
 	}
 	Set tStatus = $SELECT($$$ISERR(status): "ERROR", 1: "OK")
 	$$$TRACE("Tool "_call.name_" "_tStatus_" ms="_duration_" resultLength="_tResultLength_$SELECT(tError '= "": " "_tError, 1: ""))
-	Quit ##class(AgenticProd.Data.ToolCall).Log(call.name, call.arguments, tStatus, duration, tResultLength, tError, ..HeaderId, ..AgentSessionId)
+	Set tVerdict = $SELECT((call.name = "validate_fix") && $IsObject(result): ##class(AgenticProd.Data.ToolCall).VerdictOf(result.%Get("result_json")), 1: "")
+	Quit ##class(AgenticProd.Data.ToolCall).Log(call.name, call.arguments, tStatus, duration, tResultLength, tError, ..HeaderId, ..AgentSessionId, , tVerdict)
 }
 
 Method %LogDenial(call As %DynamicObject, metadata As %DynamicObject, status As %Status) As %Status

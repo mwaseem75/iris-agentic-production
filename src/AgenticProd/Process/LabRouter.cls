@@ -37,6 +37,11 @@ Method OnRequest(pRequest As EnsLib.HL7.Message, Output pResponse As %Library.Pe
 			}
 			Set tSC = $$$OK
 		}
+		If tClass = "" {
+			// A metric only: a failure to record it must not fail a message that was sent
+			Set tNote = ##class(AgenticProd.Data.SavedCall).Note(pRequest, ..%PrimaryRequestHeader.%Id())
+			If $$$ISERR(tNote) $$$LOGWARNING("SavedCall not recorded: "_$SYSTEM.Status.GetErrorText(tNote))
+		}
 		Quit:tClass=""
 		$$$TRACE("LabRouter to "_..TriageTarget_": "_tClass_" "_tText)
 		Set tTriage = ..TriageRequest(pRequest, tClass, tText)

@@ -21,6 +21,9 @@ Property DurationMs As %Integer;
 /// Length of the tool result text; the result itself stays in the AI Hub session.
 Property ResultLength As %Integer;
 
+/// validate_fix only: the verdict it returned (PASS, PASS_NEEDS_REVIEW, FAIL, REFUSED).
+Property Verdict As %String(MAXLEN = 30);
+
 Property CreatedAt As %TimeStamp [ InitialExpression = {$ZDATETIME($ZTIMESTAMP, 3)} ];
 
 Index HeaderIdx On HeaderId;
@@ -30,7 +33,7 @@ Index SessionIdx On AgentSessionId;
 Index ToolIdx On Tool [ Type = bitmap ];
 
 /// Save one call. pArgs may be a %DynamicObject or JSON text.
-ClassMethod Log(pTool As %String, pArgs, pStatus As %String, pDurationMs As %Integer = "", pResultLength As %Integer = "", pErrorText As %String = "", pHeaderId As %Integer = "", pAgentSessionId As %String = "", Output pId As %String) As %Status
+ClassMethod Log(pTool As %String, pArgs, pStatus As %String, pDurationMs As %Integer = "", pResultLength As %Integer = "", pErrorText As %String = "", pHeaderId As %Integer = "", pAgentSessionId As %String = "", Output pId As %String, pVerdict As %String = "") As %Status
 {
 	Set pId = ""
 	Set tSC = $$$OK
@@ -44,12 +47,73 @@ ClassMethod Log(pTool As %String, pArgs, pStatus As %String, pDurationMs As %Int
 		Set tRow.ErrorText = $EXTRACT(pErrorText, 1, 2000)
 		Set tRow.HeaderId = pHeaderId
 		Set tRow.AgentSessionId = pAgentSessionId
+		Set tRow.Verdict = pVerdict
 		$$$ThrowOnError(tRow.%Save())
 		Set pId = tRow.%Id()
 	} Catch ex {
 		Set tSC = ex.AsStatus()
 	}
 	Quit tSC
+}
+
+/// Verdict in a validate_fix result text (Tools.HL7.ValidateFix wraps the JSON in an
+/// untrusted_data block, and the session may hold it JSON-escaped); "" when there is none.
+ClassMethod VerdictOf(pResult As %String) As %String
+{
+	Set tMatch = ##class(%Regex.Matcher).%New("""result\\?""\s*:\s*\\?""(PASS_NEEDS_REVIEW|PASS|FAIL|REFUSED)", pResult)
+	Quit $SELECT(tMatch.Locate(): tMatch.Group(1), 1: "")
+}
+
+/// Fill Verdict on validate_fix rows logged before it was recorded, from the saved AI Hub
+/// session: the n-th validate_fix result in the session belongs to the n-th row. pFilled = rows set.
+ClassMethod BackfillVerdicts(Output pFilled As %Integer) As %Status
+{
+	Set tSC = $$$OK, pFilled = 0
+	Try {
+		Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT DISTINCT AgentSessionId FROM AgenticProd_Data.ToolCall WHERE Tool = 'validate_fix' AND Verdict IS NULL AND Status = 'OK' AND AgentSessionId IS NOT NULL")
+		While tRS.%Next() {
+			Set tSession = ##class(%AI.Agent.Session).%OpenId(tRS.AgentSessionId)
+			Continue:'$IsObject(tSession)
+			Kill tVerdicts
+			Do ..SessionVerdicts(tSession, .tVerdicts)
+			Set tRows = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID FROM AgenticProd_Data.ToolCall WHERE AgentSessionId = ? AND Tool = 'validate_fix' AND Status = 'OK' ORDER BY ID", tRS.AgentSessionId), tN = 0
+			While tRows.%Next() {
+				Set tN = tN + 1
+				Continue:$GET(tVerdicts(tN))=""
+				Set tRow = ..%OpenId(tRows.ID)
+				Continue:tRow.Verdict'=""
+				Set tRow.Verdict = tVerdicts(tN)
+				$$$ThrowOnError(tRow.%Save())
+				Set pFilled = pFilled + 1
+			}
+		}
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// pVerdicts(n) = verdict of the n-th validate_fix call in pSession, matched by tool_call_id.
+ClassMethod SessionVerdicts(pSession As %AI.Agent.Session, Output pVerdicts) [ Internal ]
+{
+	Kill pVerdicts
+	Set tStream = pSession.ContextData
+	Quit:'$IsObject(tStream)
+	Do tStream.Rewind()
+	Set tContext = ##class(%DynamicObject).%FromJSON(tStream)
+	Quit:'$IsObject(tContext.messages)
+	Set tN = 0, tIter = tContext.messages.%GetIterator()
+	While tIter.%GetNext(, .tMsg) {
+		If $IsObject(tMsg."tool_calls") {
+			Set tCalls = tMsg."tool_calls".%GetIterator()
+			While tCalls.%GetNext(, .tCall) {
+				If tCall.name = "validate_fix" Set tN = tN + 1, tCallN(tCall.id) = tN
+			}
+		} ElseIf tMsg.role = "tool" {
+			Set tId = tMsg."tool_call_id"
+			Set:(tId'="")&&$DATA(tCallN(tId)) pVerdicts(tCallN(tId)) = ..VerdictOf(tMsg.content)
+		}
+	}
 }
 
 Storage Default
@@ -84,6 +148,9 @@ Storage Default
 </Value>
 <Value name="10">
 <Value>CreatedAt</Value>
+</Value>
+<Value name="11">
+<Value>Verdict</Value>
 </Value>
 </Data>
 <DataLocation>^AgenticProd.Data.ToolCallD</DataLocation>

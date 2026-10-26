@@ -196,6 +196,91 @@ Method TestStoryWaitingNoAgent()
 	Do $$$AssertTrue(tStory.steps.%Get(1).text [ "no instruction-like text", "no flags")
 }
 
+/// Metrics on stub rows (eval run RUNID, so they show with eval included only): tokens split so the
+/// parts add up, quantiles, tool and validate_fix counts, decision groups, saved calls, steps.
+Method TestMetricsSummary()
+{
+	Set tBefore = ##class(AgenticProd.UI.REST).MetricsData(1)
+	Set tModel = "test-metrics-model", tSession = "test-metrics-9351"
+	For i = 1:1:4 {
+		Set tUsage = ##class(AgenticProd.Data.Usage).%New()
+		Set tUsage.HeaderId = -9350 - i, tUsage.EvalRunId = ..#RUNID, tUsage.Model = tModel, tUsage.Decision = "MAP_CODE"
+		Set tUsage.PromptTokens = 1000, tUsage.CacheReadTokens = 400, tUsage.CompletionTokens = 100, tUsage.ReasoningTokens = 30
+		Set tUsage.TotalMs = i * 1000, tUsage.CostUsd = .001, tUsage.AgentSessionId = $SELECT(i = 1: tSession, 1: "")
+		Do $$$AssertStatusOK(tUsage.%Save())
+	}
+	// Replays repeat a recorded run: left out of tokens and latency
+	Do $$$AssertStatusOK(..AddUsageRow(-9355, "MAP_CODE", tModel, 1, ..#RUNID))
+	Do $$$AssertStatusOK(##class(AgenticProd.Data.ToolCall).Log("validate_fix", {}, "OK", 10, 50, "", -9351, tSession, , "PASS"))
+	Do $$$AssertStatusOK(##class(AgenticProd.Data.ToolCall).Log("validate_fix", {}, "OK", 30, 50, "", -9351, tSession, , "FAIL"))
+	Do $$$AssertStatusOK(##class(AgenticProd.Data.ToolCall).Log("apply_fix", {}, "DENIED", "", "", "read-only", -9351, tSession))
+	Do $$$AssertStatusOK(..AddLogRow(-9361, "AUTO_FIX", "APPLIED"))
+	Do $$$AssertStatusOK(..AddLogRow(-9362, "ESCALATE", "DOWNGRADED:AUTO_FIX"))
+	Do $$$AssertStatusOK(..AddLogRow(-9363, "REJECT", "REJECTED"))
+	Set tSaved = ##class(AgenticProd.Data.SavedCall).%New()
+	Set tSaved.HeaderId = -9364, tSaved.LocalCodes = "GLU-01", tSaved.EvalRunId = ..#RUNID
+	Do $$$AssertStatusOK(tSaved.%Save())
+	For tMs = 10, 20, 30 Do $$$AssertStatusOK(##class(AgenticProd.Data.Span).Log("feedfeedfeedfeedfeedfeedfeedfeed", "00000000000000b"_(tMs/10), "", "router check", ##class(AgenticProd.Telemetry.Trace).ZtsBefore(tMs), $ZTIMESTAMP, "Ok", {}, -9365, "EV"_..#RUNID_"-T"))
+
+	Set tM = ##class(AgenticProd.UI.REST).MetricsData(1)
+	For i = 0:1:tM.tokens.%Size() - 1 Set:tM.tokens.%Get(i).Model=tModel tTok = tM.tokens.%Get(i)
+	Do $$$AssertTrue($DATA(tTok), "model row, case kept")
+	Quit:'$DATA(tTok)
+	Do $$$AssertEquals(tTok.Runs, 4, "replay left out")
+	Do $$$AssertEquals(tTok.InputTokens, 2400, "prompt minus cache reads")
+	Do $$$AssertEquals(tTok.CachedInputTokens, 1600)
+	Do $$$AssertEquals(tTok.OutputTokens, 280, "completion minus reasoning")
+	Do $$$AssertEquals(tTok.ReasoningTokens, 120)
+	For i = 0:1:tM.latency.%Size() - 1 Set:tM.latency.%Get(i).model=tModel tLat = tM.latency.%Get(i)
+	Do $$$AssertEquals(tLat.count, 4)
+	Do $$$AssertEquals(tLat.p50, 2, "nearest rank of 1,2,3,4 s")
+	Do $$$AssertEquals(tLat.p95, 4)
+	For i = 0:1:tM.tools.%Size() - 1 Set tTool(tM.tools.%Get(i).Tool) = tM.tools.%Get(i)
+	For i = 0:1:tBefore.tools.%Size() - 1 Set tToolBefore(tBefore.tools.%Get(i).Tool) = tBefore.tools.%Get(i).Calls
+	Do $$$AssertEquals(tTool("validate_fix").Calls - $GET(tToolBefore("validate_fix")), 2, "tool name case kept")
+	Do $$$AssertTrue(tTool("apply_fix").Denied >= 1, "denied counted")
+	For i = 0:1:tM.validateFix.%Size() - 1 Set tV(tM.validateFix.%Get(i).Verdict) = tM.validateFix.%Get(i).Calls
+	For i = 0:1:tBefore.validateFix.%Size() - 1 Set tVB(tBefore.validateFix.%Get(i).Verdict) = tBefore.validateFix.%Get(i).Calls
+	Do $$$AssertEquals(tV("PASS") - $GET(tVB("PASS")), 1)
+	Do $$$AssertEquals(tV("FAIL") - $GET(tVB("FAIL")), 1)
+	Do $$$AssertEquals(..Sum(tM.decisionMix.applied) - ..Sum(tBefore.decisionMix.applied), 1)
+	Do $$$AssertEquals(..Sum(tM.decisionMix.approval) - ..Sum(tBefore.decisionMix.approval), 1, "DOWNGRADED goes to a person")
+	Do $$$AssertEquals(..Sum(tM.decisionMix.rejected) - ..Sum(tBefore.decisionMix.rejected), 1)
+	Do $$$AssertEquals(tM.decisionMix.hours.%Size(), 24)
+	Do $$$AssertEquals(tM.unsafeBlocked - tBefore.unsafeBlocked, 1)
+	Do $$$AssertEquals(tM.saved.calls - tBefore.saved.calls, 1)
+	Do $$$AssertTrue(tM.saved.basedOnRuns >= 4, "saving priced from live MAP_CODE runs")
+	For i = 0:1:tM.steps.%Size() - 1 Set:tM.steps.%Get(i).step="router check" tStep = tM.steps.%Get(i)
+	Do $$$AssertTrue($IsObject($GET(tStep)), "router step")
+	Set tLive = ##class(AgenticProd.UI.REST).MetricsData(0)
+	For i = 0:1:tLive.tokens.%Size() - 1 Do $$$AssertNotEquals(tLive.tokens.%Get(i).Model, tModel, "eval rows out of live metrics")
+	Do $$$AssertEquals(tLive.saved.calls, ##class(AgenticProd.UI.REST).Rows("SELECT COUNT(*) AS N FROM AgenticProd_Data.SavedCall WHERE EvalRunId IS NULL").%Get(0).N)
+}
+
+Method TestOutcomeGroup()
+{
+	For tPair = "APPLIED:applied", "SENT_FOR_APPROVAL:approval", "APPROVED:approval", "DOWNGRADED:AUTO_FIX:approval", "REVIEW_REJECTED:approval", "REJECTED:rejected", "RESENT:resent", "ERROR:AUTO_FIX:other", ":other" {
+		Do $$$AssertEquals(##class(AgenticProd.UI.REST).OutcomeGroup($PIECE(tPair, ":", 1, *-1)), $PIECE(tPair, ":", *), tPair)
+	}
+}
+
+/// Verdict from validate_fix's result as Policy.Audit and the session hold it.
+Method TestVerdictOf()
+{
+	Do $$$AssertEquals(##class(AgenticProd.Data.ToolCall).VerdictOf("<untrusted_data source=""validate_fix"">{""result"":""PASS_NEEDS_REVIEW"",""errors"":[]}</untrusted_data>"), "PASS_NEEDS_REVIEW")
+	Do $$$AssertEquals(##class(AgenticProd.Data.ToolCall).VerdictOf("""{""result"":""FAIL"",""errors"":[]}"""), "FAIL", "JSON-escaped")
+	Do $$$AssertEquals(##class(AgenticProd.Data.ToolCall).VerdictOf("no verdict here"), "")
+}
+
+ClassMethod Sum(pArray As %DynamicArray) As %Integer
+{
+	Set tSum = 0, tIter = pArray.%GetIterator()
+	While tIter.%GetNext(, .tV) {
+		Set tSum = tSum + tV
+	}
+	Quit tSum
+}
+
 /// Values masking hides, with their components, are replaced in any text shown.
 Method TestMask()
 {
@@ -217,6 +302,8 @@ Method TestHttpAccess()
 	Do $$$AssertEquals(..Get("api/evalruns", tUser, tPass).HttpResponse.StatusCode, 200)
 	Do $$$AssertEquals(..Get("api/evalruns/0", tUser, tPass).HttpResponse.StatusCode, 404, "unknown run")
 	Do $$$AssertEquals(..Get("api/decisions/0/story", tUser, tPass).HttpResponse.StatusCode, 404, "unknown decision")
+	Do $$$AssertEquals(..Get("api/metrics/summary?eval=1", tUser, tPass).HttpResponse.StatusCode, 200, "metrics")
+	Do $$$AssertEquals(..Get("vendor/echarts/echarts.min.js", tUser, tPass).HttpResponse.StatusCode, 200, "charts library served locally")
 	Do $$$AssertEquals(..Get("api/nothing", tUser, tPass).HttpResponse.StatusCode, 404, "unknown route")
 	Set tReq = ..Get("dashboard.html", tUser, tPass)
 	Do $$$AssertEquals(tReq.HttpResponse.StatusCode, 200, "page")
@@ -284,7 +371,7 @@ Method AddUsageRow(pHeader As %Integer, pDecision As %String, pModel As %String,
 
 Method OnAfterOneTest() As %Status
 {
-	For tTable = "DecisionLog", "Usage", "Span" {
+	For tTable = "DecisionLog", "Usage", "Span", "SavedCall" {
 		Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM AgenticProd_Data."_tTable_" WHERE EvalRunId = ? OR HeaderId BETWEEN -9399 AND -9300", ..#RUNID)
 	}
 	// ToolCall has no EvalRunId column

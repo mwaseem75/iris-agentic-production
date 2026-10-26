@@ -25,6 +25,7 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
 <Route Url="/summary" Method="GET" Call="Summary"/>
 <Route Url="/decisions" Method="GET" Call="Decisions"/>
 <Route Url="/decisions/:id/story" Method="GET" Call="Story"/>
+<Route Url="/metrics/summary" Method="GET" Call="Metrics"/>
 <Route Url="/evalruns" Method="GET" Call="EvalRuns"/>
 <Route Url="/evalruns/:id" Method="GET" Call="EvalResults"/>
 </Routes>
@@ -63,6 +64,17 @@ ClassMethod Story(pId As %String) As %Status
 			Quit
 		}
 		Write tData.%ToJSON()
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+ClassMethod Metrics() As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		Write ..MetricsData(''%request.Get("eval")).%ToJSON()
 	} Catch ex {
 		Set tSC = ex.AsStatus()
 	}
@@ -418,6 +430,115 @@ ClassMethod Join(pList As %DynamicArray) As %String [ Internal ]
 		Set tOut = tOut_$SELECT(tOut '= "": ", ", 1: "")_tItem
 	}
 	Quit tOut
+}
+
+/// Agent metrics for the dashboard charts; live traffic only unless pIncludeEval. Replays are
+/// left out of tokens and latency (they repeat a recorded run). Times are UTC.
+/// tokens: per model, split so the parts add up to the total (input = prompt minus cache reads,
+/// output = completion minus reasoning). latency, approval wait and steps: nearest-rank p50/p95.
+ClassMethod MetricsData(pIncludeEval As %Boolean = 0) As %DynamicObject
+{
+	Set tUsageWhere = "(Replay = 0 OR Replay IS NULL)"_$SELECT(pIncludeEval: "", 1: " AND EvalRunId IS NULL")
+	Set tOut = {"includeEval":(''pIncludeEval), "generatedAt":($ZDATETIME($ZTIMESTAMP, 3))}
+	Do tOut.%Set("includeEval", ''pIncludeEval, "boolean")
+
+	Set tOut.tokens = ..Rows("SELECT %EXACT(Model) AS Model, COUNT(*) AS Runs, SUM(PromptTokens) - SUM(CacheReadTokens) AS InputTokens, SUM(CacheReadTokens) AS CachedInputTokens,"
+		_" SUM(CompletionTokens) - SUM(ReasoningTokens) AS OutputTokens, SUM(ReasoningTokens) AS ReasoningTokens, SUM(CostUsd) AS CostUsd"
+		_" FROM AgenticProd_Data.Usage WHERE "_tUsageWhere_" AND Model IS NOT NULL GROUP BY %EXACT(Model) ORDER BY Model")
+
+	Set tOut.latency = ..Quantiles("SELECT Model AS K, TotalMs / 1000 AS V FROM AgenticProd_Data.Usage WHERE "_tUsageWhere_" AND TotalMs IS NOT NULL AND Model IS NOT NULL", "model")
+
+	// ToolCall has no EvalRunId: a call is eval traffic when its session's Usage row is
+	Set tToolWhere = $SELECT(pIncludeEval: "", 1: " AND AgentSessionId IN (SELECT AgentSessionId FROM AgenticProd_Data.Usage WHERE EvalRunId IS NULL)")
+	Set tOut.tools = ..Rows("SELECT %EXACT(Tool) AS Tool, COUNT(*) AS Calls, ROUND(AVG(DurationMs), 1) AS AvgMs,"
+		_" SUM(CASE WHEN Status = 'OK' THEN 1 ELSE 0 END) AS Ok, SUM(CASE WHEN Status = 'ERROR' THEN 1 ELSE 0 END) AS Errors,"
+		_" SUM(CASE WHEN Status = 'DENIED' THEN 1 ELSE 0 END) AS Denied"
+		_" FROM AgenticProd_Data.ToolCall WHERE 1 = 1"_tToolWhere_" GROUP BY %EXACT(Tool) ORDER BY Calls DESC")
+	Set tOut.validateFix = ..Rows("SELECT ISNULL(Verdict, 'NOT_RECORDED') AS Verdict, COUNT(*) AS Calls FROM AgenticProd_Data.ToolCall"
+		_" WHERE Tool = 'validate_fix' AND Status = 'OK'"_tToolWhere_" GROUP BY ISNULL(Verdict, 'NOT_RECORDED') ORDER BY Calls DESC")
+
+	Set tOut.decisionMix = ..DecisionMix(pIncludeEval)
+
+	Set tLogWhere = $SELECT(pIncludeEval: "", 1: " AND d.EvalRunId IS NULL")
+	// Eval tasks are closed by Eval.Runner, not answered: their wait time is not a person's
+	Set tApproval = ..Quantiles("SELECT 'all' AS K, DATEDIFF('s', d.CreatedAt, d.ReviewedAt) AS V FROM AgenticProd_Data.DecisionLog d"
+		_" WHERE d.ReviewedAt IS NOT NULL AND (d.Reviewer IS NULL OR d.Reviewer <> 'eval')"_tLogWhere, "key").%Get(0)
+	Set tWaiting = ..Rows("SELECT COUNT(*) AS N, MIN(d.CreatedAt) AS Oldest FROM EnsLib_Workflow.TaskResponse r"
+		_" JOIN AgenticProd_Msg.ApprovalTask t ON t.ID = r.TaskStatus_Request JOIN AgenticProd_Data.DecisionLog d ON d.HeaderId = t.HeaderId"
+		_" WHERE r.TaskStatus_IsComplete = 0"_tLogWhere).%Get(0)
+	Set tOut.approval = {"answered":0, "p50Seconds":null, "p95Seconds":null, "waiting":(+tWaiting.N), "oldestWaitingSeconds":null}
+	If $IsObject(tApproval) Set tOut.approval.answered = tApproval.count, tOut.approval.p50Seconds = tApproval.p50, tOut.approval.p95Seconds = tApproval.p95
+	Do:tWaiting.Oldest'="" tOut.approval.%Set("oldestWaitingSeconds", ##class(AgenticProd.Telemetry.Trace).ZtsDiff($ZTIMESTAMP, $ZDATETIMEH(tWaiting.Oldest, 3)) \ 1)
+
+	// What one agent MAP_CODE run costs on average; a learned mapping saves one run per message
+	Set tSaved = ..Rows("SELECT COUNT(*) AS N FROM AgenticProd_Data.SavedCall"_$SELECT(pIncludeEval: "", 1: " WHERE EvalRunId IS NULL")).%Get(0)
+	Set tRun = ..Rows("SELECT COUNT(*) AS Runs, AVG(PromptTokens + CompletionTokens) AS Tokens, AVG(CostUsd) AS Cost FROM AgenticProd_Data.Usage WHERE Decision = 'MAP_CODE' AND (Replay = 0 OR Replay IS NULL)").%Get(0)
+	Set tOut.saved = {"calls":(+tSaved.N), "basedOnRuns":(+tRun.Runs), "tokens":null, "costUsd":null}
+	If tRun.Runs Set tOut.saved.tokens = tSaved.N * tRun.Tokens \ 1, tOut.saved.costUsd = $NORMALIZE(tSaved.N * tRun.Cost, 6)
+	Set tOut.learnedMappings = +..Rows("SELECT COUNT(DISTINCT LocalCode) AS N FROM AgenticProd_Data.DecisionLog d WHERE d.Outcome = 'APPROVED'"_tLogWhere).%Get(0).N
+	Set tOut.unsafeBlocked = +..Rows("SELECT COUNT(*) AS N FROM AgenticProd_Data.DecisionLog d WHERE d.Outcome %STARTSWITH 'DOWNGRADED:'"_tLogWhere).%Get(0).N
+
+	Set tOut.steps = ..Quantiles("SELECT Name AS K, DurationMs AS V FROM AgenticProd_Data.Span WHERE Name IN ('router check', 'agent run', 'triage decision') AND DurationMs IS NOT NULL"
+		_$SELECT(pIncludeEval: "", 1: " AND EvalRunId IS NULL"), "step")
+	Quit tOut
+}
+
+/// [{<pKeyName>, count, p50, p95}] over rows K, V of pSQL, in K order.
+ClassMethod Quantiles(pSQL As %String, pKeyName As %String) As %DynamicArray [ Internal ]
+{
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, pSQL)
+	If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message))
+	While tRS.%Next() {
+		Set tK = tRS.K, tV = tRS.V
+		Continue:(tK="")||(tV="")
+		Set tN(tK) = $GET(tN(tK)) + 1, tSorted(tK, +tV, tN(tK)) = ""
+	}
+	Set tOut = [], tK = ""
+	For {
+		Set tK = $ORDER(tN(tK))
+		Quit:tK=""
+		Kill tOne
+		Merge tOne = tSorted(tK)
+		Set tRow = {}
+		Do tRow.%Set(pKeyName, tK), tRow.%Set("count", tN(tK))
+		Do tRow.%Set("p50", $NORMALIZE(##class(AgenticProd.Eval.Runner).Percentile(.tOne, tN(tK), .5), 3), "number")
+		Do tRow.%Set("p95", $NORMALIZE(##class(AgenticProd.Eval.Runner).Percentile(.tOne, tN(tK), .95), 3), "number")
+		Do tOut.%Push(tRow)
+	}
+	Quit tOut
+}
+
+/// Decisions per UTC hour for the last 24 hours, by what finally happened:
+/// {hours:["HH:00",...], applied:[], approval:[], rejected:[], resent:[], other:[]}.
+ClassMethod DecisionMix(pIncludeEval As %Boolean) As %DynamicObject [ Internal ]
+{
+	Set tNow = $ZTIMESTAMP, tHourNow = (+tNow * 24) + ($PIECE(tNow, ",", 2) \ 3600)
+	Set tFrom = tHourNow - 23
+	Set tSince = $ZDATETIME((tFrom \ 24)_","_((tFrom # 24) * 3600), 3)
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT Outcome, CreatedAt FROM AgenticProd_Data.DecisionLog WHERE CreatedAt >= ?"_$SELECT(pIncludeEval: "", 1: " AND EvalRunId IS NULL"), tSince)
+	While tRS.%Next() {
+		Set tAt = $ZDATETIMEH(tRS.CreatedAt, 3), tHour = (+tAt * 24) + ($PIECE(tAt, ",", 2) \ 3600) - tFrom
+		Continue:(tHour<0)||(tHour>23)
+		Set tCat = ..OutcomeGroup(tRS.Outcome), tCount(tCat, tHour) = $GET(tCount(tCat, tHour)) + 1
+	}
+	Set tOut = {"hours":[]}
+	For tCat = "applied", "approval", "rejected", "resent", "other" Do tOut.%Set(tCat, [])
+	For h = 0:1:23 {
+		Do tOut.hours.%Push($TRANSLATE($JUSTIFY((tFrom + h) # 24, 2), " ", "0")_":00")
+		For tCat = "applied", "approval", "rejected", "resent", "other" Do tOut.%Get(tCat).%Push(+$GET(tCount(tCat, h)))
+	}
+	Quit tOut
+}
+
+/// Dashboard colour group of a DecisionLog Outcome: applied, approval (sent to a person,
+/// whatever the review did), rejected, resent or other (errors).
+ClassMethod OutcomeGroup(pOutcome As %String) As %String
+{
+	Quit:pOutcome="APPLIED" "applied"
+	Quit:pOutcome="REJECTED" "rejected"
+	Quit:pOutcome="RESENT" "resent"
+	Quit:(pOutcome="SENT_FOR_APPROVAL")||(pOutcome="APPROVED")||($EXTRACT(pOutcome, 1, 11)="DOWNGRADED:")||($EXTRACT(pOutcome, 1, 7)="REVIEW_") "approval"
+	Quit "other"
 }
 
 /// Agent production item setting; the property's InitialExpression when the production file

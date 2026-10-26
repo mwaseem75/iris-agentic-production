@@ -23,6 +23,9 @@ Parameter DASHAPP = "/agenticprod";
 
 Parameter DASHAPI = "/agenticprod/api";
 
+/// Vendored chart library (web/vendor), served under the page app's login.
+Parameter DASHVENDOR = "/agenticprod/vendor";
+
 Parameter DASHDIR = "/home/irisowner/dev/web/";
 
 /// Login group shared by DASHAPP and DASHAPI, so one login covers the page and its API calls.
@@ -34,6 +37,11 @@ Parameter DASHROLE = "AgenticProd_Dashboard";
 
 /// Read-only databases: the dashboard never writes. IRISTEMP is RW for SQL work globals.
 Parameter DASHRESOURCES = "AgenticProd_Dashboard:U,%DB_IRISAPP_DATA:R,%DB_IRISAPP_CODE:R,%DB_ENSLIB:R,%DB_HSLIB:R,%DB_HSSYS:R,%DB_IRISLIB:R,%DB_IRISSYS:R,%DB_IRISTEMP:RW";
+
+/// Role added to /api/monitor so Monitor.Metrics can run in IRISAPP (Setup.MonitorSetup).
+Parameter MONITORROLE = "AgenticProd_Monitor";
+
+Parameter MONITORRESOURCES = "%DB_IRISAPP_DATA:R,%DB_IRISAPP_CODE:R,%DB_ENSLIB:R,%DB_IRISLIB:R";
 
 /// Synthetic-use LOINC subset (see kb/LOINC_NOTICE.md).
 Parameter LOINCFILE = "/home/irisowner/dev/kb/loinc_subset.csv";
@@ -53,6 +61,7 @@ ClassMethod Run() As %Status
 		$$$ThrowOnError(..AgentSecurity())
 		$$$ThrowOnError(..WorkflowSetup())
 		$$$ThrowOnError(..DashboardSetup())
+		$$$ThrowOnError(..MonitorSetup())
 		// Setup runs at image build with IRIS about to stop, so starting it here would not last
 		$$$ThrowOnError(##class(Ens.Director).SetAutoStart("AgenticProd.Production"))
 	} Catch ex {
@@ -201,7 +210,45 @@ ClassMethod DashboardSetup() As %Status
 	Set tSC = $$$OK
 	Try {
 		$$$ThrowOnError(..CreateDashboardApp($NAMESPACE))
-		Set tSql = "GRANT SELECT ON AgenticProd_Data.DecisionLog, AgenticProd_Data.Usage, AgenticProd_Data.EvalRun, AgenticProd_Data.EvalResult, AgenticProd_Data.ToolCall, AgenticProd_Data.Span TO "_..#DASHROLE
+		Set tSql = "GRANT SELECT ON AgenticProd_Data.DecisionLog, AgenticProd_Data.Usage, AgenticProd_Data.EvalRun, AgenticProd_Data.EvalResult, AgenticProd_Data.ToolCall, AgenticProd_Data.Span, AgenticProd_Data.SavedCall, AgenticProd_Msg.ApprovalTask, EnsLib_Workflow.TaskResponse TO "_..#DASHROLE
+		Set tRS = ##class(%SQL.Statement).%ExecDirect(, tSql)
+		If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message_" ("_tSql_")"))
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// Register Monitor.Metrics and Monitor.GenAI with SAM, so /api/monitor/metrics carries the agentic metrics, and
+/// give that app MONITORROLE: /api/monitor runs as UnknownUser with %DB_IRISSYS only, so it could
+/// not load the class or read IRISAPP. The role reads the databases and SELECTs the tables the
+/// metrics count; the endpoint shows counts only, no message data.
+ClassMethod MonitorSetup() As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		Set tNamespace = $NAMESPACE
+		New $NAMESPACE
+		Set $NAMESPACE = "%SYS"
+		Set tDesc = "AgenticProd metrics for /api/monitor: read-only counts"
+		If ##class(Security.Roles).Exists(..#MONITORROLE) {
+			Set tProps("Description") = tDesc, tProps("Resources") = ..#MONITORRESOURCES
+			$$$ThrowOnError(##class(Security.Roles).Modify(..#MONITORROLE, .tProps))
+		} Else {
+			$$$ThrowOnError(##class(Security.Roles).Create(..#MONITORROLE, tDesc, ..#MONITORRESOURCES))
+		}
+		$$$ThrowOnError(##class(Security.Applications).Get("/api/monitor", .tApp))
+		// MatchRoles is ":role" (always granted) or "match:role", pieces after the first
+		If (tApp("MatchRoles")_":") '[ (":"_..#MONITORROLE_":") {
+			Kill tProps
+			Set tProps("MatchRoles") = tApp("MatchRoles")_":"_..#MONITORROLE
+			$$$ThrowOnError(##class(Security.Applications).Modify("/api/monitor", .tProps))
+		}
+		For tClass = "AgenticProd.Monitor.Metrics", "AgenticProd.Monitor.GenAI" {
+			$$$ThrowOnError(##class(SYS.Monitor.SAM.Config).AddApplicationClass(tClass, tNamespace))
+		}
+		Set $NAMESPACE = tNamespace
+		Set tSql = "GRANT SELECT ON AgenticProd_Data.DecisionLog, AgenticProd_Data.Usage, AgenticProd_Data.ToolCall, AgenticProd_Data.SavedCall, AgenticProd_Msg.ApprovalTask, EnsLib_Workflow.TaskResponse TO "_..#MONITORROLE
 		Set tRS = ##class(%SQL.Statement).%ExecDirect(, tSql)
 		If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message_" ("_tSql_")"))
 	} Catch ex {
@@ -228,7 +275,7 @@ ClassMethod CreateDashboardApp(pNamespace As %String) As %Status [ Private ]
 			$$$ThrowOnError(##class(Security.Roles).Create(..#DASHROLE, tDesc, ..#DASHRESOURCES))
 		}
 		$$$ThrowOnError(..AddUserRole(..#REVIEWUSER, ..#DASHROLE))
-		For tApp = ..#DASHAPP, ..#DASHAPI {
+		For tApp = ..#DASHAPP, ..#DASHAPI, ..#DASHVENDOR {
 			Kill tProps
 			Set tProps("NameSpace") = pNamespace
 			Set tProps("Resource") = ..#DASHRESOURCE
@@ -242,6 +289,10 @@ ClassMethod CreateDashboardApp(pNamespace As %String) As %Status [ Private ]
 				// ServeFiles 3: static files go through the login and resource check (1 serves them to anyone)
 				// Recurse off, or /agenticprod/api would be served from DASHDIR too
 				Set tProps("Recurse") = 0
+			} ElseIf tApp = ..#DASHVENDOR {
+				// Own app so the page app can keep Recurse off; same login and resource as the page
+				Set tProps("Description") = "AgenticProd dashboard libraries (web/vendor)"
+				Set tProps("DispatchClass") = "", tProps("Path") = ..#DASHDIR_"vendor/", tProps("ServeFiles") = 3, tProps("Recurse") = 1
 			} Else {
 				Set tProps("Description") = "AgenticProd dashboard API (read-only)"
 				Set tProps("DispatchClass") = "AgenticProd.UI.REST"
