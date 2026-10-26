@@ -16,9 +16,15 @@ Property ObservationProfile As %String(MAXLEN = 500) [ InitialExpression = "http
 /// FHIR packages loaded for validation, comma-separated; must include the profile's package.
 Property Packages As %String(MAXLEN = 500) [ InitialExpression = "hl7.fhir.r4.core@4.0.1,hl7.fhir.us.core@3.1.0" ];
 
+/// Code system URI for LAB_SIM's own test codes (OBX-3 coding system L), kept as the second coding.
+Property LocalCodeSystem As %String(MAXLEN = 500) [ InitialExpression = "http://lab-sim.example/codes" ];
+
 Property Validator As HS.FHIRServer.Util.ResourceValidator [ Transient ];
 
-Parameter SETTINGS = "ObservationProfile:FHIR,Packages:FHIR";
+/// OBX-8 flags that are also codes in v3-ObservationInterpretation, with their display.
+Parameter INTERPRETATIONS = "N:Normal,H:High,L:Low,A:Abnormal,HH:Critical high,LL:Critical low,AA:Critical abnormal";
+
+Parameter SETTINGS = "ObservationProfile:FHIR,Packages:FHIR,LocalCodeSystem:FHIR";
 
 Method OnInit() As %Status
 {
@@ -28,6 +34,12 @@ Method OnInit() As %Status
 	// The first profile check starts the Java validator (about 35 s); pay that here, not on a message
 	Set tStart = $ZHOROLOG
 	Set tSC = ..Warm(tValidator, ..ObservationProfile)
+	If $$$ISERR(tSC) {
+		// On an item restart the old job's OnTearDown has just stopped the JVM and the gateway
+		// still points at its port; start it again and retry once
+		Do $SYSTEM.external.startServer($$$ValidatorELS)
+		Set tSC = ..Warm(tValidator, ..ObservationProfile)
+	}
 	If $$$ISERR(tSC) {
 		$$$LOGWARNING("FHIR validator not warmed: "_$SYSTEM.Status.GetErrorText(tSC))
 	} Else {
@@ -47,8 +59,9 @@ Method OnMessage(pRequest As EnsLib.HL7.Message, Output pResponse As AgenticProd
 {
 	Set tSC = $$$OK
 	Try {
-		$$$ThrowOnError(..Build(pRequest, .tBundle))
+		$$$ThrowOnError(..Build(pRequest, .tBundle, ..LocalCodeSystem))
 		Set pResponse = ##class(AgenticProd.Msg.FHIRResult).%New()
+		Set pResponse.ControlId = pRequest.GetValueAt("1:10")
 		Set tErrors = ..Validate(..Validator, tBundle, ..ObservationProfile, .tOutcome, .tLines)
 		Set pResponse.Valid = (tErrors = 0), pResponse.IssueCount = tErrors, pResponse.Issues = tLines
 		If tErrors {
@@ -67,16 +80,17 @@ Method OnMessage(pRequest As EnsLib.HL7.Message, Output pResponse As AgenticProd
 	Quit tSC
 }
 
-/// pBundle: FHIR R4 transaction bundle for pMsg, Observation codes carrying LOINC from LabCodeMap.
-/// pMsg is not changed.
-ClassMethod Build(pMsg As EnsLib.HL7.Message, Output pBundle As %DynamicObject) As %Status
+/// pBundle: FHIR R4 transaction bundle for pMsg, Observation codes carrying LOINC from LabCodeMap
+/// and the local code under pLocalSystem. pMsg is not changed.
+ClassMethod Build(pMsg As EnsLib.HL7.Message, Output pBundle As %DynamicObject, pLocalSystem As %String = "") As %Status
 {
 	Set tSC = $$$OK
 	Try {
 		$$$ThrowOnError(..Enrich(pMsg, .tCopy))
 		$$$ThrowOnError(##class(HS.Gateway.HL7.HL7ToSDA3).GetSDA(tCopy, .tSDA))
 		Set pBundle = ##class(HS.FHIR.DTL.Util.API.Transform.SDA3ToFHIR).TransformStream(tSDA, "HS.SDA3.Container", "R4").bundle
-		Do ..AddLoinc(pBundle)
+		Do ..AddLoinc(pBundle, pLocalSystem)
+		Do ..AddInterpretation(pBundle)
 	} Catch ex {
 		Set tSC = ex.AsStatus()
 	}
@@ -107,8 +121,9 @@ ClassMethod Enrich(pMsg As EnsLib.HL7.Message, Output pCopy As EnsLib.HL7.Messag
 	Quit pCopy.InsertSegmentAt(tSeg, tObr)
 }
 
-/// Put the LabCodeMap LOINC first in each Observation.code.coding and keep the local code after it.
-ClassMethod AddLoinc(pBundle As %DynamicObject)
+/// Put the LabCodeMap LOINC first in each Observation.code.coding and keep the local code after
+/// it, with system pLocalSystem when it has none.
+ClassMethod AddLoinc(pBundle As %DynamicObject, pLocalSystem As %String = "")
 {
 	Set tIter = pBundle.entry.%GetIterator()
 	While tIter.%GetNext(, .tEntry) {
@@ -116,6 +131,7 @@ ClassMethod AddLoinc(pBundle As %DynamicObject)
 		Continue:tRes.resourceType'="Observation"
 		Set tLocal = tRes.code.coding.%Get(0)
 		Continue:'$IsObject(tLocal)
+		Set:(pLocalSystem'="")&&(tLocal.system="") tLocal.system = pLocalSystem
 		Set tMap = ##class(Ens.Util.FunctionSet).Lookup("LabCodeMap", tLocal.code)
 		Continue:tMap=""
 		Set tCoding = [{"system":"http://loinc.org", "code":($PIECE(tMap, "^")), "display":($PIECE(tMap, "^", 2))}]
@@ -124,6 +140,26 @@ ClassMethod AddLoinc(pBundle As %DynamicObject)
 			Do tCoding.%Push(tC)
 		}
 		Set tRes.code.coding = tCoding
+	}
+}
+
+/// Observation.interpretation from OBX-8: SDA3ToFHIR gives only the flag as display and text, so
+/// a known flag gets a v3-ObservationInterpretation coding. Unknown flags stay as text.
+ClassMethod AddInterpretation(pBundle As %DynamicObject)
+{
+	Set tIter = pBundle.entry.%GetIterator()
+	While tIter.%GetNext(, .tEntry) {
+		Set tRes = tEntry.resource
+		Continue:(tRes.resourceType'="Observation")||'$IsObject(tRes.interpretation)
+		Set tConcepts = tRes.interpretation.%GetIterator()
+		While tConcepts.%GetNext(, .tConcept) {
+			Set tFlag = $ZSTRIP(tConcept.text, "<>W")
+			Set:tFlag="" tFlag = $ZSTRIP(tConcept.coding.%Get(0).display, "<>W")
+			Set tPos = $FIND(","_..#INTERPRETATIONS, ","_tFlag_":")
+			Continue:(tFlag="")||'tPos
+			Set tDisplay = $PIECE($EXTRACT(","_..#INTERPRETATIONS, tPos, *), ",")
+			Set tConcept.coding = [{"system":"http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation", "code":(tFlag), "display":(tDisplay)}]
+		}
 	}
 }
 

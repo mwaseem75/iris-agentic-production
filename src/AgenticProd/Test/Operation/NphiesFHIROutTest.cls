@@ -26,7 +26,9 @@ Method TestValidControl20()
 	Set tLoinc = tObs.code.coding.%Get(0), tLocal = tObs.code.coding.%Get(1)
 	Do $$$AssertEquals(tLoinc.system_"|"_tLoinc.code, "http://loinc.org|2951-2")
 	Do $$$AssertEquals(tLoinc.display, "Sodium [Moles/volume] in Serum or Plasma")
-	Do $$$AssertEquals(tLocal.code, "NA-S", "local code kept as second coding")
+	Do $$$AssertEquals(tLocal.system_"|"_tLocal.code, "http://lab-sim.example/codes|NA-S", "local code kept as second coding")
+	Set tFlag = tObs.interpretation.%Get(0).coding.%Get(0)
+	Do $$$AssertEquals(tFlag.system_"|"_tFlag.code, "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation|N", "OBX-8")
 	Set tQty = tObs.valueQuantity
 	Do $$$AssertEquals(tQty.value_" "_tQty.code_" "_tQty.system, "139 mmol/L http://unitsofmeasure.org")
 	Set tErrors = ##class(AgenticProd.Operation.NphiesFHIROut).Validate(..Validator, tBundle, ..#PROFILE, .tOutcome, .tLines)
@@ -79,7 +81,7 @@ Method Bundle(pCaseId As %String, Output pBundle As %DynamicObject, Output pMsg 
 {
 	Do $$$AssertStatusOK(##class(AgenticProd.Test.Tools.HL7Test).LoadCase(pCaseId, .pHeaderId))
 	Do ##class(AgenticProd.Tools.Base).OpenBody(pHeaderId, .pMsg)
-	Do $$$AssertStatusOK(##class(AgenticProd.Operation.NphiesFHIROut).Build(pMsg, .pBundle))
+	Do $$$AssertStatusOK(##class(AgenticProd.Operation.NphiesFHIROut).Build(pMsg, .pBundle, "http://lab-sim.example/codes"))
 }
 
 ClassMethod First(pBundle As %DynamicObject, pType As %String) As %DynamicObject

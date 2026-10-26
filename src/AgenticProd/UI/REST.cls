@@ -136,6 +136,9 @@ ClassMethod SummaryData(pIncludeEval As %Boolean = 0) As %DynamicObject
 	Set tModel = ..AgentSetting(tItem, "Model")
 	Set tByModel = ..Rows("SELECT SUM(CostUsd) AS Cost, COUNT(*) AS Runs FROM AgenticProd_Data.Usage WHERE Model = ? AND "_tLive, tModel).%Get(0)
 	Set tBudget = +..AgentSetting(tItem, "DailyTokenBudget")
+	// Eval sends carry MSH-10 EV<runId>-<caseId>; rows from before ControlId was stored count as live
+	Set tFHIR = ..Rows("SELECT SUM(CASE WHEN Valid = 1 THEN 1 ELSE 0 END) AS Valid, SUM(CASE WHEN Valid = 1 THEN 0 ELSE 1 END) AS Invalid"
+		_" FROM AgenticProd_Msg.FHIRResult"_$SELECT(pIncludeEval: "", 1: " WHERE ControlId IS NULL OR ControlId NOT LIKE 'EV%-%'")).%Get(0)
 	Set tTokens = ##class(AgenticProd.Operation.Agent).TokensUsedToday()
 	Set tOut = {
 		"includeEval": (''pIncludeEval),
@@ -143,6 +146,7 @@ ClassMethod SummaryData(pIncludeEval As %Boolean = 0) As %DynamicObject
 		"sentForApproval": (+tLog.SentForApproval), "waiting": (+tLog.Waiting),
 		"rejected": (+tLog.Rejected), "mappingsLearned": (+tLog.MappingsLearned),
 		"changedByTriage": (+tChanged.N),
+		"fhirValid": (+tFHIR.Valid), "fhirInvalid": (+tFHIR.Invalid),
 		"costToday": (+tDay.Cost), "agentRunsToday": (+tDay.Runs),
 		"model": (tModel), "agentRunsModel": (+tByModel.Runs),
 		"costPerMessage": ($SELECT(tByModel.Runs: $NORMALIZE(tByModel.Cost / tByModel.Runs, 6), 1: "")),

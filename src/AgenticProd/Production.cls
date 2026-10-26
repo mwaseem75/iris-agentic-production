@@ -27,6 +27,7 @@ XData ProductionDefinition
   <Item Name="NphiesFHIROut" Category="Lab" ClassName="AgenticProd.Operation.NphiesFHIROut" PoolSize="1" Enabled="true" Foreground="false" LogTraceEvents="true" Comment="Simulated NPHIES FHIR endpoint: validated R4 bundles in data/out-fhir">
     <Setting Target="Adapter" Name="FilePath">/home/irisowner/dev/data/out-fhir/</Setting>
     <Setting Target="Adapter" Name="Charset">UTF-8</Setting>
+    <Setting Target="Host" Name="LocalCodeSystem">http://lab-sim.example/codes</Setting>
   </Item>
   <Item Name="Triage" Category="Agent" ClassName="AgenticProd.Process.Triage" PoolSize="1" Enabled="true" Foreground="false" LogTraceEvents="true" Comment="Action matrix: the only component that acts on a decision">
     <Setting Target="Host" Name="AgentTarget">TriageAgent</Setting>

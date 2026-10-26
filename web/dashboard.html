@@ -250,6 +250,7 @@ function renderSummary(s) {
     tile("Rejected", num(s.rejected), "returned to sender"),
     tile("Mappings learned", num(s.mappingsLearned), "approved by a reviewer"),
     tile("Changed by Triage", num(s.changedByTriage), "agent proposal not applied as sent"),
+    tile("FHIR out", num(s.fhirValid) + " / " + num(s.fhirInvalid), "valid / invalid R4 bundles"),
     tile("LLM cost today", money(s.costToday), num(s.agentRunsToday) + " agent runs"),
     tile("Cost per message", money(s.costPerMessage), (s.model || "no model") + ", " + num(s.agentRunsModel) + " runs"),
     // Bar width is capped at 100% in tile(); the text carries the real figure
