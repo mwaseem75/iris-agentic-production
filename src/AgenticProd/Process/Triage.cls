@@ -36,7 +36,8 @@ Property AutoFixThreshold As %Numeric(MAXVAL = 1, MINVAL = 0) [ InitialExpressio
 /// Folder for rejected messages and their reason files.
 Property RejectPath As %String(MAXLEN = 500) [ InitialExpression = "/home/irisowner/dev/data/rejected/" ];
 
-/// One OpenTelemetry trace per failed message, rooted here (see Telemetry.Trace).
+/// Export the trace of each failed message over OTLP (see Telemetry.Trace). Spans are stored in
+/// Data.Span either way.
 Property TracingEnabled As %Boolean [ InitialExpression = 0 ];
 
 Parameter SETTINGS = "AgentTarget:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},TargetConfigName:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},ApprovalTarget:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},AutoFixThreshold:Triage,AgentTimeout:Triage,RejectPath:Triage,TracingEnabled:Tracing";
@@ -48,12 +49,11 @@ Method OnRequest(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As 
 	Set tSC = $$$OK
 	Set (tRoot, tOutcome) = ""
 	Try {
-		If ..TracingEnabled {
-			Set tRoot = ##class(AgenticProd.Telemetry.Trace).TriageRoot(pRequest)
-			Set pRequest.TraceParent = ##class(AgenticProd.Telemetry.Trace).Context(tRoot)
-			// Saved so the workflow answer, which may come in another job, joins the trace
-			If pRequest.TraceParent '= "" $$$ThrowOnError(pRequest.%Save())
-		}
+		// Spans are always stored in Data.Span; TracingEnabled adds the OTLP export
+		Set tRoot = ##class(AgenticProd.Telemetry.Trace).TriageRoot(pRequest, ..TracingEnabled)
+		Set pRequest.TraceParent = ##class(AgenticProd.Telemetry.Trace).Context(tRoot)
+		// Saved so the workflow answer, which may come in another job, joins the trace
+		If pRequest.TraceParent '= "" $$$ThrowOnError(pRequest.%Save())
 		Set tDecision = ""
 		If ..FixedByTriage(pRequest.HeaderId) {
 			// Our own fix failed again: another agent round could loop, so a person decides
@@ -142,7 +142,7 @@ Method OnResponse(request As %Library.Persistent, ByRef response As %Library.Per
 		Quit:'$IsObject(callresponse)
 		Quit:'callrequest.%Extends("AgenticProd.Msg.ApprovalTask")
 		$$$ThrowOnError(..Review(request, callrequest, callresponse, pCompletionKey, .tFixed, .tResend))
-		If ..TracingEnabled, request.TraceParent '= "" {
+		If request.TraceParent '= "" {
 			Set tLog = ##class(AgenticProd.Data.DecisionLog).%OpenId(pCompletionKey)
 			If $IsObject(tLog) Do ##class(AgenticProd.Telemetry.Trace).ReviewSpan(request.TraceParent, tLog.CreatedAt, callresponse.%Action, tLog.Outcome, callrequest.Decision)
 		}

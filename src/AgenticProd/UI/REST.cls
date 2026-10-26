@@ -24,6 +24,7 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
 <Routes>
 <Route Url="/summary" Method="GET" Call="Summary"/>
 <Route Url="/decisions" Method="GET" Call="Decisions"/>
+<Route Url="/decisions/:id/story" Method="GET" Call="Story"/>
 <Route Url="/evalruns" Method="GET" Call="EvalRuns"/>
 <Route Url="/evalruns/:id" Method="GET" Call="EvalResults"/>
 </Routes>
@@ -45,6 +46,23 @@ ClassMethod Decisions() As %Status
 	Set tSC = $$$OK
 	Try {
 		Write ..DecisionsData(%request.Get("limit", ..#DEFAULTLIMIT), ''%request.Get("eval")).%ToJSON()
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+ClassMethod Story(pId As %String) As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		Set tData = ..StoryData(pId)
+		If '$IsObject(tData) {
+			Set %response.Status = ..#HTTP404NOTFOUND
+			Write {"error":("no decision "_pId)}.%ToJSON()
+			Quit
+		}
+		Write tData.%ToJSON()
 	} Catch ex {
 		Set tSC = ex.AsStatus()
 	}
@@ -165,6 +183,241 @@ ClassMethod DecisionsData(pLimit As %Integer = {..#DEFAULTLIMIT}, pIncludeEval A
 		For tKey = "DecisionJSON", "Reason", "AgentCalls", "Replays" Do tRow.%Remove(tKey)
 	}
 	Quit tRows
+}
+
+/// What happened to DecisionLog row pId, as plain-language steps for a reader who is not an
+/// integration engineer: router check, injection check, agent and its tool calls, the Triage rule,
+/// and the review. Also the Data.Span rows of the message's latest trace and the masked message
+/// text. "" when there is no such row. Text from the message or the agent goes through Mask first.
+ClassMethod StoryData(pId As %String) As %DynamicObject
+{
+	Quit:(pId'?1.N)||'##class(AgenticProd.Data.DecisionLog).%ExistsId(pId) ""
+	Set tLog = ##class(AgenticProd.Data.DecisionLog).%OpenId(pId)
+	Set tMessage = ..MaskedMessage(tLog.HeaderId, .tSecrets)
+	Set tTrace = ..Rows("SELECT TOP 1 TraceId FROM AgenticProd_Data.Span WHERE HeaderId = ? ORDER BY ID DESC", tLog.HeaderId).%Get(0)
+	// Root first: the review span starts at DecisionLog.CreatedAt, which has whole seconds only
+	Set tSpans = $SELECT($IsObject(tTrace): ..Rows("SELECT ID, SpanId, ParentSpanId, Name, StartTs, EndTs, DurationMs, Status, Attributes, Exported FROM AgenticProd_Data.Span WHERE TraceId = ? ORDER BY CASE WHEN ParentSpanId IS NULL THEN 0 ELSE 1 END, StartTs, ID", tTrace.TraceId), 1: [])
+	Set tIter = tSpans.%GetIterator()
+	While tIter.%GetNext(, .tSpan) {
+		Set tAttrs = $SELECT(tSpan.Attributes '= "": ##class(%DynamicObject).%FromJSON(tSpan.Attributes), 1: {})
+		Do tSpan.%Set("Attributes", tAttrs)
+		Set:'$DATA(tByName(tSpan.Name)) tByName(tSpan.Name) = tAttrs
+	}
+	Set tSteps = []
+
+	Set tClass = $SELECT($DATA(tByName("router check")): tByName("router check").%Get("agentic.error_class"), 1: "")
+	Set:tClass="" tClass = tLog.ErrorClass
+	Do tSteps.%Push({"step":"router", "title":"Router check",
+		"text":("LabRouter checked the message and stopped it ("_tClass_"): "_$SELECT(tLog.ErrorText '= "": ..Mask(tLog.ErrorText, .tSecrets), 1: "no problem text recorded")_".")})
+
+	Set tFlags = [], tDecision = $SELECT(tLog.DecisionJSON '= "": ##class(%DynamicObject).%FromJSON(tLog.DecisionJSON), 1: {})
+	If $IsObject(tDecision.evidence) {
+		Set tEv = tDecision.evidence.%GetIterator()
+		While tEv.%GetNext(, .tLine) {
+			Do:$EXTRACT(tLine, 1, 26)="suspicious instruction in " tFlags.%Push($PIECE($EXTRACT(tLine, 27, *), ": "))
+		}
+	}
+	Do tSteps.%Push({"step":"injection", "title":"Injection check", "flagged":(tFlags),
+		"text":($SELECT(tFlags.%Size(): "InjectionGuard found instruction-like text in "_..Join(tFlags)_". The agent still saw it, as marked data, but nothing it proposes for this message can be applied automatically.",
+			1: "InjectionGuard found no instruction-like text in the free-text fields."))})
+
+	Do tSteps.%Push(..AgentStep(tLog, .tSecrets))
+
+	Set tTriage = $SELECT($DATA(tByName("triage decision")): tByName("triage decision").%Get("agentic.final_outcome"), 1: "")
+	Do tSteps.%Push({"step":"triage", "title":"Triage rule", "outcome":(..TriageOutcome(tLog, tTriage)), "text":(..TriageText(tLog, ..TriageOutcome(tLog, tTriage), .tSecrets))})
+
+	Do tSteps.%Push(..ReviewStep(tLog, ..TriageOutcome(tLog, tTriage), .tSecrets))
+
+	Set tN = 0, tIter = tSteps.%GetIterator()
+	While tIter.%GetNext(, .tStep) {
+		Do tStep.%Set("n", $INCREMENT(tN))
+	}
+	Set tCase = $SELECT(tLog.EvalRunId '= "": "EV"_tLog.EvalRunId_"-"_tLog.CaseId, 1: "")
+	Set tOut = {"id":(+pId), "headerId":(tLog.HeaderId), "sessionId":(tLog.SessionId), "case":(tCase),
+		"decision":(tLog.Decision), "outcome":(tLog.Outcome), "createdAt":(tLog.CreatedAt),
+		"traceId":($SELECT($IsObject(tTrace): tTrace.TraceId, 1: "")), "steps":(tSteps), "spans":(tSpans), "message":(tMessage)}
+	Do:tOut.message="" tOut.%Set("message", "", "null")
+	Do:tLog.SessionId="" tOut.%Set("sessionId", "", "null")
+	Quit tOut
+}
+
+/// The agent's step: what it proposed, or why it was not called, and its tool calls in order.
+/// A replay ran no tools; the recorded session's calls are listed and marked recorded.
+ClassMethod AgentStep(pLog As AgenticProd.Data.DecisionLog, ByRef pSecrets) As %DynamicObject [ Internal ]
+{
+	Set tStep = {"step":"agent", "title":"Agent", "tools":[]}
+	Set tUsage = ..Rows("SELECT TOP 1 Model, Replay, Decision, Confidence, AgentSessionId, PromptTokens, CompletionTokens, CostUsd, ToolCalls, DecisionJSON FROM AgenticProd_Data.Usage WHERE HeaderId = ? ORDER BY ID DESC", pLog.HeaderId).%Get(0)
+	If '$IsObject(tUsage) || (tUsage.Decision = "") {
+		Set tWhy = $SELECT(pLog.Reason [ "agent not called a second time": "this message was built by a Triage fix that failed again, so a second agent round could loop",
+			pLog.Reason [ "Daily token budget": "the daily token budget was used up",
+			pLog.Reason [ "agent gave no decision": "it gave no decision ("_$PIECE(..Mask(pLog.Reason, .pSecrets), "agent gave no decision: ", 2)_")",
+			1: "no agent run is recorded for this message")
+		Do tStep.%Set("text", "The agent was not used: "_tWhy_". Triage sent the message to a person instead.")
+		Quit tStep
+	}
+	Set tProposal = $SELECT(tUsage.DecisionJSON '= "": ##class(%DynamicObject).%FromJSON(tUsage.DecisionJSON), 1: {})
+	Set tWhat = tUsage.Decision
+	If (tUsage.Decision = "MAP_CODE") && $IsObject(tProposal.mapping) {
+		Set tWhat = tWhat_": map local code "_..Mask(tProposal.mapping."local_code", .pSecrets)_" to LOINC "_tProposal.mapping.loinc_$SELECT(tProposal.mapping.display '= "": " ("_tProposal.mapping.display_")", 1: "")
+	} ElseIf $IsObject(tProposal.fix) && tProposal.fix.%Size() {
+		Set tFixes = [], tIter = tProposal.fix.%GetIterator()
+		While tIter.%GetNext(, .tFix) {
+			Do tFixes.%Push(tFix.path_" '"_..Mask(tFix.from, .pSecrets)_"' to '"_..Mask(tFix.to, .pSecrets)_"'")
+		}
+		Set tWhat = tWhat_": change "_..Join(tFixes)
+	}
+	Set tHow = $SELECT(tUsage.Replay: "The agent run was replayed from a recorded session, with no LLM call and no tools run. It",
+		1: "The agent called "_tUsage.Model_" ("_(+tUsage.PromptTokens + tUsage.CompletionTokens)_" tokens, $"_$FNUMBER(tUsage.CostUsd, "", 6)_") and")
+	Do tStep.%Set("text", tHow_" proposed "_tWhat_$SELECT(tUsage.Confidence '= "": ", confidence "_$FNUMBER(tUsage.Confidence, "", 2), 1: "")_".")
+	Do tStep.%Set("replay", +tUsage.Replay, "boolean")
+	Quit:tUsage.AgentSessionId="" tStep
+	Set tCalls = ..Rows("SELECT Tool, Status, DurationMs, ResultLength, ErrorText FROM AgenticProd_Data.ToolCall WHERE AgentSessionId = ? ORDER BY ID", tUsage.AgentSessionId)
+	Set tIter = tCalls.%GetIterator()
+	While tIter.%GetNext(, .tCall) {
+		Set tResult = $CASE(tCall.Status, "OK": "returned "_+tCall.ResultLength_" characters", "DENIED": "refused by the read-only policy", : "failed")
+		Set:(tCall.Status'="OK")&&(tCall.ErrorText'="") tResult = tResult_": "_$EXTRACT(..Mask(tCall.ErrorText, .pSecrets), 1, 120)
+		Set tItem = {"tool":(tCall.Tool), "status":(tCall.Status), "durationMs":(tCall.DurationMs),
+			"text":(tCall.Tool_" "_tResult_$SELECT(tCall.DurationMs '= "": " in "_tCall.DurationMs_" ms", 1: ""))}
+		Do tItem.%Set("recorded", +tUsage.Replay, "boolean")
+		Do tStep.tools.%Push(tItem)
+	}
+	// AI Hub's load_skill runs outside the audit policy, so it has no ToolCall row
+	Set tUnaudited = tUsage.ToolCalls - tCalls.%Size()
+	Do:tUnaudited>0 tStep.%Set("unauditedToolCalls", tUnaudited)
+	Quit tStep
+}
+
+/// What Triage itself decided before any review. pSpanOutcome is the "triage decision" span's
+/// agentic.final_outcome; a review overwrites DecisionLog.Outcome, so without the span it is
+/// worked out from the decision and its reason.
+ClassMethod TriageOutcome(pLog As AgenticProd.Data.DecisionLog, pSpanOutcome As %String) As %String [ Internal ]
+{
+	Quit:pSpanOutcome'="" pSpanOutcome
+	Quit:(pLog.Outcome'="APPROVED")&&($EXTRACT(pLog.Outcome, 1, 7)'="REVIEW_") pLog.Outcome
+	Quit:$EXTRACT(pLog.Reason, 1, 16)="downgraded from " "DOWNGRADED:"_$PIECE($EXTRACT(pLog.Reason, 17, *), ":")
+	Quit "SENT_FOR_APPROVAL"
+}
+
+ClassMethod TriageText(pLog As AgenticProd.Data.DecisionLog, pOutcome As %String, ByRef pSecrets) As %String [ Internal ]
+{
+	Set tAction = $PIECE(pOutcome, ":", 2)
+	If $EXTRACT(pOutcome, 1, 11) = "DOWNGRADED:" {
+		Set tWhy = $PIECE($PIECE($EXTRACT(pLog.Reason, 17, *), ": ", 2, *), " (agent: ")
+		Quit "Triage did not accept "_tAction_": "_$SELECT(tWhy '= "": ..Mask(tWhy, .pSecrets), 1: "the action matrix does not allow it")_". It turned the proposal into ESCALATE and sent it to a person."
+	}
+	Quit:pOutcome="APPLIED" "Triage re-checked the fix itself (validation passed, confidence above the threshold, a whitelisted change, no patient identity fields) and sent a fixed copy on. The original message is unchanged."
+	Quit:pOutcome="RESENT" "RESEND is allowed for a TRANSIENT error that was not resent before, so Triage resent the original message."
+	Quit:pOutcome="REJECTED" "REJECT is allowed only for STRUCTURE_ERROR or ROUTING, which only the sender can fix, so Triage returned the message to the sender."
+	If $EXTRACT(pOutcome, 1, 6) = "ERROR:" Quit "Triage chose "_tAction_" but could not send the result; the message is still failed."
+	Quit:pLog.Decision="MAP_CODE" "A new code mapping is never applied automatically: Triage sent an approval task to a reviewer."
+	Quit "The message needs a person: Triage sent an approval task to a reviewer."
+}
+
+/// The reviewer's answer, "waiting" when a task is open, or that no review was needed.
+ClassMethod ReviewStep(pLog As AgenticProd.Data.DecisionLog, pTriageOutcome As %String, ByRef pSecrets) As %DynamicObject [ Internal ]
+{
+	Set tStep = {"step":"review", "title":"Reviewer"}
+	Set tAsked = (pTriageOutcome = "SENT_FOR_APPROVAL") || ($EXTRACT(pTriageOutcome, 1, 11) = "DOWNGRADED:")
+	If pLog.ReviewedAt = "" {
+		Do tStep.%Set("status", $SELECT(tAsked: "waiting", 1: "none"))
+		Do tStep.%Set("text", $SELECT(tAsked: "Waiting for a reviewer in the Workflow inbox.", 1: "No review needed."))
+		Quit tStep
+	}
+	If pLog.Reviewer = "eval" {
+		Do tStep.%Set("status", "closed")
+		Do tStep.%Set("text", "Closed by the eval runner at "_pLog.ReviewedAt_" (UTC); not reviewed by a person.")
+		Quit tStep
+	}
+	Set tWhat = $CASE(pLog.Outcome,
+		"APPROVED": "approved the mapping "_..Mask(pLog.LocalCode, .pSecrets)_" to LOINC "_pLog.Loinc_"; it was added to the lookup table and the original message was resent",
+		"REVIEW_APPLIED": "approved the fix; Triage re-validated it and sent a fixed copy on",
+		"REVIEW_CLOSED": "approved and closed the task; nothing was changed",
+		"REVIEW_REJECTED": "rejected the proposal; nothing was changed",
+		"REVIEW_BAD_LOINC": "approved a LOINC that was not accepted, so nothing was written",
+		"REVIEW_FIX_FAILED": "approved the fix, but it failed the re-check, so nothing was sent",
+		: "answered the task (outcome "_pLog.Outcome_")")
+	Do tStep.%Set("status", $SELECT(pLog.Outcome = "REVIEW_REJECTED": "rejected", 1: "approved"))
+	Do tStep.%Set("text", $SELECT(pLog.Reviewer '= "": "Reviewer "_pLog.Reviewer, 1: "A reviewer")_" "_tWhat_" at "_pLog.ReviewedAt_" (UTC)."_$SELECT(pLog.ReviewNote '= "": " Note: "_..Mask(pLog.ReviewNote, .pSecrets), 1: ""))
+	Quit tStep
+}
+
+/// Masked text of the message body (the masking get_failed_message uses); "" when the body
+/// was purged or its class has no masking rule. pSecrets(value) = the values that masking hides,
+/// for Mask.
+ClassMethod MaskedMessage(pHeaderId As %Integer, Output pSecrets) As %String [ Internal ]
+{
+	Kill pSecrets
+	Set tText = ""
+	Try {
+		Quit:$$$ISERR(##class(AgenticProd.Tools.Base).OpenBody(pHeaderId, .tBody))
+		Set tMasker = ##class(AgenticProd.Tools.Base).MaskerFor($CLASSNAME(tBody))
+		Quit:tMasker=""
+		Quit:$$$ISERR($CLASSMETHOD(tMasker, "MaskedText", tBody, .tText))
+		If tBody.%Extends("EnsLib.HL7.Message") {
+			Set tMasked = ##class(AgenticProd.Tools.HL7).#MASKEDPID, tSeps = tBody.Separators
+			Set tRaw = $REPLACE($REPLACE(tBody.OutputToString(), $CHAR(13,10), $CHAR(13)), $CHAR(10), $CHAR(13))
+			For i = 1:1:$LENGTH(tRaw, $CHAR(13)) {
+				Set tLine = $PIECE(tRaw, $CHAR(13), i)
+				Continue:$PIECE(tLine, $EXTRACT(tSeps))'="PID"
+				For f = 1:1:$LENGTH(tMasked, ",") {
+					Set tField = $PIECE(tMasked, ",", f)
+					Continue:tField=""
+					Set tValue = $PIECE(tLine, $EXTRACT(tSeps), tField + 1)
+					Do ..AddSecret(tValue, $EXTRACT(tSeps, 2, 3)_$EXTRACT(tSeps, 5), .pSecrets)
+				}
+			}
+		}
+	} Catch ex {
+		Set tText = ""
+	}
+	Quit tText
+}
+
+/// pValue and each of its components, repeats and subcomponents (pSeps = component, repetition
+/// and subcomponent separators) as secrets. Pieces shorter than 3 characters would mask
+/// ordinary text, so they are left out.
+ClassMethod AddSecret(pValue As %String, pSeps As %String, ByRef pSecrets) [ Internal ]
+{
+	Quit:$LENGTH(pValue)<3
+	Set pSecrets(pValue) = ""
+	For s = 1:1:$LENGTH(pSeps) {
+		Set tSep = $EXTRACT(pSeps, s)
+		Continue:pValue'[tSep
+		For p = 1:1:$LENGTH(pValue, tSep) Do ..AddSecret($PIECE(pValue, tSep, p), pSeps, .pSecrets)
+	}
+}
+
+/// pText with every pSecrets value replaced by ***, longest first so a full name goes before its parts.
+ClassMethod Mask(pText As %String, ByRef pSecrets) As %String
+{
+	Quit:pText="" ""
+	Set tKey = ""
+	For {
+		Set tKey = $ORDER(pSecrets(tKey))
+		Quit:tKey=""
+		Set tByLen(-$LENGTH(tKey), tKey) = ""
+	}
+	Set tLen = ""
+	For {
+		Set tLen = $ORDER(tByLen(tLen))
+		Quit:tLen=""
+		Set tKey = ""
+		For {
+			Set tKey = $ORDER(tByLen(tLen, tKey))
+			Quit:tKey=""
+			Set pText = $REPLACE(pText, tKey, "***")
+		}
+	}
+	Quit pText
+}
+
+ClassMethod Join(pList As %DynamicArray) As %String [ Internal ]
+{
+	Set tOut = "", tIter = pList.%GetIterator()
+	While tIter.%GetNext(, .tItem) {
+		Set tOut = tOut_$SELECT(tOut '= "": ", ", 1: "")_tItem
+	}
+	Quit tOut
 }
 
 /// Agent production item setting; the property's InitialExpression when the production file

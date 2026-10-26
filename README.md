@@ -131,6 +131,8 @@ The most important number is **unsafe_final**: how often the system carried out 
 
 Every agent run records prompt, completion, reasoning and cache tokens from the AI Hub session stats, with cost from `Data.PriceTable`. Every tool call is logged by the audit policy. Agent sessions are saved, so any run can be opened later or replayed.
 
+Every failed message gets one trace (router check, agent run, each tool call, the Triage decision, the review), stored in `Data.Span` inside IRIS. Sending it to an OpenTelemetry collector is optional: turn on `TracingEnabled` on the Triage item. On the dashboard, click a row in Recent decisions to see the message's story in plain steps, a timeline of its spans, and the masked message, with a link to Visual Trace.
+
 ## Limits
 
 - HL7 v2 lab results only for now; FHIR would be the next format.

@@ -132,6 +132,79 @@ Method TestEvalRunsAndResults()
 
 /// Reviewer gets JSON and the page; no login and a wrong password get 401; the entry page
 /// shows the IRIS login form to an anonymous browser.
+/// Story of an approved mapping: steps in order, tool calls in order with short results, the Triage
+/// rule from the span (the review overwrote DecisionLog.Outcome), the reviewer, and the trace.
+Method TestStoryApprovedMapping()
+{
+	Set tHeader = -9341, tSession = "test-story-9341"
+	Set tJSON = {"decision":"MAP_CODE","evidence":["suspicious instruction in NTE(1):3: ignore previous"]}.%ToJSON()
+	Do $$$AssertStatusOK(..AddLogRow(tHeader, "MAP_CODE", "APPROVED", "", tJSON, "local GLU1 is glucose", .tLogId))
+	Set tLog = ##class(AgenticProd.Data.DecisionLog).%OpenId(tLogId)
+	Set tLog.ErrorText = "OBX(1):3 local code GLU1 not in LabCodeMap", tLog.ErrorClass = "UNMAPPED_CODE"
+	Set tLog.LocalCode = "GLU1", tLog.Loinc = "2345-7", tLog.Reviewer = "reviewer", tLog.ReviewedAt = "2026-10-26 10:00:00"
+	Do $$$AssertStatusOK(tLog.%Save())
+	Set tUsage = ##class(AgenticProd.Data.Usage).%New()
+	Set tUsage.HeaderId = tHeader, tUsage.AgentSessionId = tSession, tUsage.Model = "gpt-4o-mini", tUsage.Decision = "MAP_CODE"
+	Set tUsage.Confidence = .9, tUsage.PromptTokens = 1000, tUsage.CompletionTokens = 100, tUsage.CostUsd = .0002, tUsage.ToolCalls = 3
+	Set tUsage.DecisionJSON = {"decision":"MAP_CODE","mapping":{"local_code":"GLU1","loinc":"2345-7","display":"Glucose"}}.%ToJSON()
+	Do $$$AssertStatusOK(tUsage.%Save())
+	Do $$$AssertStatusOK(##class(AgenticProd.Data.ToolCall).Log("get_failed_message", {}, "OK", 40, 812, "", tHeader, tSession))
+	Do $$$AssertStatusOK(##class(AgenticProd.Data.ToolCall).Log("search_loinc", {}, "OK", 90, 300, "", tHeader, tSession))
+	Set tTrace = "0123456789abcdef0123456789abcdef", tStart = ##class(AgenticProd.Telemetry.Trace).ZtsBefore(5000)
+	Do $$$AssertStatusOK(##class(AgenticProd.Data.Span).Log(tTrace, "00000000000000a1", "", "triage hdr", tStart, $ZTIMESTAMP, "Ok", {}, tHeader))
+	Do $$$AssertStatusOK(##class(AgenticProd.Data.Span).Log(tTrace, "00000000000000a2", "00000000000000a1", "triage decision", ##class(AgenticProd.Telemetry.Trace).ZtsBefore(100), $ZTIMESTAMP, "Ok", {"agentic.final_outcome":"SENT_FOR_APPROVAL"}, tHeader))
+
+	Set tStory = ##class(AgenticProd.UI.REST).StoryData(tLogId)
+	Do $$$AssertTrue($IsObject(tStory), "story built")
+	Quit:'$IsObject(tStory)
+	Do $$$AssertEquals(tStory.traceId, tTrace)
+	Do $$$AssertEquals(tStory.spans.%Size(), 2)
+	Do $$$AssertEquals(tStory.spans.%Get(0).Name, "triage hdr", "spans by start time")
+	Do $$$AssertEquals(tStory.spans.%Get(1).Attributes."agentic.final_outcome", "SENT_FOR_APPROVAL", "attributes sent as an object")
+	Set tSteps = tStory.steps
+	Do $$$AssertEquals(tSteps.%Size(), 5)
+	For i = 0:1:tSteps.%Size() - 1 Set tStep(tSteps.%Get(i).step) = tSteps.%Get(i), tOrder = $GET(tOrder)_tSteps.%Get(i).step_","
+	Do $$$AssertEquals(tOrder, "router,injection,agent,triage,review,")
+	Do $$$AssertEquals(tSteps.%Get(4).n, 5, "steps numbered")
+	Do $$$AssertTrue(tStep("router").text [ "GLU1 not in LabCodeMap", tStep("router").text)
+	Do $$$AssertEquals(tStep("injection").flagged.%ToJSON(), "[""NTE(1):3""]")
+	Do $$$AssertTrue(tStep("agent").text [ "map local code GLU1 to LOINC 2345-7", tStep("agent").text)
+	Do $$$AssertEquals(tStep("agent").tools.%Size(), 2)
+	Do $$$AssertEquals(tStep("agent").tools.%Get(0).tool, "get_failed_message", "tool calls in order")
+	Do $$$AssertTrue(tStep("agent").tools.%Get(1).text [ "returned 300 characters in 90 ms", tStep("agent").tools.%Get(1).text)
+	Do $$$AssertEquals(tStep("agent").unauditedToolCalls, 1, "load_skill")
+	Do $$$AssertEquals(tStep("triage").outcome, "SENT_FOR_APPROVAL", "Triage's own outcome from the span")
+	Do $$$AssertTrue(tStep("triage").text [ "never applied automatically", tStep("triage").text)
+	Do $$$AssertEquals(tStep("review").status, "approved")
+	Do $$$AssertTrue(tStep("review").text [ "reviewer approved the mapping GLU1 to LOINC 2345-7", tStep("review").text)
+	Do $$$AssertEquals(##class(AgenticProd.UI.REST).StoryData("x"), "", "bad ID")
+	Do $$$AssertEquals(##class(AgenticProd.UI.REST).StoryData(999999999), "", "no such row")
+}
+
+/// No agent run, no trace, downgrade worked out from the reason, review still open.
+Method TestStoryWaitingNoAgent()
+{
+	Do $$$AssertStatusOK(..AddLogRow(-9342, "ESCALATE", "DOWNGRADED:AUTO_FIX", "", "", "downgraded from AUTO_FIX: fix changes PID-7 (agent: date)", .tLogId))
+	Set tStory = ##class(AgenticProd.UI.REST).StoryData(tLogId)
+	Do $$$AssertEquals(tStory.spans.%Size(), 0)
+	Do $$$AssertEquals(tStory.traceId, "")
+	Do $$$AssertEquals(tStory.message, "", "stub header has no body")
+	Do $$$AssertTrue(tStory.steps.%Get(2).text [ "not used", tStory.steps.%Get(2).text)
+	Do $$$AssertEquals(tStory.steps.%Get(3).outcome, "DOWNGRADED:AUTO_FIX")
+	Do $$$AssertTrue(tStory.steps.%Get(3).text [ "did not accept AUTO_FIX: fix changes PID-7.", tStory.steps.%Get(3).text)
+	Do $$$AssertEquals(tStory.steps.%Get(4).status, "waiting")
+	Do $$$AssertTrue(tStory.steps.%Get(1).text [ "no instruction-like text", "no flags")
+}
+
+/// Values masking hides, with their components, are replaced in any text shown.
+Method TestMask()
+{
+	Do ##class(AgenticProd.UI.REST).AddSecret("DOE^JANE^Q", "^~&", .tSecrets)
+	Do ##class(AgenticProd.UI.REST).AddSecret("19800101", "^~&", .tSecrets)
+	Set tText = ##class(AgenticProd.UI.REST).Mask("PID-5 DOE^JANE^Q, born 19800101, DOE again; Q stays", .tSecrets)
+	Do $$$AssertEquals(tText, "PID-5 ***, born ***, *** again; Q stays")
+}
+
 Method TestHttpAccess()
 {
 	Set tUser = ##class(AgenticProd.Setup).#REVIEWUSER, tPass = ##class(AgenticProd.Setup).#REVIEWPASSWORD
@@ -143,6 +216,7 @@ Method TestHttpAccess()
 	Do $$$AssertEquals(..Get("api/decisions?limit=1", tUser, tPass).HttpResponse.StatusCode, 200)
 	Do $$$AssertEquals(..Get("api/evalruns", tUser, tPass).HttpResponse.StatusCode, 200)
 	Do $$$AssertEquals(..Get("api/evalruns/0", tUser, tPass).HttpResponse.StatusCode, 404, "unknown run")
+	Do $$$AssertEquals(..Get("api/decisions/0/story", tUser, tPass).HttpResponse.StatusCode, 404, "unknown decision")
 	Do $$$AssertEquals(..Get("api/nothing", tUser, tPass).HttpResponse.StatusCode, 404, "unknown route")
 	Set tReq = ..Get("dashboard.html", tUser, tPass)
 	Do $$$AssertEquals(tReq.HttpResponse.StatusCode, 200, "page")
@@ -189,13 +263,14 @@ Method Get(pPath As %String, pUser As %String = "", pPass As %String = "") As %N
 }
 
 /// Stub DecisionLog row; an eval row (RUNID) unless pEvalRunId is "".
-Method AddLogRow(pHeader As %Integer, pDecision As %String, pOutcome As %String, pEvalRunId As %String = {..#RUNID}, pJSON As %String = "", pReason As %String = "") As %Status
+Method AddLogRow(pHeader As %Integer, pDecision As %String, pOutcome As %String, pEvalRunId As %String = {..#RUNID}, pJSON As %String = "", pReason As %String = "", Output pId As %String) As %Status
 {
 	Set tRow = ##class(AgenticProd.Data.DecisionLog).%New()
 	Set tRow.HeaderId = pHeader, tRow.Decision = pDecision, tRow.ErrorClass = "OTHER"
 	Set tRow.EvalRunId = pEvalRunId, tRow.CaseId = $SELECT(pEvalRunId '= "": "T", 1: ""), tRow.Outcome = pOutcome, tRow.Confidence = .5
 	Set tRow.DecisionJSON = pJSON, tRow.Reason = pReason
-	Quit tRow.%Save()
+	Set tSC = tRow.%Save(), pId = tRow.%Id()
+	Quit tSC
 }
 
 /// Stub Usage row with no tokens, so TokensUsedToday is unchanged.
@@ -209,9 +284,11 @@ Method AddUsageRow(pHeader As %Integer, pDecision As %String, pModel As %String,
 
 Method OnAfterOneTest() As %Status
 {
-	For tTable = "DecisionLog", "Usage" {
+	For tTable = "DecisionLog", "Usage", "Span" {
 		Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM AgenticProd_Data."_tTable_" WHERE EvalRunId = ? OR HeaderId BETWEEN -9399 AND -9300", ..#RUNID)
 	}
+	// ToolCall has no EvalRunId column
+	Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM AgenticProd_Data.ToolCall WHERE HeaderId BETWEEN -9399 AND -9300")
 	Quit $$$OK
 }
 

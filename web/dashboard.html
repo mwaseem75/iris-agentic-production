@@ -67,6 +67,21 @@ a:hover { text-decoration: underline; }
 .t-info { background: var(--info-bg); color: var(--accent); }
 .err { color: var(--bad); margin: 0 0 12px; }
 .hidden { display: none; }
+.story-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin-bottom: 10px; }
+.story-head h2 { margin: 0; }
+ol.steps { margin: 0 0 16px; padding-left: 22px; }
+ol.steps > li { margin: 0 0 10px; }
+ol.steps .st { font-weight: 600; margin-right: 6px; }
+ol.steps ol { margin: 4px 0 0; padding-left: 20px; color: var(--muted); }
+h3 { font-size: 13px; margin: 0 0 8px; font-weight: 650; color: var(--muted); }
+.wf { display: grid; grid-template-columns: minmax(120px, 34%) 1fr 64px; gap: 3px 10px; align-items: center; font-size: 12px; margin-bottom: 14px; }
+.wf .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wf .track { position: relative; height: 14px; background: var(--bar-bg); border-radius: 3px; }
+.wf .bar { position: absolute; top: 0; bottom: 0; min-width: 2px; background: var(--bar); border-radius: 3px; }
+.wf .bar.err { background: var(--bad); }
+.wf .ms { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+details pre { font: 12px/1.4 ui-monospace, Consolas, monospace; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; overflow-x: auto; margin: 8px 0 0; }
+summary { cursor: pointer; color: var(--accent); }
 @media (max-width: 600px) {
   .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .tile .value { font-size: 20px; }
@@ -89,7 +104,7 @@ a:hover { text-decoration: underline; }
   <div class="tiles" id="tiles"></div>
 
   <section class="panel">
-    <h2>Recent decisions <span class="muted" id="dec-count"></span></h2>
+    <h2>Recent decisions <span class="muted" id="dec-count"></span> <span class="muted">(select a row to see what happened)</span></h2>
     <p class="muted hidden" id="dec-note">No live traffic yet. Tick "Include eval runs" to see eval messages.</p>
     <div class="scroll">
       <table>
@@ -100,6 +115,20 @@ a:hover { text-decoration: underline; }
         <tbody id="decisions"></tbody>
       </table>
     </div>
+  </section>
+
+  <section class="panel hidden" id="story">
+    <div class="story-head">
+      <h2 id="story-title"></h2>
+      <span class="muted" id="story-sub"></span>
+      <span class="spacer"></span>
+      <span id="story-links"></span>
+      <button id="story-close" type="button">Close</button>
+    </div>
+    <ol class="steps" id="story-steps"></ol>
+    <h3>Timeline <span id="story-trace" class="muted"></span></h3>
+    <div class="wf" id="story-spans"></div>
+    <details id="story-msg-box"><summary>Message (patient name, birth date, address and phone masked)</summary><pre id="story-msg"></pre></details>
   </section>
 
   <section class="panel">
@@ -134,6 +163,7 @@ a:hover { text-decoration: underline; }
 "use strict";
 var traceUrl = "";
 var selectedRun = null;
+var selectedDecision = null;
 var includeEval = false;
 try { includeEval = localStorage.getItem("agenticprod.includeEval") === "1"; } catch (e) {}
 
@@ -218,7 +248,11 @@ function renderDecisions(rows) {
   document.getElementById("dec-count").textContent = "(" + (includeEval ? "live and eval" : "live") + ", last " + rows.length + ")";
   document.getElementById("dec-note").classList.toggle("hidden", includeEval || rows.length > 0);
   rows.forEach(function (d) {
-    var tr = el("tr");
+    var tr = el("tr", null, "click" + (d.ID === selectedDecision ? " sel" : ""));
+    tr.tabIndex = 0;
+    tr.dataset.id = d.ID;
+    tr.addEventListener("click", function () { showStory(d.ID); });
+    tr.addEventListener("keydown", function (e) { if (e.key === "Enter") showStory(d.ID); });
     cell(tr, d.CreatedAt);
     cell(tr, d.EvalRunId ? "EV" + d.EvalRunId + "-" + d.CaseId : "hdr " + d.HeaderId);
     cell(tr, d.ErrorClass);
@@ -239,6 +273,7 @@ function renderDecisions(rows) {
       var a = el("a", "Visual Trace");
       a.href = traceUrl + encodeURIComponent(d.SessionId);
       a.target = "_blank"; a.rel = "noopener";
+      a.addEventListener("click", function (e) { e.stopPropagation(); });
       cell(tr, a);
     } else cell(tr, "");
     body.appendChild(tr);
@@ -303,6 +338,85 @@ function showRun(run) {
   }).catch(showError);
 }
 
+// %TimeStamp in UTC, e.g. "2026-10-26 10:00:00.123"
+function utcMs(ts) { return ts ? Date.parse(ts.replace(" ", "T") + "Z") : NaN; }
+
+function showStory(id) {
+  selectedDecision = id;
+  Array.prototype.forEach.call(document.querySelectorAll("#decisions tr"), function (tr) {
+    tr.classList.toggle("sel", tr.dataset.id === String(id));
+  });
+  get("api/decisions/" + id + "/story").then(renderStory).catch(showError);
+}
+
+function renderStory(st) {
+  document.getElementById("story-title").textContent = "What happened: " + (st.case || "header " + st.headerId);
+  document.getElementById("story-sub").textContent = st.createdAt + " UTC, final " + (st.outcome || "—");
+  var links = document.getElementById("story-links");
+  links.replaceChildren();
+  if (st.sessionId && traceUrl) {
+    var a = el("a", "Open in Visual Trace");
+    a.href = traceUrl + encodeURIComponent(st.sessionId);
+    a.target = "_blank"; a.rel = "noopener";
+    links.appendChild(a);
+  }
+  var ol = document.getElementById("story-steps");
+  ol.replaceChildren();
+  st.steps.forEach(function (s) {
+    var li = el("li");
+    li.appendChild(el("span", s.title, "st"));
+    li.appendChild(document.createTextNode(s.text));
+    if (s.status === "waiting") { li.appendChild(document.createTextNode(" ")); li.appendChild(tag("waiting", "warn")); }
+    if (s.tools && s.tools.length) {
+      var sub = el("ol");
+      s.tools.forEach(function (t) {
+        var item = el("li", t.text + (t.recorded ? " (recorded run)" : ""));
+        if (t.status !== "OK") { item.appendChild(document.createTextNode(" ")); item.appendChild(tag(t.status, "bad")); }
+        sub.appendChild(item);
+      });
+      if (s.unauditedToolCalls) sub.appendChild(el("li", s.unauditedToolCalls + " more call(s) by AI Hub itself (load_skill), not audited"));
+      li.appendChild(sub);
+    }
+    ol.appendChild(li);
+  });
+  renderSpans(st);
+  var msg = document.getElementById("story-msg-box");
+  msg.classList.toggle("hidden", !st.message);
+  document.getElementById("story-msg").textContent = st.message || "";
+  var box = document.getElementById("story");
+  box.classList.remove("hidden");
+  box.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+// Waterfall: each bar placed by its start and length within the whole trace
+function renderSpans(st) {
+  var wf = document.getElementById("story-spans");
+  wf.replaceChildren();
+  document.getElementById("story-trace").textContent = st.traceId ? "(trace " + st.traceId + ")" : "";
+  if (!st.spans.length) { wf.appendChild(el("div", "No spans stored for this message.", "muted")); return; }
+  var t0 = Infinity, t1 = -Infinity, depth = {};
+  st.spans.forEach(function (s) {
+    t0 = Math.min(t0, utcMs(s.StartTs));
+    t1 = Math.max(t1, utcMs(s.EndTs));
+  });
+  var total = Math.max(1, t1 - t0);
+  st.spans.forEach(function (s) {
+    depth[s.SpanId] = s.ParentSpanId && depth[s.ParentSpanId] !== undefined ? depth[s.ParentSpanId] + 1 : 0;
+    var nm = el("div", s.Name, "nm");
+    nm.style.paddingLeft = (depth[s.SpanId] * 12) + "px";
+    nm.title = s.Name + "\n" + JSON.stringify(s.Attributes, null, 1);
+    var track = el("div", null, "track");
+    var bar = el("div", null, "bar" + (s.Status === "Error" ? " err" : ""));
+    bar.style.left = ((utcMs(s.StartTs) - t0) / total * 100).toFixed(2) + "%";
+    bar.style.width = (Math.max(0, utcMs(s.EndTs) - utcMs(s.StartTs)) / total * 100).toFixed(2) + "%";
+    bar.title = nm.title;
+    track.appendChild(bar);
+    wf.appendChild(nm);
+    wf.appendChild(track);
+    wf.appendChild(el("div", s.DurationMs == null ? "" : num(s.DurationMs) + " ms", "ms"));
+  });
+}
+
 function showError(e) {
   var p = document.getElementById("error");
   p.textContent = "Could not load data: " + e.message;
@@ -324,6 +438,11 @@ function load() {
 }
 
 document.getElementById("refresh").addEventListener("click", load);
+document.getElementById("story-close").addEventListener("click", function () {
+  selectedDecision = null;
+  document.getElementById("story").classList.add("hidden");
+  Array.prototype.forEach.call(document.querySelectorAll("#decisions tr.sel"), function (tr) { tr.classList.remove("sel"); });
+});
 var evalBox = document.getElementById("incl-eval");
 evalBox.checked = includeEval;
 evalBox.addEventListener("change", function () {

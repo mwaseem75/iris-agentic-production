@@ -1,5 +1,5 @@
 /// Telemetry.Trace with capture on: span names, parent links and attributes for one failed message,
-/// recorded in-process instead of exported. Needs libirisotel (in the build 154 image). No LLM.
+/// recorded in-process, and the same spans stored in Data.Span. Nothing is exported. No LLM.
 Class AgenticProd.Test.Telemetry.TraceTest Extends %UnitTest.TestCase
 {
 
@@ -15,6 +15,7 @@ Method OnAfterOneTest() As %Status
 	Do ##class(AgenticProd.Telemetry.Trace).Capture(0)
 	Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM AgenticProd_Data.Usage WHERE HeaderId = ?", ..#HEADER)
 	Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM AgenticProd_Data.ToolCall WHERE HeaderId = ?", ..#HEADER)
+	Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM AgenticProd_Data.Span WHERE HeaderId = ? OR Name %STARTSWITH 'test-span'", ..#HEADER)
 	Quit $$$OK
 }
 
@@ -92,6 +93,53 @@ Method TestTriageTraceTree()
 	Set tJSON = tSpans.%ToJSON()
 	Do $$$AssertNotTrue(tJSON [ ..#MARKER, "no message or decision text in any attribute")
 	Do $$$AssertNotTrue(tJSON [ "PATIENT", "no flag text in any attribute")
+	Do $$$AssertTrue(tRequest.TraceParent ? 1"00-"32AN1"-"16AN1"-00", "not exported: flags 00")
+
+	// Every span is also in Data.Span, keyed to the message and its eval run (EV1-05)
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT Name, TraceId, SpanId, ParentSpanId, HeaderId, ControlId, EvalRunId, DurationMs, Status, Attributes, Exported FROM AgenticProd_Data.Span WHERE TraceId = ?", tRootSpan."trace_id")
+	Set tStored = 0
+	While tRS.%Next() {
+		Set tStored = tStored + 1, tRow(tRS.Name) = $LISTBUILD(tRS.SpanId, tRS.ParentSpanId, tRS.Status, tRS.DurationMs)
+		Do $$$AssertEquals(tRS.HeaderId, ..#HEADER, "header on "_tRS.Name)
+		Do $$$AssertEquals(tRS.ControlId, "EV1-05", "control ID on "_tRS.Name)
+		Do $$$AssertEquals(tRS.EvalRunId, 1, "eval run on "_tRS.Name)
+		Do $$$AssertEquals(tRS.Exported, 0)
+		Do $$$AssertTrue(tRS.DurationMs >= 0, "duration on "_tRS.Name)
+		Do $$$AssertNotTrue(tRS.Attributes [ ..#MARKER, "no message text stored")
+	}
+	Do $$$AssertEquals(tStored, 7, "7 spans stored")
+	Quit:'$DATA(tRow("agent run"))
+	Do $$$AssertEquals($LISTGET(tRow("agent run"), 1), tAgentSpan."span_id")
+	Do $$$AssertEquals($LISTGET(tRow("agent run"), 2), tRootSpan."span_id")
+	Do $$$AssertEquals($LISTGET(tRow("execute_tool apply_fix"), 3), "Error")
+	Do $$$AssertTrue($LISTGET(tRow("agent run"), 4) >= 2900, "agent run about 3 s: "_$LISTGET(tRow("agent run"), 4))
+}
+
+/// A span ended in another job (workflow review) takes the header from spans already stored.
+Method TestKeysFromStoredTrace()
+{
+	Set tRoot = ##class(AgenticProd.Telemetry.Trace).TriageRoot(..Request())
+	Do ##class(AgenticProd.Telemetry.Trace).End(tRoot)
+	Set tParent = ##class(AgenticProd.Telemetry.Trace).Context(tRoot)
+	Kill ^||AgenticProd.SpanKeys
+	Do ##class(AgenticProd.Telemetry.Trace).ReviewSpan(tParent, "", "Approve", "APPROVED", "MAP_CODE")
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT HeaderId, ControlId, ParentSpanId FROM AgenticProd_Data.Span WHERE TraceId = ? AND Name = 'workflow review'", tRoot.TraceId)
+	Do $$$AssertTrue(tRS.%Next(), "review span stored")
+	Do $$$AssertEquals(tRS.HeaderId, ..#HEADER)
+	Do $$$AssertEquals(tRS.ControlId, "EV1-05")
+	Do $$$AssertEquals(tRS.ParentSpanId, tRoot.SpanId)
+}
+
+/// Storing must never fail the message: a span the table refuses is logged, not thrown.
+Method TestStoreErrorNotThrown()
+{
+	Set tSpan = ##class(AgenticProd.Telemetry.Trace).Start("test-span refused")
+	Set tSpan.TraceId = ""
+	Do ##class(AgenticProd.Telemetry.Trace).End(tSpan)
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT COUNT(*) AS N FROM AgenticProd_Data.Span WHERE Name = 'test-span refused'")
+	Do tRS.%Next()
+	Do $$$AssertEquals(tRS.N, 0, "nothing stored, no error raised")
+	Do $$$AssertEquals(##class(AgenticProd.Telemetry.Trace).Start("test-span", "not-a-traceparent"), "", "bad parent: no span")
 }
 
 /// A missing span or parent is a no-op, so components need no tracing checks of their own.

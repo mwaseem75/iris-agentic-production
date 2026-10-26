@@ -30,11 +30,10 @@ Property ErrorClass As AgenticProd.Msg.ErrorClass(%JSONFIELDNAME = "error_class"
 Property Flags As list Of %String(%JSONFIELDNAME = "flags", MAXLEN = 500);
 
 /// W3C traceparent of Triage's root span, so the workflow review span joins the same trace.
-/// Set by Triage only when its TracingEnabled is on.
+/// Flags 01 when Triage's TracingEnabled exports the trace, 00 when it is only stored.
 Property TraceParent As %String(%JSONINCLUDE = "none", MAXLEN = 60);
 
 /// $ZTS when LabRouter started and finished its checks, for the "router check" span.
-/// Set only when LabRouter's TracingEnabled is on.
 Property RouterStart As %String(%JSONINCLUDE = "none", MAXLEN = 30);
 
 Property RouterEnd As %String(%JSONINCLUDE = "none", MAXLEN = 30);
