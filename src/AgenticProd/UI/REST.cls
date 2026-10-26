@@ -19,6 +19,9 @@ Parameter DEFAULTLIMIT = 50;
 
 Parameter MAXLIMIT = 200;
 
+/// Seconds without a new EvalResult after which a RUNNING eval run is shown as STOPPED.
+Parameter STALESECONDS = 600;
+
 XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
 {
 <Routes>
@@ -171,6 +174,7 @@ ClassMethod DecisionsData(pLimit As %Integer = {..#DEFAULTLIMIT}, pIncludeEval A
 	Set:pLimit<1 pLimit = ..#DEFAULTLIMIT
 	Set:pLimit>..#MAXLIMIT pLimit = ..#MAXLIMIT
 	Set tRows = ..Rows("SELECT TOP ? d.ID, d.CreatedAt, d.EvalRunId, d.CaseId, d.HeaderId, d.SessionId, d.Source, d.ErrorClass, d.Decision, d.Outcome, d.Confidence, d.CostUsd, d.Model, d.Reason, d.DecisionJSON,"
+		_" (SELECT MAX(t.ControlId) FROM AgenticProd_Msg.TriageRequest t WHERE t.HeaderId = d.HeaderId) AS ControlId,"
 		_" (SELECT MAX(u.Decision) FROM AgenticProd_Data.Usage u WHERE u.HeaderId = d.HeaderId) AS AgentDecision,"
 		_" (SELECT COUNT(*) FROM AgenticProd_Data.Usage u WHERE u.HeaderId = d.HeaderId AND (u.Replay = 0 OR u.Replay IS NULL)) AS AgentCalls,"
 		_" (SELECT COUNT(*) FROM AgenticProd_Data.Usage u WHERE u.HeaderId = d.HeaderId AND u.Replay = 1) AS Replays"
@@ -478,6 +482,25 @@ ClassMethod MetricsData(pIncludeEval As %Boolean = 0) As %DynamicObject
 		_" WHERE Tool = 'validate_fix' AND Status = 'OK'"_tToolWhere_" GROUP BY ISNULL(Verdict, 'NOT_RECORDED') ORDER BY Calls DESC")
 
 	Set tOut.decisionMix = ..DecisionMix(pIncludeEval)
+	Set tOut.outcomes = {"applied":0, "approval":0, "rejected":0, "resent":0, "other":0}
+	Set tOut.agentVsFinal = []
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT d.Outcome, (SELECT MAX(u.Decision) FROM AgenticProd_Data.Usage u WHERE u.HeaderId = d.HeaderId) AS AgentDecision"
+		_" FROM AgenticProd_Data.DecisionLog d"_$SELECT(pIncludeEval: "", 1: " WHERE d.EvalRunId IS NULL"))
+	While tRS.%Next() {
+		Set tGroup = ..OutcomeGroup(tRS.Outcome)
+		Do tOut.outcomes.%Set(tGroup, tOut.outcomes.%Get(tGroup) + 1)
+		// No Usage row: the logged ESCALATE was Triage's own (loop guard, budget, no checker)
+		Set tAgent = $SELECT(tRS.AgentDecision '= "": tRS.AgentDecision, 1: "no agent run")
+		Set tPair(tAgent, tGroup) = $GET(tPair(tAgent, tGroup)) + 1
+	}
+	Set tAgent = ""
+	For {
+		Set tAgent = $ORDER(tPair(tAgent))
+		Quit:tAgent=""
+		Set tRow = {"agent":(tAgent)}
+		For tGroup = "applied", "approval", "rejected", "resent", "other" Do tRow.%Set(tGroup, +$GET(tPair(tAgent, tGroup)))
+		Do tOut.agentVsFinal.%Push(tRow)
+	}
 
 	Set tLogWhere = $SELECT(pIncludeEval: "", 1: " AND d.EvalRunId IS NULL")
 	// Eval tasks are closed by Eval.Runner, not answered: their wait time is not a person's
@@ -571,10 +594,23 @@ ClassMethod AgentSetting(pItem As %String, pName As %String) As %String [ Intern
 	Quit $SELECT($IsObject(tProp): $ZSTRIP(tProp.InitialExpression, "<>", """"), 1: "")
 }
 
+/// Eval runs, newest first. A RUNNING run with no result for STALESECONDS shows as STOPPED: a run
+/// whose job died (container restart, terminal closed) never gets to set DONE or ERROR itself.
 ClassMethod EvalRunsData() As %DynamicArray
 {
-	Quit ..Rows("SELECT ID, Label, Model, Mode, Status, StartedAt, CaseCount, Accuracy, ExactAccuracy, MappingAccuracy,"
-		_" UnsafeAgent, UnsafeFinal, TimedOut, CostPerMessageUsd, P95Seconds FROM AgenticProd_Data.EvalRun ORDER BY ID DESC")
+	Set tRows = ..Rows("SELECT r.ID, r.Label, r.Model, r.Mode, r.Status, r.StartedAt, r.CaseCount, r.Accuracy, r.ExactAccuracy, r.MappingAccuracy,"
+		_" r.UnsafeAgent, r.UnsafeFinal, r.TimedOut, r.CostPerMessageUsd, r.P95Seconds,"
+		_" (SELECT MAX(e.CreatedAt) FROM AgenticProd_Data.EvalResult e WHERE e.RunId = r.ID) AS LastResultAt"
+		_" FROM AgenticProd_Data.EvalRun r ORDER BY r.ID DESC")
+	Set tIter = tRows.%GetIterator()
+	While tIter.%GetNext(, .tRow) {
+		If tRow.Status = "RUNNING" {
+			Set tLast = $SELECT(tRow.LastResultAt '= "": tRow.LastResultAt, 1: tRow.StartedAt)
+			Set:(##class(AgenticProd.Telemetry.Trace).ZtsDiff($ZTIMESTAMP, $ZDATETIMEH(tLast, 3)) > ..#STALESECONDS) tRow.Status = "STOPPED"
+		}
+		Do tRow.%Remove("LastResultAt")
+	}
+	Quit tRows
 }
 
 /// Per-case rows of run pRunId, or "" when there is no such run.

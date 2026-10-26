@@ -33,7 +33,17 @@ button {
 }
 button:hover { border-color: var(--accent); }
 .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 22px; }
-.tile.wide { grid-column: 1 / -1; }
+.tiles.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.row-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin: 0 0 6px; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin: 0 0 18px; }
+.tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 8px 14px; color: var(--muted); }
+.tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+.tabs button:hover { color: var(--text); }
+td.wrap-cell { white-space: normal; }
+.arrow { color: var(--muted); margin: 0 4px; }
+.more-row { margin-top: 10px; display: flex; gap: 12px; align-items: baseline; }
+details.more { margin-top: 16px; }
+details.more > summary { font-weight: 600; margin-bottom: 12px; }
 .tile.over .sub { color: var(--bad); }
 .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
 .tile .label { color: var(--muted); font-size: 12px; }
@@ -79,7 +89,8 @@ h3 { font-size: 13px; margin: 0 0 8px; font-weight: 650; color: var(--muted); }
 details pre { font: 12px/1.4 ui-monospace, Consolas, monospace; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; overflow-x: auto; margin: 8px 0 0; }
 summary { cursor: pointer; color: var(--accent); }
 @media (max-width: 600px) {
-  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .tiles, .tiles.three { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .tabs button { padding: 8px 10px; }
   .tile .value { font-size: 20px; }
   .opt { display: none; }
   .charts { grid-template-columns: minmax(0, 1fr); }
@@ -98,77 +109,101 @@ summary { cursor: pointer; color: var(--accent); }
     <button id="refresh" type="button">Refresh</button>
   </header>
   <p class="lede">An AI agent triages failed HL7 messages. A deterministic Triage step decides what is applied; a person approves the rest.</p>
+  <nav class="tabs" role="tablist">
+    <button type="button" role="tab" data-tab="overview" aria-selected="true">Overview</button>
+    <button type="button" role="tab" data-tab="messages" aria-selected="false">Messages</button>
+    <button type="button" role="tab" data-tab="evaluation" aria-selected="false">Evaluation</button>
+  </nav>
   <p class="err hidden" id="error"></p>
 
-  <div class="tiles" id="tiles"></div>
+  <div class="tabpanel" id="tab-overview" role="tabpanel">
+    <h2 class="row-label">What happened</h2>
+    <div class="tiles" id="tiles-what"></div>
+    <h2 class="row-label">Trust and learning</h2>
+    <div class="tiles" id="tiles-trust"></div>
+    <h2 class="row-label">Cost</h2>
+    <div class="tiles three" id="tiles-cost"></div>
 
-  <section class="panel">
-    <h2>Recent decisions <span class="muted" id="dec-count"></span> <span class="muted">(select a row to see what happened)</span></h2>
-    <p class="muted hidden" id="dec-note">No live traffic yet. Tick "Include eval runs" to see eval messages.</p>
-    <div class="scroll">
-      <table>
-        <thead><tr>
-          <th>Time (UTC)</th><th>Case / header</th><th>Error class</th><th>Agent decision</th>
-          <th>Final outcome</th><th class="num">Confidence</th><th class="num">Cost</th><th class="opt">Model</th><th>Trace</th>
-        </tr></thead>
-        <tbody id="decisions"></tbody>
-      </table>
-    </div>
-  </section>
+    <section class="panel">
+      <h2>Agent metrics <span class="muted" id="met-scope"></span></h2>
+      <div class="charts">
+        <div class="chart-card"><h3>Final outcomes</h3><div class="chart" id="ch-outcomes"></div></div>
+        <div class="chart-card"><h3>Agent proposed vs Triage did</h3><p class="note">Bar: the agent's decision. Colour: what finally happened.</p><div class="chart" id="ch-agentfinal"></div></div>
+        <div class="chart-card"><h3>Tokens by type per model</h3><p class="note">Live runs, replays left out. Parts add up to the total.</p><div class="chart" id="ch-tokens"></div></div>
+        <div class="chart-card"><h3>Agent latency per model (s)</h3><div class="chart" id="ch-latency"></div></div>
+      </div>
+      <details class="more" id="more">
+        <summary>More metrics</summary>
+        <div class="mini" id="met-tiles"></div>
+        <div class="charts">
+          <div class="chart-card"><h3>Decision mix per hour (last 24 h, UTC)</h3><div class="chart" id="ch-mix"></div></div>
+          <div class="chart-card"><h3>Tool calls per tool</h3><p class="note">Label: average ms per call.</p><div class="chart" id="ch-tools"></div></div>
+          <div class="chart-card"><h3>validate_fix results</h3><div class="chart" id="ch-validate"></div></div>
+          <div class="chart-card"><h3>Step durations from spans (ms)</h3><div class="chart" id="ch-steps"></div></div>
+        </div>
+      </details>
+    </section>
+  </div>
 
-  <section class="panel hidden" id="story">
-    <div class="story-head">
-      <h2 id="story-title"></h2>
-      <span class="muted" id="story-sub"></span>
-      <span class="spacer"></span>
-      <span id="story-links"></span>
-      <button id="story-close" type="button">Close</button>
-    </div>
-    <ol class="steps" id="story-steps"></ol>
-    <h3>Timeline <span id="story-trace" class="muted"></span></h3>
-    <div class="wf" id="story-spans"></div>
-    <details id="story-msg-box"><summary>Message (patient name, birth date, address and phone masked)</summary><pre id="story-msg"></pre></details>
-  </section>
+  <div class="tabpanel hidden" id="tab-messages" role="tabpanel">
+    <section class="panel">
+      <h2>Recent decisions <span class="muted" id="dec-count"></span> <span class="muted">(select a row to see what happened)</span></h2>
+      <p class="muted hidden" id="dec-note">No live traffic yet. Tick "Include eval runs" to see eval messages.</p>
+      <div class="scroll">
+        <table>
+          <thead><tr>
+            <th>Time (UTC)</th><th>Control id</th><th>Error class</th><th>Agent &rarr; Final</th>
+            <th class="num">Confidence</th><th class="num opt">Cost</th><th class="opt">Model</th>
+          </tr></thead>
+          <tbody id="decisions"></tbody>
+        </table>
+      </div>
+      <div class="more-row"><button id="dec-more" type="button" class="hidden">Show more</button></div>
+    </section>
 
-  <section class="panel">
-    <h2>Agent metrics <span class="muted" id="met-scope"></span></h2>
-    <div class="mini" id="met-tiles"></div>
-    <div class="charts">
-      <div class="chart-card"><h3>Decision mix per hour (last 24 h, UTC)</h3><div class="chart" id="ch-mix"></div></div>
-      <div class="chart-card"><h3>Tokens by type per model</h3><p class="note">Live runs, replays left out. Parts add up to the total.</p><div class="chart" id="ch-tokens"></div></div>
-      <div class="chart-card"><h3>Agent latency per model (s)</h3><div class="chart" id="ch-latency"></div></div>
-      <div class="chart-card"><h3>Step durations from spans (ms)</h3><div class="chart" id="ch-steps"></div></div>
-      <div class="chart-card"><h3>Tool calls per tool</h3><p class="note">Label: average ms per call.</p><div class="chart" id="ch-tools"></div></div>
-      <div class="chart-card"><h3>validate_fix results</h3><div class="chart" id="ch-validate"></div></div>
-    </div>
-  </section>
+    <section class="panel hidden" id="story">
+      <div class="story-head">
+        <h2 id="story-title"></h2>
+        <span class="muted" id="story-sub"></span>
+        <span class="spacer"></span>
+        <span id="story-links"></span>
+        <button id="story-close" type="button">Close</button>
+      </div>
+      <ol class="steps" id="story-steps"></ol>
+      <h3>Timeline <span id="story-trace" class="muted"></span></h3>
+      <div class="wf" id="story-spans"></div>
+      <details id="story-msg-box"><summary>Message (patient name, birth date, address and phone masked)</summary><pre id="story-msg"></pre></details>
+    </section>
+  </div>
 
-  <section class="panel">
-    <h2>Eval runs <span class="muted">(select a run to see each case)</span></h2>
-    <div class="scroll">
-      <table>
-        <thead><tr>
-          <th>Run</th><th>Label</th><th>Model</th><th class="num">Cases</th><th class="num">Accuracy</th>
-          <th class="num">Mapping acc.</th><th class="num">unsafe_agent</th><th class="num">unsafe_final</th>
-          <th class="num">Cost / msg</th><th class="num">p95 s</th><th class="opt">Status</th>
-        </tr></thead>
-        <tbody id="runs"></tbody>
-      </table>
-    </div>
-  </section>
+  <div class="tabpanel hidden" id="tab-evaluation" role="tabpanel">
+    <section class="panel">
+      <h2>Eval runs <span class="muted">(select a run to see each case)</span></h2>
+      <div class="scroll">
+        <table>
+          <thead><tr>
+            <th>Run</th><th>Label</th><th>Model</th><th class="num">Cases</th><th class="num">Accuracy</th>
+            <th class="num opt">Mapping acc.</th><th class="num">unsafe_agent</th><th class="num">unsafe_final</th>
+            <th class="num opt">Cost / msg</th><th class="num opt">p95 s</th><th>Status</th>
+          </tr></thead>
+          <tbody id="runs"></tbody>
+        </table>
+      </div>
+    </section>
 
-  <section class="panel hidden" id="detail">
-    <h2 id="detail-title"></h2>
-    <div class="scroll">
-      <table>
-        <thead><tr>
-          <th>Case</th><th>Slug</th><th>Expected</th><th>Agent</th><th>Agent LOINC</th>
-          <th>Final outcome</th><th>Result</th><th class="num">Seconds</th><th class="num">Cost</th>
-        </tr></thead>
-        <tbody id="results"></tbody>
-      </table>
-    </div>
-  </section>
+    <section class="panel hidden" id="detail">
+      <h2 id="detail-title"></h2>
+      <div class="scroll">
+        <table>
+          <thead><tr>
+            <th>Case</th><th class="opt">Slug</th><th>Expected</th><th>Agent</th><th class="opt">Agent LOINC</th>
+            <th>Final outcome</th><th>Result</th><th class="num opt">Seconds</th><th class="num opt">Cost</th>
+          </tr></thead>
+          <tbody id="results"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
 </div>
 
 <script src="vendor/echarts/echarts.min.js"></script>
@@ -180,6 +215,10 @@ var charts = {};
 var traceUrl = "";
 var selectedRun = null;
 var selectedDecision = null;
+var DEC_PAGE = 15;
+var decLimit = DEC_PAGE;
+// Options for charts whose box was hidden (other tab, closed details): drawn once it is shown
+var pending = {};
 var includeEval = false;
 try { includeEval = localStorage.getItem("agenticprod.includeEval") === "1"; } catch (e) {}
 
@@ -237,26 +276,30 @@ function tile(label, value, sub, meter, cls) {
   return t;
 }
 
-function renderSummary(s) {
+function renderSummary(s, m) {
   traceUrl = s.traceUrl || "";
-  var box = document.getElementById("tiles");
+  var sv = m.saved;
   var budgetSub = !s.dailyTokenBudget ? "no daily budget"
     : s.tokensPercent + "% of " + num(s.dailyTokenBudget) + " daily budget"
       + (s.overBudget ? " — over budget: new messages go to a person" : "");
-  box.replaceChildren(
+  document.getElementById("tiles-what").replaceChildren(
     tile("Messages triaged", num(s.triaged)),
     tile("Auto-fixed", num(s.autoFixed), "whitelisted fixes applied"),
     tile("Sent for approval", num(s.sentForApproval), num(s.waiting) + " waiting"),
-    tile("Rejected", num(s.rejected), "returned to sender"),
-    tile("Mappings learned", num(s.mappingsLearned), "approved by a reviewer"),
+    tile("Rejected", num(s.rejected), "returned to sender")
+  );
+  document.getElementById("tiles-trust").replaceChildren(
     tile("Changed by Triage", num(s.changedByTriage), "agent proposal not applied as sent"),
-    tile("FHIR out", num(s.fhirValid) + " / " + num(s.fhirInvalid), "valid / invalid R4 bundles"),
+    tile("Mappings learned", num(s.mappingsLearned), "approved by a reviewer"),
+    tile("LLM calls saved", num(sv.calls), sv.costUsd == null ? "by learned mappings" : "~" + num(sv.tokens) + " tokens, " + money(sv.costUsd)),
+    tile("FHIR out", num(s.fhirValid) + " / " + num(s.fhirInvalid), "valid / invalid R4 bundles")
+  );
+  document.getElementById("tiles-cost").replaceChildren(
     tile("LLM cost today", money(s.costToday), num(s.agentRunsToday) + " agent runs"),
     tile("Cost per message", money(s.costPerMessage), (s.model || "no model") + ", " + num(s.agentRunsModel) + " runs"),
     // Bar width is capped at 100% in tile(); the text carries the real figure
     tile("Tokens today", num(s.tokensToday), budgetSub,
-      s.dailyTokenBudget ? s.tokensToday / s.dailyTokenBudget : undefined,
-      "wide" + (s.overBudget ? " over" : ""))
+      s.dailyTokenBudget ? s.tokensToday / s.dailyTokenBudget : undefined, s.overBudget ? "over" : "")
   );
 }
 
@@ -268,6 +311,10 @@ function noAgentText(why) {
 function renderDecisions(rows) {
   var body = document.getElementById("decisions");
   body.replaceChildren();
+  // One extra row is fetched only to know whether "Show more" has anything to show
+  var more = rows.length > decLimit;
+  rows = rows.slice(0, decLimit);
+  document.getElementById("dec-more").classList.toggle("hidden", !more);
   document.getElementById("dec-count").textContent = "(" + (includeEval ? "live and eval" : "live") + ", last " + rows.length + ")";
   document.getElementById("dec-note").classList.toggle("hidden", includeEval || rows.length > 0);
   rows.forEach(function (d) {
@@ -276,33 +323,26 @@ function renderDecisions(rows) {
     tr.dataset.id = d.ID;
     tr.addEventListener("click", function () { showStory(d.ID); });
     tr.addEventListener("keydown", function (e) { if (e.key === "Enter") showStory(d.ID); });
-    cell(tr, d.CreatedAt);
-    cell(tr, d.EvalRunId ? "EV" + d.EvalRunId + "-" + d.CaseId : "hdr " + d.HeaderId);
+    cell(tr, d.CreatedAt ? d.CreatedAt.substring(5, 16) : "");
+    cell(tr, d.ControlId || (d.EvalRunId ? "EV" + d.EvalRunId + "-" + d.CaseId : "hdr " + d.HeaderId));
     cell(tr, d.ErrorClass);
     // No agent run: the logged ESCALATE is Triage's, not the agent's
-    cell(tr, d.AgentDecision || (d.agentCalled ? d.Decision : "—"));
-    var out = cell(tr, tag(d.Outcome || "—", outcomeKind(d.Outcome)));
-    if (d.triageChanged) out.appendChild(tag("Triage changed", "info"));
-    if (d.fhirOut) out.appendChild(tag("FHIR " + d.fhirOut, d.fhirOut === "valid" ? "good" : "bad"));
-    if (d.flagged && d.flagged.length) {
-      var f = tag("flagged", "bad");
-      f.title = "InjectionGuard flagged " + d.flagged.join(", ");
-      out.appendChild(f);
-    }
+    var agent = d.AgentDecision || (d.agentCalled ? d.Decision : "");
+    var td = cell(tr, tag(agent || noAgentText(d.noAgentReason), "other"), "wrap-cell");
+    td.appendChild(el("span", "→", "arrow"));
+    td.appendChild(tag(d.Outcome || "—", outcomeKind(d.Outcome)));
+    if (d.flagged && d.flagged.length) td.appendChild(tag("flagged", "bad"));
+    if (d.fhirOut && d.fhirOut !== "valid") td.appendChild(tag("FHIR " + d.fhirOut, "bad"));
+    td.title = [d.triageChanged ? "Triage changed the agent's proposal" : "",
+      d.flagged && d.flagged.length ? "InjectionGuard flagged " + d.flagged.join(", ") : "",
+      d.fhirOut ? "FHIR out: " + d.fhirOut : ""].filter(Boolean).join("; ");
     // Without an agent run the logged confidence and cost are placeholders, not measurements
     cell(tr, !d.agentCalled || d.Confidence == null ? "" : Number(d.Confidence).toFixed(2), "num");
-    cell(tr, d.agentCalled ? money(d.CostUsd) : "", "num");
-    cell(tr, d.agentCalled ? d.Model : noAgentText(d.noAgentReason), "opt" + (d.agentCalled ? "" : " muted"));
-    if (d.SessionId && traceUrl) {
-      var a = el("a", "Visual Trace");
-      a.href = traceUrl + encodeURIComponent(d.SessionId);
-      a.target = "_blank"; a.rel = "noopener";
-      a.addEventListener("click", function (e) { e.stopPropagation(); });
-      cell(tr, a);
-    } else cell(tr, "");
+    cell(tr, d.agentCalled ? money(d.CostUsd) : "", "num opt");
+    cell(tr, d.agentCalled ? d.Model : "", "opt");
     body.appendChild(tr);
   });
-  if (!rows.length) { var tr = el("tr"); var td = cell(tr, "No decisions yet.", "muted"); td.colSpan = 9; body.appendChild(tr); }
+  if (!rows.length) { var tr = el("tr"); var td2 = cell(tr, "No decisions yet.", "muted"); td2.colSpan = 7; body.appendChild(tr); }
 }
 
 function renderRuns(rows) {
@@ -316,12 +356,12 @@ function renderRuns(rows) {
     cell(tr, r.Model + (r.Mode === "replay" ? " (replay)" : ""));
     cell(tr, num(r.CaseCount), "num");
     cell(tr, pct(r.Accuracy), "num");
-    cell(tr, pct(r.MappingAccuracy), "num");
+    cell(tr, pct(r.MappingAccuracy), "num opt");
     cell(tr, tag(num(r.UnsafeAgent), r.UnsafeAgent ? "warn" : "good"), "num");
     cell(tr, tag(num(r.UnsafeFinal), r.UnsafeFinal ? "bad" : "good"), "num");
-    cell(tr, money(r.CostPerMessageUsd), "num");
-    cell(tr, r.P95Seconds == null ? "—" : r.P95Seconds, "num");
-    cell(tr, r.Status, "opt");
+    cell(tr, money(r.CostPerMessageUsd), "num opt");
+    cell(tr, r.P95Seconds == null ? "—" : r.P95Seconds, "num opt");
+    cell(tr, tag(r.Status || "—", { DONE: "good", RUNNING: "info", STOPPED: "warn", ERROR: "bad" }[r.Status] || "other"));
     tr.addEventListener("click", function () { showRun(r); });
     tr.addEventListener("keydown", function (e) { if (e.key === "Enter") showRun(r); });
     body.appendChild(tr);
@@ -341,10 +381,10 @@ function showRun(run) {
     rows.forEach(function (c) {
       var tr = el("tr");
       cell(tr, c.CaseId);
-      cell(tr, c.Slug);
+      cell(tr, c.Slug, "opt");
       cell(tr, c.ExpectedDecision + (c.ExpectedLoinc ? " " + c.ExpectedLoinc : ""));
       cell(tr, c.AgentDecision || "—");
-      cell(tr, c.AgentLoinc || "");
+      cell(tr, c.AgentLoinc || "", "opt");
       cell(tr, tag(c.FinalOutcome || "—", outcomeKind(c.FinalOutcome)));
       var res = c.UnsafeFinal ? tag("unsafe final", "bad")
         : c.UnsafeAgent ? tag("unsafe proposal", "warn")
@@ -352,8 +392,8 @@ function showRun(run) {
         : tag("miss", "bad");
       var td = cell(tr, res);
       if (c.Injection) td.appendChild(document.createTextNode(c.InjectionFlagged ? " injection flagged" : " injection"));
-      cell(tr, c.Seconds == null ? "—" : c.Seconds, "num");
-      cell(tr, money(c.CostUsd), "num");
+      cell(tr, c.Seconds == null ? "—" : c.Seconds, "num opt");
+      cell(tr, money(c.CostUsd), "num opt");
       body.appendChild(tr);
     });
     var d = document.getElementById("detail");
@@ -463,11 +503,19 @@ function esc(t) { return String(t).replace(/[&<>"]/g, function (c) { return { "&
 // One ECharts instance per box, reused across refreshes
 function chart(key, box, option) {
   if (typeof echarts === "undefined") return;
+  // ECharts sizes from the box; a hidden box is 0 wide and would give an empty canvas
+  if (!box.offsetWidth) { pending[key] = [box, option]; return; }
+  delete pending[key];
   if (!charts[key] || charts[key].getDom() !== box) {
     if (charts[key]) charts[key].dispose();
     charts[key] = echarts.init(box, null, { renderer: "canvas" });
   } else charts[key].resize();
   charts[key].setOption(Object.assign({ animation: false, textStyle: { fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif" } }, option), true);
+}
+
+function drawPending() {
+  Object.keys(pending).forEach(function (k) { chart(k, pending[k][0], pending[k][1]); });
+  Object.keys(charts).forEach(function (k) { if (charts[k].getDom().offsetWidth) charts[k].resize(); });
 }
 
 function empty(key, text) {
@@ -484,14 +532,36 @@ function renderMetrics(m) {
   // A legend wraps to two rows at phone width
   GRID.top = window.innerWidth < 600 ? 54 : 34;
   document.getElementById("met-scope").textContent = "(" + (m.includeEval ? "live and eval" : "live") + ")";
-  var ap = m.approval, sv = m.saved;
+  var ap = m.approval;
   document.getElementById("met-tiles").replaceChildren(
     tile("Approval wait", ap.answered ? secs(ap.p50Seconds) + " p50" : "—", ap.answered ? secs(ap.p95Seconds) + " p95, " + num(ap.answered) + " answered" : "no answered tasks"),
     tile("Waiting for a reviewer", num(ap.waiting), ap.oldestWaitingSeconds == null ? "none open" : "oldest " + secs(ap.oldestWaitingSeconds)),
-    tile("LLM calls saved", num(sv.calls), sv.costUsd == null ? num(m.learnedMappings) + " learned mappings"
-      : "~" + num(sv.tokens) + " tokens, " + money(sv.costUsd) + "; " + num(m.learnedMappings) + " learned mappings"),
+    tile("Learned mappings", num(m.learnedMappings), "distinct local codes"),
     tile("Unsafe proposals blocked", num(m.unsafeBlocked), "changed by Triage, sent to a person")
   );
+
+  var groups = ["applied", "approval", "rejected", "resent", "other"];
+  var outData = groups.filter(function (g) { return m.outcomes[g]; }).map(function (g) {
+    return { name: GROUP_LABEL[g], value: m.outcomes[g], itemStyle: { color: COLORS[g] } };
+  });
+  if (!outData.length) empty("outcomes", "No decisions yet");
+  else chart("outcomes", document.getElementById("ch-outcomes"), {
+    tooltip: { trigger: "item", confine: true, formatter: "{b}: {c} ({d}%)" },
+    legend: Object.assign({}, LEGEND, { top: "auto", bottom: 0 }),
+    series: [{ type: "pie", radius: ["45%", "70%"], center: ["50%", "45%"], data: outData,
+      label: { formatter: "{c}", fontSize: 12 }, labelLine: { length: 6, length2: 6 } }]
+  });
+
+  if (!m.agentVsFinal.length) empty("agentfinal", "No decisions yet");
+  else chart("agentfinal", document.getElementById("ch-agentfinal"), {
+    grid: GRID, legend: LEGEND, tooltip: { trigger: "axis", axisPointer: { type: "shadow" }, confine: true },
+    xAxis: { type: "value", minInterval: 1, axisLabel: { fontSize: 11 } },
+    yAxis: { type: "category", inverse: true, data: m.agentVsFinal.map(function (r) { return r.agent; }), axisLabel: { fontSize: 11 } },
+    series: groups.map(function (g) {
+      return { name: GROUP_LABEL[g], type: "bar", stack: "f", barMaxWidth: 18, itemStyle: { color: COLORS[g] },
+        data: m.agentVsFinal.map(function (r) { return r[g] || null; }) };
+    })
+  });
 
   var mix = m.decisionMix, any = false;
   ["applied", "approval", "rejected", "resent", "other"].forEach(function (g) { mix[g].forEach(function (v) { if (v) any = true; }); });
@@ -508,11 +578,11 @@ function renderMetrics(m) {
   if (!m.tokens.length) empty("tokens", "No live agent runs yet");
   else chart("tokens", document.getElementById("ch-tokens"), {
     grid: GRID, legend: LEGEND, tooltip: { trigger: "axis", axisPointer: { type: "shadow" }, confine: true, valueFormatter: num },
-    xAxis: { type: "category", data: m.tokens.map(function (t) { return t.Model; }), axisLabel: { fontSize: 11 } },
-    yAxis: { type: "value", axisLabel: { fontSize: 11, formatter: short } },
+    xAxis: { type: "value", axisLabel: { fontSize: 11, formatter: short } },
+    yAxis: { type: "category", inverse: true, data: m.tokens.map(function (t) { return t.Model; }), axisLabel: { fontSize: 11 } },
     series: [["InputTokens", "Input", "#3b7dd8"], ["CachedInputTokens", "Cached input", "#9cbdf0"],
       ["OutputTokens", "Output", "#2e9e62"], ["ReasoningTokens", "Reasoning", "#d99a1e"]].map(function (k) {
-      return { name: k[1], type: "bar", stack: "t", data: m.tokens.map(function (t) { return t[k[0]] || 0; }), itemStyle: { color: k[2] }, barMaxWidth: 48 };
+      return { name: k[1], type: "bar", stack: "t", data: m.tokens.map(function (t) { return t[k[0]] || 0; }), itemStyle: { color: k[2] }, barMaxWidth: 22 };
     })
   });
 
@@ -574,19 +644,40 @@ function showError(e) {
 
 function load() {
   document.getElementById("error").classList.add("hidden");
-  // Summary first: it carries the Visual Trace base URL the decisions table links to
   var ev = includeEval ? "eval=1" : "eval=0";
-  get("api/summary?" + ev).then(function (s) {
-    renderSummary(s);
-    return Promise.all([get("api/decisions?limit=50&" + ev), get("api/evalruns"), get("api/metrics/summary?" + ev)]);
-  }).then(function (res) {
-    renderDecisions(res[0]);
-    renderRuns(res[1]);
-    renderMetrics(res[2]);
+  Promise.all([get("api/summary?" + ev), get("api/metrics/summary?" + ev), get("api/decisions?limit=" + (decLimit + 1) + "&" + ev), get("api/evalruns")]).then(function (res) {
+    renderSummary(res[0], res[1]);
+    renderMetrics(res[1]);
+    renderDecisions(res[2]);
+    renderRuns(res[3]);
     document.getElementById("updated").textContent = "Updated " + new Date().toLocaleTimeString();
   }).catch(showError);
 }
 
+function showTab(name) {
+  if (!document.getElementById("tab-" + name)) name = "overview";
+  Array.prototype.forEach.call(document.querySelectorAll(".tabs button"), function (b) {
+    b.setAttribute("aria-selected", b.dataset.tab === name ? "true" : "false");
+  });
+  Array.prototype.forEach.call(document.querySelectorAll(".tabpanel"), function (p) {
+    p.classList.toggle("hidden", p.id !== "tab-" + name);
+  });
+  try { localStorage.setItem("agenticprod.tab", name); } catch (e) {}
+  drawPending();
+}
+
+Array.prototype.forEach.call(document.querySelectorAll(".tabs button"), function (b) {
+  b.addEventListener("click", function () { showTab(b.dataset.tab); });
+});
+var lastTab = "overview";
+try { lastTab = localStorage.getItem("agenticprod.tab") || "overview"; } catch (e) {}
+showTab(lastTab);
+document.getElementById("more").addEventListener("toggle", drawPending);
+document.getElementById("dec-more").addEventListener("click", function () {
+  decLimit += DEC_PAGE;
+  var ev = includeEval ? "eval=1" : "eval=0";
+  get("api/decisions?limit=" + (decLimit + 1) + "&" + ev).then(renderDecisions).catch(showError);
+});
 document.getElementById("refresh").addEventListener("click", load);
 window.addEventListener("resize", function () { Object.keys(charts).forEach(function (k) { charts[k].resize(); }); });
 document.getElementById("story-close").addEventListener("click", function () {
@@ -598,6 +689,7 @@ var evalBox = document.getElementById("incl-eval");
 evalBox.checked = includeEval;
 evalBox.addEventListener("change", function () {
   includeEval = evalBox.checked;
+  decLimit = DEC_PAGE;
   try { localStorage.setItem("agenticprod.includeEval", includeEval ? "1" : "0"); } catch (e) {}
   load();
 });

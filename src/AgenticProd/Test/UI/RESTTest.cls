@@ -130,6 +130,26 @@ Method TestEvalRunsAndResults()
 	Do ##class(AgenticProd.Data.EvalRun).%DeleteId(tRunId)
 }
 
+/// A RUNNING run whose job died shows as STOPPED once STALESECONDS pass without a result.
+Method TestStaleRunShowsStopped()
+{
+	For tAge = 60, 1200 {
+		Set tRun = ##class(AgenticProd.Data.EvalRun).%New()
+		Set tRun.Label = "stale test", tRun.Model = "test", tRun.Mode = "replay", tRun.Status = "RUNNING"
+		Set tRun.StartedAt = $ZDATETIME($ZDATETIMEH($ZDATETIME($ZTIMESTAMP, -2) - tAge, -2), 3)
+		Do $$$AssertStatusOK(tRun.%Save())
+		Set tId(tAge) = tRun.%Id()
+	}
+	Set tIter = ##class(AgenticProd.UI.REST).EvalRunsData().%GetIterator()
+	While tIter.%GetNext(, .tR) {
+		Set:tR.ID=tId(60) tFresh = tR.Status
+		Set:tR.ID=tId(1200) tStale = tR.Status
+	}
+	Do $$$AssertEquals($GET(tFresh), "RUNNING")
+	Do $$$AssertEquals($GET(tStale), "STOPPED")
+	For tAge = 60, 1200 Do ##class(AgenticProd.Data.EvalRun).%DeleteId(tId(tAge))
+}
+
 /// Reviewer gets JSON and the page; no login and a wrong password get 401; the entry page
 /// shows the IRIS login form to an anonymous browser.
 /// Story of an approved mapping: steps in order, tool calls in order with short results, the Triage
@@ -201,6 +221,7 @@ Method TestStoryWaitingNoAgent()
 Method TestMetricsSummary()
 {
 	Set tBefore = ##class(AgenticProd.UI.REST).MetricsData(1)
+	Do $$$AssertTrue($IsObject(tBefore.outcomes) && $IsObject(tBefore.agentVsFinal), "outcomes and agentVsFinal present")
 	Set tModel = "test-metrics-model", tSession = "test-metrics-9351"
 	For i = 1:1:4 {
 		Set tUsage = ##class(AgenticProd.Data.Usage).%New()
