@@ -48,7 +48,16 @@ Property Temperature As %String(MAXLEN = 10);
 /// AI kill switch: on, every message is escalated to a person without an LLM call.
 Property KillSwitch As %Boolean [ InitialExpression = 0 ];
 
-Parameter SETTINGS = "ProviderConfig:Agent,Model:Agent,Temperature:Agent,Mode:Agent,KillSwitch:Agent,MaxIterations:Agent,MaxToolCalls:Agent,MaxTokensPerMessage:Agent,DailyTokenBudget:Agent,RunAsUser:Agent";
+/// Tool tiers set on the Settings tab, "tool=write,tool=critical"; unlisted tools are readonly.
+Property ToolTiers As %String(MAXLEN = 2000);
+
+/// Tiers the agent may use: "readonly", "readonly,write" or "readonly,write,critical".
+Property EnabledTiers As %String(MAXLEN = 100) [ InitialExpression = "readonly" ];
+
+/// Skill classes from TriageAgent's SKILLS left out for this item, comma separated.
+Property DisabledSkills As %String(MAXLEN = 500);
+
+Parameter SETTINGS = "ProviderConfig:Agent,Model:Agent,Temperature:Agent,Mode:Agent,KillSwitch:Agent,MaxIterations:Agent,MaxToolCalls:Agent,MaxTokensPerMessage:Agent,DailyTokenBudget:Agent,DisabledSkills:Agent,ToolTiers:Guardrails,EnabledTiers:Guardrails,RunAsUser:Agent";
 
 /// Fail closed: if the switch fails the item does not start, rather than run the agent with %All.
 /// The switch lasts for the job's life, so this item must keep its own pool (no shared jobs).
@@ -99,6 +108,7 @@ Method Triage(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As Age
 		Set tAgent.Model = ..Model
 		Set tAgent.MaxIterations = ..MaxIterations
 		Set:..Temperature'="" tAgent.Temperature = +..Temperature
+		Set tAgent.Skills = ..EnabledSkills(..DisabledSkills)
 		$$$ThrowOnError(tAgent.%Init())
 		Set tSession = tAgent.CreateSession({"cache":{"enabled":1,"cache_system_prompt":1,"cache_tool_definitions":1}})
 		// Saved early so ToolCall rows carry the session ID
@@ -106,7 +116,9 @@ Method Triage(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As Age
 		Set tAudit = ##class(AgenticProd.Policy.Audit).%New()
 		Set tAudit.HeaderId = pRequest.HeaderId
 		Set tAudit.AgentSessionId = tSession.%Id()
-		$$$ThrowOnError(tAgent.ToolManager.SetAuthPolicy(##class(AgenticProd.Policy.ReadOnly).%New()))
+		Set tPolicy = ##class(AgenticProd.Policy.ReadOnly).%New()
+		Set tPolicy.ToolTiers = ..ToolTiers, tPolicy.EnabledTiers = ..EnabledTiers
+		$$$ThrowOnError(tAgent.ToolManager.SetAuthPolicy(tPolicy))
 		$$$ThrowOnError(tAgent.ToolManager.SetAuditPolicy(tAudit))
 
 		$$$TRACE("Agent call: model="_..Model_" maxIterations="_..MaxIterations_" headerId="_pRequest.HeaderId)
@@ -292,6 +304,19 @@ ClassMethod ApplyMessageBudget(pRequest As AgenticProd.Msg.TriageRequest, pStats
 	// The answer may look fine, but a run that needed this much is not trusted for AUTO_FIX
 	$$$LOGWARNING("Per-message budget exceeded for header "_pRequest.HeaderId_": "_tWhy_"; agent answered "_pDecision.Decision_", escalating")
 	Quit pDecision.Escalated("budget exceeded: "_tWhy_"; agent answered "_pDecision.Decision)
+}
+
+/// Value for agent.Skills: TriageAgent's SKILLS minus pDisabled. build 154: %LoadSkills reads
+/// the SKILLS parameter when Skills is "", so "all off" is a blank, which loads nothing.
+ClassMethod EnabledSkills(pDisabled As %String) As %String
+{
+	Set tAll = ##class(AgenticProd.Agent.TriageAgent).#SKILLS, tOut = ""
+	For i = 1:1:$LENGTH(tAll, ",") {
+		Set tSkill = $ZSTRIP($PIECE(tAll, ",", i), "<>W")
+		Continue:(tSkill="")||$LISTFIND($LISTFROMSTRING(pDisabled), tSkill)
+		Set tOut = tOut_$SELECT(tOut '= "": ",", 1: "")_tSkill
+	}
+	Quit $SELECT(tOut = "": " ", 1: tOut)
 }
 
 /// ESCALATE decision used when the agent gives no valid answer.

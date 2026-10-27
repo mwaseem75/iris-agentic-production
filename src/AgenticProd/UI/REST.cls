@@ -57,11 +57,25 @@ ClassMethod SettingsData() As %DynamicObject
 {
 	Set tData = {"user":($USERNAME)}
 	Do tData.%Set("canEdit", ..CanEditSettings(), "boolean")
-	Set tData.providerKinds = []
+	Set tData.providerKinds = [], tData.compatKinds = []
 	Set tKinds = ##class(AgenticProd.Settings.Store).#PROVIDERS
 	For i = 1:1:$LENGTH(tKinds, ",") Do tData.providerKinds.%Push($PIECE(tKinds, ",", i))
+	Set tKinds = ##class(AgenticProd.Settings.Store).#COMPATKINDS
+	For i = 1:1:$LENGTH(tKinds, ",") Do tData.compatKinds.%Push($PIECE(tKinds, ",", i))
 	Set tData.providers = ##class(AgenticProd.Settings.Store).Providers()
 	Set tData.agents = ##class(AgenticProd.Settings.Store).ItemSettings(##class(AgenticProd.Settings.Store).#AGENTFIELDS)
+	Set tData.skills = ##class(AgenticProd.Settings.Store).Skills()
+	Set tData.instructions = ##class(AgenticProd.Settings.Store).XDataText("AgenticProd.Agent.TriageAgent", "INSTRUCTIONS")
+	Set tData.guardrails = ##class(AgenticProd.Settings.Store).ItemSettings(##class(AgenticProd.Settings.Store).#GUARDFIELDS)
+	Set tData.errorClasses = []
+	Set tKinds = $EXTRACT(##class(AgenticProd.Msg.ErrorClass).#VALUELIST, 2, *)
+	For i = 1:1:$LENGTH(tKinds, ",") Do tData.errorClasses.%Push($PIECE(tKinds, ",", i))
+	// The catalog needs an agent %Init; a broken provider must not hide the rest of the page
+	Try {
+		Set tData.tools = ##class(AgenticProd.Settings.Store).Tools()
+	} Catch ex {
+		Set tData.tools = [], tData.toolsError = $SYSTEM.Status.GetErrorText(ex.AsStatus())
+	}
 	Set tData.budgets = ##class(AgenticProd.Settings.Store).ItemSettings(##class(AgenticProd.Settings.Store).#BUDGETFIELDS)
 	Do tData.budgets.%Set("KillSwitch", +tData.budgets.KillSwitch, "boolean")
 	Set tData.usedToday = ##class(AgenticProd.Operation.Agent).TokensUsedToday()
@@ -75,7 +89,7 @@ ClassMethod CanEditSettings() As %Boolean
 	Quit $SYSTEM.Security.Check(##class(AgenticProd.Settings.Store).#EDITRESOURCE, "WRITE")
 }
 
-/// PUT /settings/providers|agents|budgets|prices with the section's fields as JSON.
+/// PUT /settings/providers|agents|guardrails|budgets|prices with the section's fields as JSON.
 ClassMethod SettingsSave(pSection As %String) As %Status
 {
 	Quit ..SettingsWrite(pSection)
@@ -139,7 +153,7 @@ ClassMethod SettingsApply(pAction As %String, pBody As %DynamicObject, Output pS
 	Set tResult = {"ok":true}
 	If pAction = "providers" {
 		Set pSC = ##class(AgenticProd.Settings.Store).SaveProvider(pBody)
-	} ElseIf (pAction = "agents") || (pAction = "budgets") {
+	} ElseIf (pAction = "agents") || (pAction = "guardrails") || (pAction = "budgets") {
 		Set pSC = ##class(AgenticProd.Settings.Store).SaveItemSettings(pAction, pBody, .tNote)
 	} ElseIf pAction = "prices" {
 		Set pSC = ##class(AgenticProd.Settings.Store).SavePrice(pBody)
@@ -285,6 +299,8 @@ ClassMethod SummaryData(pIncludeEval As %Boolean = 0) As %DynamicObject
 		"inboxUrl": ($SYSTEM.CSP.GetDefaultApp($NAMESPACE)_"/_DeepSee.UserPortal.Workflow.zen")
 	}
 	Do tOut.%Set("includeEval", tOut.includeEval, "boolean"), tOut.%Set("overBudget", tOut.overBudget, "boolean")
+	// Every tab shows a banner while it is on
+	Do tOut.%Set("killSwitch", +..AgentSetting(tItem, "KillSwitch"), "boolean")
 	For tKey = "costPerMessage", "tokensPercent" Do:tOut.%Get(tKey)="" tOut.%Set(tKey, "", "null")
 	Quit tOut
 }

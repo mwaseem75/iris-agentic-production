@@ -80,6 +80,11 @@ button.danger { color: var(--bad); border-color: var(--bad); }
 .msg.ok { color: var(--good); }
 .msg.bad { color: var(--bad); }
 .readonly-note { background: var(--warn-bg); color: var(--warn); border-radius: 6px; padding: 8px 12px; margin: 0 0 14px; }
+.kill-banner { background: var(--bad); color: #fff; border-radius: 6px; padding: 10px 14px; margin: 0 0 14px; font-weight: 600; }
+.checks { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 6px 0; }
+.checks label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); }
+pre.instr { white-space: pre-wrap; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; font-size: 12px; max-height: 360px; overflow: auto; }
+h3.sub { font-size: 13px; margin: 16px 0 4px; }
 a:hover { text-decoration: underline; }
 .tag { display: inline-block; padding: 0 7px; border-radius: 10px; font-size: 12px; line-height: 19px; }
 .t-good { background: var(--good-bg); color: var(--good); }
@@ -94,7 +99,8 @@ a:hover { text-decoration: underline; }
 .chart { width: 100%; height: 240px; }
 .mini { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
 .err { color: var(--bad); margin: 0 0 12px; }
-.hidden { display: none; }
+/* !important: .form .actions and other display rules are more specific */
+.hidden { display: none !important; }
 .story-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin-bottom: 10px; }
 .story-head h2 { margin: 0; }
 ol.steps { margin: 0 0 16px; padding-left: 22px; }
@@ -128,6 +134,7 @@ summary { cursor: pointer; color: var(--accent); }
     <button id="refresh" type="button">Refresh</button>
   </header>
   <p class="lede">An AI agent triages failed HL7 messages. A deterministic Triage step decides what is applied; a person approves the rest.</p>
+  <p class="kill-banner hidden" id="kill-banner" role="alert">AI kill switch is ON: every failed message goes to a person, no LLM call. Turn it off on the Settings tab.</p>
   <nav class="tabs" role="tablist">
     <button type="button" role="tab" data-tab="overview" aria-selected="true">Overview</button>
     <button type="button" role="tab" data-tab="messages" aria-selected="false">Messages</button>
@@ -241,11 +248,12 @@ summary { cursor: pointer; color: var(--accent); }
       </div>
       <form class="form edit-only" id="f-provider">
         <label>Name <input name="name" required pattern="[a-z][a-z0-9_]{0,31}" placeholder="openai_main"></label>
-        <label>Kind <select name="model_provider" id="f-kinds"></select></label>
+        <label>Kind <select name="kind" id="f-kinds"></select></label>
         <label>Model <input name="model" required placeholder="gpt-4o-mini"></label>
-        <label>Base URL (optional) <input name="base_url" placeholder="https://..."></label>
+        <label>Base URL <input name="base_url" placeholder="optional; required for OpenAI-compatible"></label>
         <div class="actions"><button type="submit" class="primary">Save provider</button></div>
       </form>
+      <p class="muted edit-only">Azure OpenAI and Ollama have no provider of their own on this AI Hub build: they run through the OpenAI provider against their OpenAI-compatible URL (Azure: <code>https://&lt;resource&gt;.openai.azure.com/openai/v1/</code>, Ollama: <code>http://host:11434/v1</code>; Ollama ignores the key, set any value).</p>
       <p class="msg" id="m-provider"></p>
       <form class="form edit-only" id="f-test">
         <label>Test provider <select name="name" id="f-test-name"></select></label>
@@ -266,8 +274,33 @@ summary { cursor: pointer; color: var(--accent); }
         <label>Max tokens / message <input name="MaxTokensPerMessage" type="number" min="0" required></label>
         <div class="actions edit-only"><button type="submit" class="primary">Apply</button></div>
       </form>
+      <h3 class="sub">Skills</h3>
+      <div class="checks" id="set-skills"></div>
       <p class="muted">Applied as production item settings; the TriageAgent item restarts (about 20 s).</p>
       <p class="msg" id="m-agents"></p>
+      <details><summary>Instructions (read-only, from <code>AgenticProd.Agent.TriageAgent</code>)</summary><pre class="instr" id="set-instr"></pre></details>
+    </section>
+
+    <section class="panel">
+      <h2>Guardrails</h2>
+      <h3 class="sub">Tools and tiers</h3>
+      <p class="muted">Every agent tool is readonly today. The authorization policy refuses a write or critical tool unless its tier is enabled; a tool that requires auth is at least write.</p>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Tool</th><th class="opt">Class</th><th class="opt">What it does</th><th>Tier</th></tr></thead>
+          <tbody id="set-tools"></tbody>
+        </table>
+      </div>
+      <form class="form" id="f-guard">
+        <label>Tiers the agent may use <select name="EnabledTiers"><option value="readonly">readonly only</option><option value="readonly,write">readonly + write</option><option value="readonly,write,critical">readonly + write + critical</option></select></label>
+        <label>AUTO_FIX confidence threshold <input name="AutoFixThreshold" type="number" min="0" max="1" step="0.01" required></label>
+        <label>Grounding check (used from 8.6) <select name="GroundingStrictness"><option value="strict">strict: ungrounded = ESCALATE</option><option value="warn">warn: note it</option><option value="off">off</option></select></label>
+        <div class="actions edit-only"><button type="submit" class="primary">Apply</button></div>
+      </form>
+      <h3 class="sub">AUTO_FIX per error class</h3>
+      <div class="checks" id="set-autofix"></div>
+      <p class="muted">Off: Triage sends that class's AUTO_FIX proposals to a person ("auto-fix disabled in Settings"). IDENTITY_ISSUE is never auto-fixed.</p>
+      <p class="msg" id="m-guard"></p>
     </section>
 
     <section class="panel">
@@ -774,6 +807,7 @@ function load() {
   document.getElementById("error").classList.add("hidden");
   var ev = includeEval ? "eval=1" : "eval=0";
   Promise.all([get("api/summary?" + ev), get("api/metrics/summary?" + ev), get("api/decisions?limit=" + (decLimit + 1) + "&" + ev), get("api/evalruns")]).then(function (res) {
+    setKillBanner(res[0].killSwitch);
     renderSummary(res[0], res[1]);
     renderMetrics(res[1]);
     renderDecisions(res[2]);
@@ -825,8 +859,7 @@ function renderSettings(s) {
   settings = s;
   var edit = s.canEdit;
   document.getElementById("set-readonly").classList.toggle("hidden", edit);
-  Array.prototype.forEach.call(document.querySelectorAll("#tab-settings .edit-only"), function (e) { e.classList.toggle("hidden", !edit); });
-  Array.prototype.forEach.call(document.querySelectorAll("#f-agents input, #f-agents select, #f-budgets input, #f-budgets select"), function (e) { e.disabled = !edit; });
+  setKillBanner(s.budgets.KillSwitch);
 
   var body = document.getElementById("set-providers");
   body.textContent = "";
@@ -838,7 +871,7 @@ function renderSettings(s) {
   s.providers.forEach(function (p) {
     var tr = el("tr");
     cell(tr, p.name);
-    cell(tr, p.model_provider);
+    cell(tr, kindLabel(p.kind));
     cell(tr, p.model);
     cell(tr, p.base_url || "—", "opt");
     cell(tr, tag(p.key, p.key === "set" ? "good" : "warn"));
@@ -862,13 +895,59 @@ function renderSettings(s) {
     }
     body.appendChild(tr);
   });
-  fillSelect(document.getElementById("f-kinds"), s.providerKinds.map(function (k) { return [k, k]; }), "openai");
-  var choices = [["", "(.env default: OPENAI_API_KEY)"]].concat(s.providers.map(function (p) { return [p.name, p.name + " — " + p.model_provider + " " + p.model]; }));
+  compatKinds = s.compatKinds;
+  fillSelect(document.getElementById("f-kinds"), s.providerKinds.concat(s.compatKinds).map(function (k) { return [k, kindLabel(k)]; }), "openai");
+  var choices = [["", "(.env default: OPENAI_API_KEY)"]].concat(s.providers.map(function (p) { return [p.name, p.name + " — " + p.kind + " " + p.model]; }));
   fillSelect(document.getElementById("f-test-name"), choices, s.agents.ProviderConfig);
   fillSelect(document.getElementById("f-agent-provider"), choices, s.agents.ProviderConfig);
 
   var fa = document.getElementById("f-agents");
   ["Model", "Temperature", "MaxIterations", "MaxToolCalls", "MaxTokensPerMessage"].forEach(function (k) { fa.elements[k].value = s.agents[k]; });
+  var sk = document.getElementById("set-skills");
+  sk.textContent = "";
+  s.skills.forEach(function (k) {
+    var l = el("label"), c = el("input");
+    c.type = "checkbox"; c.checked = k.enabled; c.value = k.class;
+    l.title = k.description;
+    l.appendChild(c); l.appendChild(document.createTextNode(k.name + " "));
+    l.appendChild(el("span", "(" + k.class.split(".").pop() + ")", "muted"));
+    sk.appendChild(l);
+  });
+  document.getElementById("set-instr").textContent = s.instructions;
+
+  var g = s.guardrails;
+  var tb = document.getElementById("set-tools");
+  tb.textContent = "";
+  if (s.toolsError) {
+    var te = el("tr");
+    cell(te, "Tool list unavailable: " + s.toolsError, "muted").colSpan = 4;
+    tb.appendChild(te);
+  }
+  s.tools.forEach(function (t) {
+    var tr = el("tr"), sel = el("select");
+    cell(tr, t.name);
+    cell(tr, t.provider, "opt");
+    cell(tr, t.description, "opt wrap-cell");
+    fillSelect(sel, ["readonly", "write", "critical"].filter(function (x) { return !(t.requiresAuth && x === "readonly"); }).map(function (x) { return [x, x]; }), t.tier);
+    sel.dataset.tool = t.name;
+    cell(tr, sel);
+    tb.appendChild(tr);
+  });
+  var fg = document.getElementById("f-guard");
+  fg.elements.EnabledTiers.value = g.EnabledTiers;
+  fg.elements.AutoFixThreshold.value = g.AutoFixThreshold;
+  fg.elements.GroundingStrictness.value = g.GroundingStrictness;
+  var off = (g.AutoFixDisabled || "").split(",");
+  var af = document.getElementById("set-autofix");
+  af.textContent = "";
+  s.errorClasses.forEach(function (ec) {
+    var l = el("label"), c = el("input");
+    c.type = "checkbox"; c.value = ec;
+    c.checked = ec !== "IDENTITY_ISSUE" && off.indexOf(ec) < 0;
+    if (ec === "IDENTITY_ISSUE") { c.disabled = true; c.dataset.fixed = "1"; }
+    l.appendChild(c); l.appendChild(document.createTextNode(ec));
+    af.appendChild(l);
+  });
   var fb = document.getElementById("f-budgets");
   fb.elements.DailyTokenBudget.value = s.budgets.DailyTokenBudget;
   fb.elements.Mode.value = s.budgets.Mode;
@@ -924,6 +1003,18 @@ function renderSettings(s) {
     cell(tr, c.NewValue == null ? "" : String(c.NewValue), "wrap-cell");
     cb.appendChild(tr);
   });
+
+  // Last, so the rows and checkboxes built above follow the role too
+  Array.prototype.forEach.call(document.querySelectorAll("#tab-settings .edit-only"), function (e) { e.classList.toggle("hidden", !edit); });
+  Array.prototype.forEach.call(document.querySelectorAll("#tab-settings input, #tab-settings select"), function (e) { e.disabled = !edit || e.dataset.fixed === "1"; });
+}
+
+var compatKinds = [];
+function kindLabel(k) { return compatKinds.indexOf(k) >= 0 ? k + " (OpenAI-compatible)" : k; }
+function setKillBanner(on) { document.getElementById("kill-banner").classList.toggle("hidden", !on); }
+function checkedValues(id, want) {
+  return Array.prototype.filter.call(document.querySelectorAll("#" + id + " input[type=checkbox]"), function (c) { return c.checked === want && c.dataset.fixed !== "1"; })
+    .map(function (c) { return c.value; }).join(",");
 }
 
 document.getElementById("f-provider").addEventListener("submit", function (ev) {
@@ -946,8 +1037,9 @@ document.getElementById("f-test").addEventListener("submit", function (ev) {
     loadSettings();
   }).catch(function (e) { say("m-test", e.message); }).then(function () { btn.disabled = false; });
 });
-function applyItem(section, form, msgId) {
+function applyItem(section, form, msgId, extra) {
   var d = formData(form);
+  Object.keys(extra || {}).forEach(function (k) { d[k] = extra[k]; });
   var btn = form.querySelector("button");
   btn.disabled = true;
   say(msgId, "Applying…", true);
@@ -956,7 +1048,16 @@ function applyItem(section, form, msgId) {
     loadSettings();
   }).catch(function (e) { say(msgId, e.message); }).then(function () { btn.disabled = false; });
 }
-document.getElementById("f-agents").addEventListener("submit", function (ev) { ev.preventDefault(); applyItem("agents", ev.target, "m-agents"); });
+document.getElementById("f-agents").addEventListener("submit", function (ev) {
+  ev.preventDefault();
+  applyItem("agents", ev.target, "m-agents", { DisabledSkills: checkedValues("set-skills", false) });
+});
+document.getElementById("f-guard").addEventListener("submit", function (ev) {
+  ev.preventDefault();
+  var tiers = Array.prototype.filter.call(document.querySelectorAll("#set-tools select"), function (s) { return s.value !== "readonly"; })
+    .map(function (s) { return s.dataset.tool + "=" + s.value; }).join(",");
+  applyItem("guardrails", ev.target, "m-guard", { ToolTiers: tiers, AutoFixDisabled: checkedValues("set-autofix", false) });
+});
 document.getElementById("f-budgets").addEventListener("submit", function (ev) { ev.preventDefault(); applyItem("budgets", ev.target, "m-budgets"); });
 document.getElementById("kill-btn").addEventListener("click", function () {
   var btn = this;

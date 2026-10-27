@@ -21,14 +21,22 @@ Parameter PRODUCTION = "AgenticProd.Production";
 
 Parameter AGENTITEM = "TriageAgent";
 
-/// Provider kinds build 154 accepts with api_key and base_url (Ollama: openai + base_url).
-/// Azure and Ollama have no provider of their own on this build.
+/// Provider kinds build 154 accepts with api_key and base_url.
 Parameter PROVIDERS = "openai,anthropic,openrouter,nim";
 
-/// Item settings each section may change; anything else is refused.
-Parameter AGENTFIELDS = "ProviderConfig,Model,Temperature,MaxIterations,MaxToolCalls,MaxTokensPerMessage";
+/// Kinds with no provider of their own on build 154: run as model_provider openai against their
+/// OpenAI-compatible base_url, and remembered as display_kind (stripped before Provider.Create).
+Parameter COMPATKINDS = "azure_openai,ollama";
 
-Parameter BUDGETFIELDS = "DailyTokenBudget,Mode,KillSwitch";
+/// Item settings each section may change, as item:field; anything else is refused.
+Parameter AGENTFIELDS = "TriageAgent:ProviderConfig,TriageAgent:Model,TriageAgent:Temperature,TriageAgent:MaxIterations,TriageAgent:MaxToolCalls,TriageAgent:MaxTokensPerMessage,TriageAgent:DisabledSkills";
+
+Parameter GUARDFIELDS = "TriageAgent:ToolTiers,TriageAgent:EnabledTiers,Triage:AutoFixDisabled,Triage:AutoFixThreshold,Triage:GroundingStrictness";
+
+Parameter BUDGETFIELDS = "TriageAgent:DailyTokenBudget,TriageAgent:Mode,TriageAgent:KillSwitch";
+
+/// Item -> class, for a setting's default when the production does not set it.
+Parameter ITEMCLASSES = "TriageAgent=AgenticProd.Operation.Agent,Triage=AgenticProd.Process.Triage";
 
 Parameter PRICEFIELDS = "Provider,InputPer1M,OutputPer1M,CacheReadPer1M,CacheWritePer1M";
 
@@ -97,7 +105,7 @@ ClassMethod ProviderSettings(pName As %String, Output pProvider As %String, Outp
 		Set pSettings = {}
 		Set tIter = tDetails.%GetIterator()
 		While tIter.%GetNext(.tKey, .tVal) {
-			Continue:(tKey="model")||(tKey="model_provider")||(tVal="")
+			Continue:(tKey="model")||(tKey="model_provider")||(tKey="display_kind")||(tVal="")
 			Do pSettings.%Set(tKey, tVal)
 		}
 	} Catch ex {
@@ -107,66 +115,80 @@ ClassMethod ProviderSettings(pName As %String, Output pProvider As %String, Outp
 }
 
 /// Provider configs with key status "set" / "not set"; never the key.
+/// build 154: the Config Store table shows a user without %Admin_ConfigStore no rows (no error),
+/// so the names also come from the change log; details come from GetDetails (READRESOURCE).
 ClassMethod Providers() As %DynamicArray
 {
-	Set tList = []
-	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT Name, FullyQualifiedName, ModifiedAt FROM %ConfigStore.Configuration WHERE Area = 'AI' AND Type = 'LLM' ORDER BY Name")
-	If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message))
-	While tRS.%Next() {
-		Set tName = tRS.Name
-		// Subtyped entries (AI.LLM.<subtype>.<name>) are not ours to show
-		Continue:tRS.FullyQualifiedName'=..FQN(tName)
-		Set tRow = {"name":(tName), "modifiedAt":(tRS.ModifiedAt)}
-		If $$$ISOK(##class(%ConfigStore.Configuration).GetDetails(..FQN(tName), .tDetails, 0, 0)) {
-			Set tRow."model_provider" = tDetails.%Get("model_provider")
-			Set tRow.model = tDetails.%Get("model")
-			Set tRow."base_url" = tDetails.%Get("base_url")
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT Name, FullyQualifiedName FROM %ConfigStore.Configuration WHERE Area = 'AI' AND Type = 'LLM'")
+	If tRS.%SQLCODE >= 0 {
+		While tRS.%Next() {
+			// Subtyped entries (AI.LLM.<subtype>.<name>) are not ours to show
+			Set:tRS.FullyQualifiedName=..FQN(tRS.Name) tNames(tRS.Name) = ""
 		}
+	}
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT DISTINCT %EXACT(Item) AS Item FROM AgenticProd_Data.SettingsAudit WHERE Scope = 'providers' AND Field = 'created'")
+	If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message))
+	While tRS.%Next() { Set tNames(tRS.Item) = "" }
+	Set tList = [], tName = ""
+	For {
+		Set tName = $ORDER(tNames(tName))
+		Quit:tName=""
+		// Deleted since, or not readable for this user
+		Continue:$$$ISERR(##class(%ConfigStore.Configuration).GetDetails(..FQN(tName), .tDetails, 0, 0))
+		Set tRow = {"name":(tName), "model_provider":(tDetails.%Get("model_provider")), "model":(tDetails.%Get("model")), "base_url":(tDetails.%Get("base_url"))}
+		Set tRow.kind = $SELECT(tDetails.%Get("display_kind") '= "": tDetails.%Get("display_kind"), 1: tDetails.%Get("model_provider"))
 		Set tRow.key = ..KeyStatus(tName)
 		Do tList.%Push(tRow)
 	}
 	Quit tList
 }
 
-/// "set", "not set", or "unknown" when the caller may not even look.
+/// "set" or "not set". build 154: %Wallet.KeyValue.Exists answers 0 for a user without the
+/// collection's use resource, so for them (the reviewer) the change log decides.
 ClassMethod KeyStatus(pName As %String) As %String
 {
-	Try {
-		Set tStatus = $SELECT(##class(%Wallet.KeyValue).Exists(..#COLLECTION_"."_pName): "set", 1: "not set")
-	} Catch {
-		Set tStatus = "unknown"
+	If $SYSTEM.Security.Check(..#USERESOURCE, "USE") {
+		Quit $SELECT(##class(%Wallet.KeyValue).Exists(..#COLLECTION_"."_pName): "set", 1: "not set")
 	}
-	Quit tStatus
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT COUNT(*) AS N FROM AgenticProd_Data.SettingsAudit WHERE Scope = 'keys' AND Item = ?", pName)
+	Quit:(tRS.%SQLCODE<0)||'tRS.%Next() "not set"
+	Quit $SELECT(tRS.N: "set", 1: "not set")
 }
 
-/// Create or update provider config pData.name (model_provider, model, base_url). The api_key
-/// field always points at the Wallet; the key itself is set with SetKey.
+/// Create or update provider config pData.name: kind (PROVIDERS or COMPATKINDS; model_provider
+/// is taken as the kind when kind is missing), model, base_url. A compatible kind needs base_url.
+/// The api_key field always points at the Wallet; the key itself is set with SetKey.
 ClassMethod SaveProvider(pData As %DynamicObject) As %Status
 {
 	Set tSC = $$$OK
 	Try {
 		Set tName = pData.%Get("name")
 		$$$ThrowOnError(..CheckName(tName))
-		Set tNew("model_provider") = pData.%Get("model_provider")
+		Set tKind = $SELECT(pData.%Get("kind") '= "": pData.%Get("kind"), 1: pData.%Get("model_provider"))
+		Set tCompat = $LISTFIND($LISTFROMSTRING(..#COMPATKINDS), tKind) > 0
+		If 'tCompat, '$LISTFIND($LISTFROMSTRING(..#PROVIDERS), tKind) $$$ThrowStatus($$$ERROR($$$GeneralError, "kind must be one of "_..#PROVIDERS_","_..#COMPATKINDS))
+		Set tNew("model_provider") = $SELECT(tCompat: "openai", 1: tKind)
+		Set tNew("display_kind") = $SELECT(tCompat: tKind, 1: "")
 		Set tNew("model") = pData.%Get("model")
 		Set tNew("base_url") = pData.%Get("base_url")
-		If '$LISTFIND($LISTFROMSTRING(..#PROVIDERS), tNew("model_provider")) $$$ThrowStatus($$$ERROR($$$GeneralError, "model_provider must be one of "_..#PROVIDERS))
 		If (tNew("model")'?1.100(1AN,1P))||(tNew("model")[" ") $$$ThrowStatus($$$ERROR($$$GeneralError, "model is required, no spaces"))
 		If (tNew("base_url")'=""),$ZCONVERT($PIECE(tNew("base_url"), "://"), "L")'?1"http"0.1"s" $$$ThrowStatus($$$ERROR($$$GeneralError, "base_url must start with http:// or https://"))
+		If tCompat, tNew("base_url") = "" $$$ThrowStatus($$$ERROR($$$GeneralError, tKind_" runs as OpenAI-compatible: base_url is required"))
 
 		Set tDetails = {"model_provider":(tNew("model_provider")), "model":(tNew("model")), "api_key":("secret://"_..#COLLECTION_"."_tName_"#api_key")}
 		Set:tNew("base_url")'="" tDetails."base_url" = tNew("base_url")
+		Set:tCompat tDetails."display_kind" = tKind
 		Set tFQN = ..FQN(tName)
 		If ##class(%ConfigStore.Configuration).Exists(tFQN) {
 			$$$ThrowOnError(##class(%ConfigStore.Configuration).GetDetails(tFQN, .tOld, 0, 0))
 			$$$ThrowOnError(##class(%ConfigStore.Configuration).Modify(tFQN, tDetails))
-			For tField = "model_provider", "model", "base_url" {
+			For tField = "model_provider", "display_kind", "model", "base_url" {
 				Continue:tOld.%Get(tField)=tNew(tField)
 				$$$ThrowOnError(##class(AgenticProd.Data.SettingsAudit).Log("providers", tName, tField, tOld.%Get(tField), tNew(tField)))
 			}
 		} Else {
 			$$$ThrowOnError(##class(%ConfigStore.Configuration).Create("AI", "LLM", "", tName, tDetails, tName, "AgenticProd provider (Settings page)", ..#READRESOURCE, ..#EDITRESOURCE))
-			$$$ThrowOnError(##class(AgenticProd.Data.SettingsAudit).Log("providers", tName, "created", "", tNew("model_provider")_" "_tNew("model")_$SELECT(tNew("base_url")'="": " "_tNew("base_url"), 1: "")))
+			$$$ThrowOnError(##class(AgenticProd.Data.SettingsAudit).Log("providers", tName, "created", "", tKind_" "_tNew("model")_$SELECT(tNew("base_url")'="": " "_tNew("base_url"), 1: "")))
 		}
 	} Catch ex {
 		Set tSC = ex.AsStatus()
@@ -196,48 +218,68 @@ ClassMethod SetKey(pName As %String, pKey As %String) As %Status
 	Quit tSC
 }
 
-/// Current values of the agent item's settings in pFields (comma list).
+/// Production item setting, or the item class's InitialExpression when the production leaves it unset.
+ClassMethod Setting(pItem As %String, pField As %String) As %String
+{
+	Set tValue = ##class(Ens.Director).GetHostSettingValue(pItem, pField, .tSC)
+	Quit:$$$ISOK(tSC)&&(tValue'="") tValue
+	Set tClass = ""
+	For i = 1:1:$LENGTH(..#ITEMCLASSES, ",") {
+		Set:$PIECE($PIECE(..#ITEMCLASSES, ",", i), "=")=pItem tClass = $PIECE($PIECE(..#ITEMCLASSES, ",", i), "=", 2)
+	}
+	Set tProp = ##class(%Dictionary.CompiledProperty).%OpenId(tClass_"||"_pField)
+	Quit $SELECT($IsObject(tProp): $ZSTRIP(tProp.InitialExpression, "<>", """"), 1: "")
+}
+
+/// Current values of pFields (item:field comma list), keyed by field.
 ClassMethod ItemSettings(pFields As %String) As %DynamicObject
 {
 	Set tObj = {}
 	For i = 1:1:$LENGTH(pFields, ",") {
-		Set tField = $PIECE(pFields, ",", i)
-		Do tObj.%Set(tField, ##class(AgenticProd.UI.REST).AgentSetting(..#AGENTITEM, tField))
+		Set tPair = $PIECE(pFields, ",", i)
+		Do tObj.%Set($PIECE(tPair, ":", 2), ..Setting($PIECE(tPair, ":"), $PIECE(tPair, ":", 2)))
 	}
 	Quit tObj
 }
 
-/// Apply pData (field: value) to the agent item; pSection "agents" or "budgets" decides which
-/// fields are allowed. Through Ens.Production.ApplySettings, so a running item restarts with them.
-/// pNote: set when the values were saved but the item did not restart in time (it picks them up
+/// Apply pData (field: value); pSection agents, guardrails or budgets decides which fields are
+/// allowed and on which item. Through Ens.Production.ApplySettings, so a running item restarts.
+/// pNote: set when the values were saved but an item did not restart in time (it picks them up
 /// when it does); that is not an error.
 ClassMethod SaveItemSettings(pSection As %String, pData As %DynamicObject, Output pNote As %String) As %Status
 {
 	Set tSC = $$$OK, pNote = ""
 	Try {
-		Set tAllowed = $CASE(pSection, "agents": ..#AGENTFIELDS, "budgets": ..#BUDGETFIELDS, : "")
+		Set tAllowed = $CASE(pSection, "agents": ..#AGENTFIELDS, "guardrails": ..#GUARDFIELDS, "budgets": ..#BUDGETFIELDS, : "")
 		If tAllowed = "" $$$ThrowStatus($$$ERROR($$$GeneralError, "Unknown settings section "_pSection))
+		For i = 1:1:$LENGTH(tAllowed, ",") Set tItemOf($PIECE($PIECE(tAllowed, ",", i), ":", 2)) = $PIECE($PIECE(tAllowed, ",", i), ":")
 		Set tIter = pData.%GetIterator()
 		While tIter.%GetNext(.tField, .tVal) {
-			If '$LISTFIND($LISTFROMSTRING(tAllowed), tField) $$$ThrowStatus($$$ERROR($$$GeneralError, "Not a "_pSection_" setting: "_tField))
+			If '$DATA(tItemOf(tField)) $$$ThrowStatus($$$ERROR($$$GeneralError, "Not a "_pSection_" setting: "_tField))
 			// JSON true/false arrive as 1/0 already; normalise numbers like "8" and 8
 			Set tVal = $SELECT($ISVALIDNUM(tVal): +tVal, 1: tVal)
 			$$$ThrowOnError(..CheckItemSetting(tField, tVal))
-			Set tOld = ##class(AgenticProd.UI.REST).AgentSetting(..#AGENTITEM, tField)
-			Continue:tOld=tVal
-			Set tSettings(..#AGENTITEM, "Host", tField) = tVal, tOldOf(tField) = tOld
+			Set tItem = tItemOf(tField), tOld = ..Setting(tItem, tField)
+			// "0.85" in the production file is .85 here: no change
+			Continue:(tOld=tVal)||($ISVALIDNUM(tOld)&&$ISVALIDNUM(tVal)&&(tOld'="")&&(+tOld=tVal))
+			Set tSettings(tItem, "Host", tField) = tVal, tOldOf(tField) = tOld
 		}
 		Quit:'$DATA(tSettings)
 		Set tApplySC = ..ApplyQuietly(.tSettings)
 		// The config is saved before the item restarts: a restart timeout (the agent item's
 		// OnInit takes ~20 s) still leaves the new values in force, so log what was saved
-		Set tField = "", tSaved = 0
+		Set tItem = "", tSaved = 0
 		For {
-			Set tField = $ORDER(tSettings(..#AGENTITEM, "Host", tField), 1, tVal)
-			Quit:tField=""
-			Continue:##class(AgenticProd.UI.REST).AgentSetting(..#AGENTITEM, tField)'=tVal
-			Set tSaved = tSaved + 1
-			$$$ThrowOnError(##class(AgenticProd.Data.SettingsAudit).Log(pSection, ..#AGENTITEM, tField, tOldOf(tField), tVal))
+			Set tItem = $ORDER(tSettings(tItem))
+			Quit:tItem=""
+			Set tField = ""
+			For {
+				Set tField = $ORDER(tSettings(tItem, "Host", tField), 1, tVal)
+				Quit:tField=""
+				Continue:..Setting(tItem, tField)'=tVal
+				Set tSaved = tSaved + 1
+				$$$ThrowOnError(##class(AgenticProd.Data.SettingsAudit).Log(pSection, tItem, tField, tOldOf(tField), tVal))
+			}
 		}
 		If $$$ISERR(tApplySC) {
 			If 'tSaved $$$ThrowStatus(tApplySC)
@@ -281,10 +323,86 @@ ClassMethod CheckItemSetting(pField As %String, pValue As %String) As %Status
 			"DailyTokenBudget": pValue?1.12N,
 			"Mode": (pValue = "live") || (pValue = "replay"),
 			"KillSwitch": (pValue = 0) || (pValue = 1),
+			"AutoFixThreshold": $ISVALIDNUM(pValue) && (pValue >= 0) && (pValue <= 1),
+			"GroundingStrictness": (",off,warn,strict," [ (","_pValue_",")) && (pValue '= ""),
+			"EnabledTiers": (pValue = "readonly") || (pValue = "readonly,write") || (pValue = "readonly,write,critical"),
+			"ToolTiers": ..ListOK(pValue, "tiers"),
+			"DisabledSkills": ..ListOK(pValue, "skills"),
+			"AutoFixDisabled": ..ListOK(pValue, "classes"),
 			: 0)
 	}
 	Quit:tOK $$$OK
 	Quit $$$ERROR($$$GeneralError, "Invalid value for "_pField_": "_pValue)
+}
+
+/// Comma list check: "tiers" = tool=tier pairs (tool name, tier write or critical), "skills" =
+/// skill classes from TriageAgent's SKILLS, "classes" = error classes. Empty is fine.
+ClassMethod ListOK(pValue As %String, pKind As %String) As %Boolean [ Internal ]
+{
+	Quit:pValue="" 1
+	Set tSkills = $LISTFROMSTRING(##class(AgenticProd.Agent.TriageAgent).#SKILLS)
+	Set tClasses = $LISTFROMSTRING($EXTRACT(##class(AgenticProd.Msg.ErrorClass).#VALUELIST, 2, *))
+	Set tOK = 1
+	For i = 1:1:$LENGTH(pValue, ",") {
+		Set tItem = $PIECE(pValue, ",", i)
+		If pKind = "tiers" {
+			Set tOK = ($PIECE(tItem, "=")?1L.63(1L,1N,1"_")) && ($LENGTH(tItem, "=") = 2) && (",write,critical," [ (","_$PIECE(tItem, "=", 2)_",")) && ($PIECE(tItem, "=", 2) '= "")
+		} ElseIf pKind = "skills" {
+			Set tOK = $LISTFIND(tSkills, tItem) > 0
+		} Else {
+			Set tOK = $LISTFIND(tClasses, tItem) > 0
+		}
+		Quit:'tOK
+	}
+	Quit tOK
+}
+
+/// The triage agent's tools as AI Hub lists them (no LLM call), with the tier the policy gives
+/// each: [{name, provider, description, requiresAuth, tier}].
+ClassMethod Tools() As %DynamicArray
+{
+	Set tAgent = ##class(AgenticProd.Agent.TriageAgent).%New()
+	$$$ThrowOnError(tAgent.%Init())
+	Set tPolicy = ##class(AgenticProd.Policy.ReadOnly).%New()
+	Set tPolicy.ToolTiers = ..Setting(..#AGENTITEM, "ToolTiers")
+	Set tOut = [], tIter = tAgent.ToolManager.GetToolStatuses().%GetIterator()
+	While tIter.%GetNext(, .tTool) {
+		Set tDesc = tTool.description
+		Set tRow = {"name":(tTool.name), "provider":(tTool.provider), "description":($EXTRACT(tDesc, 1, 160)_$SELECT($LENGTH(tDesc) > 160: "...", 1: ""))}
+		Do tRow.%Set("requiresAuth", ''tTool."requires_auth", "boolean")
+		Set tRow.tier = tPolicy.TierOf(tTool.name, {"requires_auth":(''tTool."requires_auth")})
+		Do tOut.%Push(tRow)
+	}
+	Quit tOut
+}
+
+/// TriageAgent's skills with their SUMMARY name and description, and whether this item uses them.
+ClassMethod Skills() As %DynamicArray
+{
+	Set tDisabled = $LISTFROMSTRING(..Setting(..#AGENTITEM, "DisabledSkills"))
+	Set tAll = ##class(AgenticProd.Agent.TriageAgent).#SKILLS, tOut = []
+	For i = 1:1:$LENGTH(tAll, ",") {
+		Set tClass = $ZSTRIP($PIECE(tAll, ",", i), "<>W")
+		Continue:tClass=""
+		Set tRow = {"class":(tClass), "name":(tClass), "description":""}
+		Set tLines = $TRANSLATE(..XDataText(tClass, "SUMMARY"), $CHAR(13))
+		For j = 1:1:$LENGTH(tLines, $CHAR(10)) {
+			Set tLine = $PIECE(tLines, $CHAR(10), j), tKey = $ZSTRIP($PIECE(tLine, ":"), "<>W")
+			Do:(tKey="name")||(tKey="description") tRow.%Set(tKey,$ZSTRIP($PIECE(tLine, ":", 2, *), "<>W", """"))
+		}
+		Do tRow.%Set("enabled", '$LISTFIND(tDisabled, tClass), "boolean")
+		Do tOut.%Push(tRow)
+	}
+	Quit tOut
+}
+
+/// Text of XData block pName in pClass ("" when missing).
+ClassMethod XDataText(pClass As %String, pName As %String) As %String
+{
+	Set tXData = ##class(%Dictionary.CompiledXData).%OpenId(pClass_"||"_pName)
+	Quit:'$IsObject(tXData) ""
+	Do tXData.Data.Rewind()
+	Quit tXData.Data.Read(32000)
 }
 
 /// The AI kill switch: on, every failure goes to a person without an LLM call.

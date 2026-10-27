@@ -24,6 +24,18 @@ Method TestAutoFixApplied05()
 	Do ##class(EnsLib.HL7.Message).%DeleteId(tFixed.%Id())
 }
 
+/// AUTO_FIX switched off for the class on the Settings tab: a valid, confident fix still goes to a person.
+Method TestAutoFixDisabledInSettings05()
+{
+	Do $$$AssertStatusOK(..Case("05", "BAD_FORMAT", .tRequest))
+	Set tDecision = ..Stub("AUTO_FIX", "BAD_FORMAT", 0.95, 1, "OBX(1):14", "2026-10-23 10:15", "202610231015")
+	Set tTriage = ..Triage()
+	Set tTriage.AutoFixDisabled = "MISSING_FIELD,BAD_FORMAT"
+	Do $$$AssertStatusOK(tTriage.Plan(tRequest, tDecision, .tFinal, .tOutcome, .tFixed))
+	Do ..AssertDowngraded(tFinal, tOutcome, "AUTO_FIX", "auto-fix disabled in Settings")
+	Do $$$AssertEquals(tFixed, "", "nothing built")
+}
+
 Method TestLowConfidenceEscalates05()
 {
 	Do $$$AssertStatusOK(..Case("05", "BAD_FORMAT", .tRequest))

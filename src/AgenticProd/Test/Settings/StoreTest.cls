@@ -91,6 +91,58 @@ Method TestItemSettingChecks()
 	Do $$$AssertStatusNotOK(##class(AgenticProd.Settings.Store).SaveItemSettings("other", {}), "unknown section")
 }
 
+/// Azure OpenAI / Ollama run as model_provider openai against their base_url; the label is kept
+/// in Config Store but never reaches %AI.Provider.Create.
+Method TestCompatibleKinds()
+{
+	Set tName = ..#TESTPROVIDER
+	Do $$$AssertStatusNotOK(##class(AgenticProd.Settings.Store).SaveProvider({"name":(tName), "kind":"ollama", "model":"llama3.2"}), "compatible kind needs base_url")
+	Do $$$AssertStatusOK(##class(AgenticProd.Settings.Store).SaveProvider({"name":(tName), "kind":"ollama", "model":"llama3.2", "base_url":"http://localhost:11434/v1"}))
+	Set tRow = ..Provider(tName)
+	Do $$$AssertEquals(tRow.kind, "ollama")
+	Do $$$AssertEquals(tRow."model_provider", "openai")
+	Do $$$AssertStatusOK(##class(AgenticProd.Settings.Store).SetKey(tName, "ollama"))
+	Do $$$AssertStatusOK(##class(AgenticProd.Settings.Store).ProviderSettings(tName, .tKind, .tModel, .tSettings))
+	Do $$$AssertEquals(tKind, "openai")
+	Do $$$AssertNotTrue(tSettings.%IsDefined("display_kind"), "label stripped for Provider.Create")
+	Do $$$AssertEquals(tSettings."base_url", "http://localhost:11434/v1")
+	Set tAgent = ##class(AgenticProd.Agent.PingAgent).%New()
+	Set tAgent.ProviderConfig = tName
+	Do $$$AssertStatusOK(tAgent.%Init(), "provider builds with the compatible settings")
+}
+
+/// Guardrail and agent values the Settings tab may write; the item settings are not applied.
+Method TestGuardrailChecks()
+{
+	For tOK = $LISTBUILD("EnabledTiers", "readonly,write"), $LISTBUILD("ToolTiers", "get_segment=write,validate_fix=critical"),
+		$LISTBUILD("ToolTiers", ""), $LISTBUILD("AutoFixDisabled", "BAD_FORMAT,MISSING_FIELD"), $LISTBUILD("AutoFixThreshold", 0.9),
+		$LISTBUILD("GroundingStrictness", "warn"), $LISTBUILD("DisabledSkills", "AgenticProd.Skill.CodeMapping") {
+		Do $$$AssertStatusOK(##class(AgenticProd.Settings.Store).CheckItemSetting($LIST(tOK, 1), $LIST(tOK, 2)), $LISTTOSTRING(tOK, "="))
+	}
+	For tBad = $LISTBUILD("EnabledTiers", "write"), $LISTBUILD("ToolTiers", "get_segment=readonly"), $LISTBUILD("ToolTiers", "get_segment"),
+		$LISTBUILD("AutoFixDisabled", "NOT_A_CLASS"), $LISTBUILD("AutoFixThreshold", 1.5), $LISTBUILD("GroundingStrictness", "loose"),
+		$LISTBUILD("DisabledSkills", "Some.Other.Skill") {
+		Do $$$AssertStatusNotOK(##class(AgenticProd.Settings.Store).CheckItemSetting($LIST(tBad, 1), $LIST(tBad, 2)), $LISTTOSTRING(tBad, "="))
+	}
+	Do $$$AssertStatusNotOK(##class(AgenticProd.Settings.Store).SaveItemSettings("guardrails", {"Model":"x"}), "Model is not a guardrail")
+
+	Set tTools = ##class(AgenticProd.Settings.Store).Tools()
+	Do $$$AssertEquals(tTools.%Size(), 9, "the triage agent's nine tools")
+	Set tIter = tTools.%GetIterator(), tAllRead = 1
+	While tIter.%GetNext(, .tTool) { Set:tTool.tier'="readonly" tAllRead = 0 }
+	Do $$$AssertTrue(tAllRead, "all tools readonly by default")
+	Do $$$AssertEquals(##class(AgenticProd.Settings.Store).Skills().%Size(), 2)
+	Do $$$AssertTrue(##class(AgenticProd.Settings.Store).XDataText("AgenticProd.Agent.TriageAgent", "INSTRUCTIONS") [ "Triage agent")
+
+	Do $$$AssertEquals(##class(AgenticProd.Operation.Agent).EnabledSkills(""), ##class(AgenticProd.Agent.TriageAgent).#SKILLS)
+	Do $$$AssertEquals(##class(AgenticProd.Operation.Agent).EnabledSkills("AgenticProd.Skill.CodeMapping"), "AgenticProd.Skill.HL7Repair")
+	Do $$$AssertEquals(##class(AgenticProd.Operation.Agent).EnabledSkills(##class(AgenticProd.Agent.TriageAgent).#SKILLS), " ", "all off is a blank, not the default list")
+	Set tAgent = ##class(AgenticProd.Agent.TriageAgent).%New()
+	Set tAgent.Skills = " "
+	Do $$$AssertStatusOK(tAgent.%Init())
+	Do $$$AssertEquals(tAgent.ToolManager.GetToolStatuses().%Size(), 3, "no skills: only the Tools.Base tools")
+}
+
 Method TestPrices()
 {
 	Set tModel = ..#TESTMODEL

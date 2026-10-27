@@ -40,7 +40,15 @@ Property RejectPath As %String(MAXLEN = 500) [ InitialExpression = "/home/irisow
 /// Data.Span either way.
 Property TracingEnabled As %Boolean [ InitialExpression = 0 ];
 
-Parameter SETTINGS = "AgentTarget:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},TargetConfigName:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},ApprovalTarget:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},AutoFixThreshold:Triage,AgentTimeout:Triage,RejectPath:Triage,TracingEnabled:Tracing";
+/// Error classes whose AUTO_FIX is switched off on the Settings tab, comma separated: such a
+/// proposal goes to a person.
+Property AutoFixDisabled As %String(MAXLEN = 500);
+
+/// How the grounding gate (8.6) treats an unsupported claim: off, warn (note it) or strict
+/// (ESCALATE). Stored now, read once the gate exists.
+Property GroundingStrictness As %String(VALUELIST = ",off,warn,strict") [ InitialExpression = "strict" ];
+
+Parameter SETTINGS = "AgentTarget:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},TargetConfigName:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},ApprovalTarget:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},AutoFixThreshold:Triage,AutoFixDisabled:Triage,GroundingStrictness:Triage,AgentTimeout:Triage,RejectPath:Triage,TracingEnabled:Tracing";
 
 /// Ask the agent, apply the action matrix, act, and log what was done in Data.DecisionLog.
 /// pResponse is the decision Triage acted on (the agent's, or its ESCALATE downgrade).
@@ -279,6 +287,7 @@ Method AutoFixRefusal(pRequest As AgenticProd.Msg.TriageRequest, pDecision As Ag
 {
 	Set pFixed = ""
 	Quit:pDecision.ErrorClass="IDENTITY_ISSUE" "identity issues are never auto-fixed"
+	Quit:$LISTFIND($LISTFROMSTRING(..AutoFixDisabled), pDecision.ErrorClass) "auto-fix disabled in Settings for "_pDecision.ErrorClass
 	Quit:'pDecision.Validated "agent did not report a passing validate_fix"
 	Quit:pDecision.Confidence<..AutoFixThreshold "confidence "_pDecision.Confidence_" is below AutoFixThreshold "_..AutoFixThreshold
 	Quit:pDecision.Fix.Count()=0 "no fix steps"
@@ -420,6 +429,12 @@ Storage Default
 </Value>
 <Value name="7">
 <Value>TracingEnabled</Value>
+</Value>
+<Value name="8">
+<Value>AutoFixDisabled</Value>
+</Value>
+<Value name="9">
+<Value>GroundingStrictness</Value>
 </Value>
 </Data>
 <DefaultData>TriageDefaultData</DefaultData>
