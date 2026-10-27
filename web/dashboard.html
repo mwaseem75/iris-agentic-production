@@ -35,6 +35,7 @@ button:hover, a.btn:hover { border-color: var(--accent); }
 a.btn { color: var(--accent); border: 1px solid var(--line); border-radius: 6px; padding: 4px 12px; text-decoration: none; }
 .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 22px; }
 .tiles.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.tiles.five { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .row-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin: 0 0 6px; }
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin: 0 0 18px; }
 .tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 8px 14px; color: var(--muted); }
@@ -112,7 +113,7 @@ h3 { font-size: 13px; margin: 0 0 8px; font-weight: 650; color: var(--muted); }
 details pre { font: 12px/1.4 ui-monospace, Consolas, monospace; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; overflow-x: auto; margin: 8px 0 0; }
 summary { cursor: pointer; color: var(--accent); }
 @media (max-width: 600px) {
-  .tiles, .tiles.three { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .tiles, .tiles.three, .tiles.five { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .tabs button { padding: 8px 10px; }
   .tile .value { font-size: 20px; }
   .opt { display: none; }
@@ -147,7 +148,7 @@ summary { cursor: pointer; color: var(--accent); }
     <h2 class="row-label">What happened</h2>
     <div class="tiles" id="tiles-what"></div>
     <h2 class="row-label">Trust and learning</h2>
-    <div class="tiles" id="tiles-trust"></div>
+    <div class="tiles five" id="tiles-trust"></div>
     <h2 class="row-label">Cost</h2>
     <div class="tiles three" id="tiles-cost"></div>
 
@@ -294,7 +295,7 @@ summary { cursor: pointer; color: var(--accent); }
       <form class="form" id="f-guard">
         <label>Tiers the agent may use <select name="EnabledTiers"><option value="readonly">readonly only</option><option value="readonly,write">readonly + write</option><option value="readonly,write,critical">readonly + write + critical</option></select></label>
         <label>AUTO_FIX confidence threshold <input name="AutoFixThreshold" type="number" min="0" max="1" step="0.01" required></label>
-        <label>Grounding check (used from 8.6) <select name="GroundingStrictness"><option value="strict">strict: ungrounded = ESCALATE</option><option value="warn">warn: note it</option><option value="off">off</option></select></label>
+        <label>Grounding check <select name="GroundingStrictness"><option value="enforce">enforce: ungrounded = ESCALATE</option><option value="warn">warn: record and show only</option><option value="off">off</option></select></label>
         <div class="actions edit-only"><button type="submit" class="primary">Apply</button></div>
       </form>
       <h3 class="sub">AUTO_FIX per error class</h3>
@@ -329,6 +330,18 @@ summary { cursor: pointer; color: var(--accent); }
         </table>
       </div>
       <p class="msg" id="m-prices"></p>
+    </section>
+
+    <section class="panel">
+      <h2>Memory <span class="muted">learned code mappings</span></h2>
+      <p class="muted">Every LabCodeMap entry the router uses without asking the agent, with where it came from. Revoke removes the entry and sends a review task for each message that went out with it; the same mapping is only learned again with a reviewer's note.</p>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Local code</th><th>LOINC</th><th>Origin</th><th class="opt">Provenance</th><th class="num">Routed</th><th>Status</th><th class="edit-only"></th></tr></thead>
+          <tbody id="set-memory"></tbody>
+        </table>
+      </div>
+      <p class="msg" id="m-memory"></p>
     </section>
 
     <section class="panel">
@@ -433,7 +446,8 @@ function renderSummary(s, m) {
     tile("Changed by Triage", num(s.changedByTriage), "agent proposal not applied as sent"),
     tile("Mappings learned", num(s.mappingsLearned), "approved by a reviewer"),
     tile("LLM calls saved", num(sv.calls), sv.costUsd == null ? "by learned mappings" : "~" + num(sv.tokens) + " tokens, " + money(sv.costUsd)),
-    tile("FHIR out", num(s.fhirValid) + " / " + num(s.fhirInvalid), "valid / invalid R4 bundles")
+    tile("FHIR out", num(s.fhirValid) + " / " + num(s.fhirInvalid), "valid / invalid R4 bundles"),
+    tile("Grounding", num(s.groundingPassed) + " / " + num(s.groundingCaught), "passed / caught: claims not traced to message, tools or KB")
   );
   document.getElementById("tiles-cost").replaceChildren(
     tile("LLM cost today", money(s.costToday), num(s.agentRunsToday) + " agent runs"),
@@ -592,6 +606,16 @@ function renderStory(st) {
     li.appendChild(el("span", s.title, "st"));
     li.appendChild(document.createTextNode(s.text));
     if (s.status === "waiting") { li.appendChild(document.createTextNode(" ")); li.appendChild(tag("waiting", "warn")); }
+    if (s.step === "grounding") { li.appendChild(document.createTextNode(" ")); li.appendChild(tag(s.status, s.status === "passed" ? "good" : s.status === "warned" ? "warn" : "bad")); }
+    if (s.checks && s.checks.length) {
+      var cl = el("ol");
+      s.checks.forEach(function (c) {
+        var item = el("li", c.text + " ");
+        item.appendChild(tag(c.pass ? "pass" : "fail", c.pass ? "good" : "bad"));
+        cl.appendChild(item);
+      });
+      li.appendChild(cl);
+    }
     if (s.tools && s.tools.length) {
       var sub = el("ol");
       s.tools.forEach(function (t) {
@@ -987,6 +1011,56 @@ function renderSettings(s) {
       cell(tr, b, "edit-only");
     }
     pb.appendChild(tr);
+  });
+
+  var mb = document.getElementById("set-memory");
+  mb.textContent = "";
+  s.memory.forEach(function (m) {
+    var tr = el("tr");
+    cell(tr, m.LocalCode);
+    var lc = el("span", m.Loinc);
+    if (m.Display) { lc.appendChild(el("br")); lc.appendChild(el("span", m.Display, "muted")); }
+    cell(tr, lc, "wrap-cell");
+    cell(tr, tag(m.Origin, m.Origin === "Seed" ? "other" : "good"));
+    var pv = el("span");
+    if (m.Origin === "Approved") {
+      pv.appendChild(document.createTextNode("approved by " + (m.Reviewer || "?") + " at " + m.ApprovedAt + " UTC"));
+      if (m.DecisionLogId) {
+        var a = el("a", "decision " + m.DecisionLogId);
+        a.href = "#"; a.style.marginLeft = "6px";
+        a.addEventListener("click", function (ev) { ev.preventDefault(); showTab("overview"); showStory(m.DecisionLogId); });
+        pv.appendChild(a);
+      }
+      if (m.Evidence) pv.appendChild(el("div", "evidence: " + m.Evidence.split("\n").join("; "), "muted"));
+    } else {
+      pv.appendChild(document.createTextNode("Setup seed, " + m.ApprovedAt + " UTC"));
+    }
+    if (m.Warning) { pv.appendChild(document.createTextNode(" ")); pv.appendChild(tag(m.Warning, "warn")); }
+    cell(tr, pv, "opt wrap-cell");
+    cell(tr, num(m.routed), "num");
+    var st = el("span");
+    st.appendChild(tag(m.Status, m.Status === "Active" ? "good" : "bad"));
+    if (m.Status === "Revoked") st.appendChild(el("div", (m.RevokedBy || "") + ", " + (m.RevokedAt || "") + ": " + (m.RevokeReason || ""), "muted"));
+    cell(tr, st, "wrap-cell");
+    if (edit) {
+      var box = el("span");
+      if (m.Status === "Active") {
+        var why = el("input"), rb = el("button", "Revoke");
+        why.placeholder = "reason"; why.style.width = "9em";
+        rb.type = "button"; rb.className = "danger";
+        rb.addEventListener("click", function () {
+          if (!why.value.trim()) { say("m-memory", "Give a reason to revoke " + m.LocalCode + "."); return; }
+          rb.disabled = true;
+          send("POST", "api/settings/memory/revoke", { id: m.ID, reason: why.value }).then(function (r) {
+            say("m-memory", "Revoked " + m.LocalCode + " -> " + m.Loinc + ". " + (r.note || ""), true);
+            loadSettings();
+          }).catch(function (e) { say("m-memory", e.message); rb.disabled = false; });
+        });
+        box.appendChild(why); box.appendChild(rb);
+      }
+      cell(tr, box, "edit-only");
+    }
+    mb.appendChild(tr);
   });
 
   var cb = document.getElementById("set-changes");

@@ -29,6 +29,20 @@ Method GetSensors() As %Status
 			Do ..SetSensorLabels("tool_calls_total", tRS.N, .tLabels)
 		}
 
+		Do ..SetSensorInfo("grounding_failures_total", "Agent decisions with a failed grounding check, by check (DecisionLog.GroundingFailed)", "counter")
+		Set tRS = ..Query("SELECT GroundingFailed FROM AgenticProd_Data.DecisionLog WHERE Grounded = 0")
+		While tRS.%Next() {
+			For i = 1:1:$LENGTH(tRS.GroundingFailed, ",") Set tName = $PIECE(tRS.GroundingFailed, ",", i)  Set:tName'="" tFailed(tName) = $GET(tFailed(tName)) + 1
+		}
+		Set tName = ""
+		For {
+			Set tName = $ORDER(tFailed(tName), 1, tN)
+			Quit:tName=""
+			Kill tLabels
+			Set tLabels("check") = tName
+			Do ..SetSensorLabels("grounding_failures_total", tN, .tLabels)
+		}
+
 		Do ..SetSensorInfo("unsafe_blocked_total", "Agent proposals Triage refused to carry out and sent to a person (DOWNGRADED)", "counter")
 		Do ..SetSensor("unsafe_blocked_total", ..Count("SELECT COUNT(*) AS N FROM AgenticProd_Data.DecisionLog WHERE Outcome %STARTSWITH 'DOWNGRADED:'"))
 		Do ..SetSensorInfo("llm_calls_saved_total", "Messages that passed on a reviewer-approved mapping instead of an agent run", "counter")

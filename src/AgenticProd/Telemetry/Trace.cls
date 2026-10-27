@@ -232,9 +232,14 @@ ClassMethod ToolSpan(pParent As %String, pTool As %String, pDurationMs As %Integ
 }
 
 /// "triage decision" span from pStart to now: the action matrix and what Triage did.
-ClassMethod DecisionSpan(pParent As %String, pAgent As AgenticProd.Msg.Decision, pFinal As AgenticProd.Msg.Decision, pOutcome As %String, pStart As %String, pFailed As %Boolean = 0)
+/// pGrounding (Triage.Ground) adds agentic.grounded and agentic.grounding_failures.
+ClassMethod DecisionSpan(pParent As %String, pAgent As AgenticProd.Msg.Decision, pFinal As AgenticProd.Msg.Decision, pOutcome As %String, pStart As %String, pFailed As %Boolean = 0, pGrounding As %DynamicObject = "")
 {
 	Quit:pParent=""
+	If $IsObject(pGrounding) {
+		Set tAttrs("agentic.grounded") = $SELECT(pGrounding.grounded: "true", 1: "false")
+		Set tAttrs("agentic.grounding_failures") = pGrounding.failed
+	}
 	Set tAttrs("agentic.agent_decision") = $SELECT($IsObject(pAgent): pAgent.Decision, 1: "")
 	Set tAttrs("agentic.decision") = $SELECT($IsObject(pFinal): pFinal.Decision, 1: "")
 	Set tAttrs("agentic.error_class") = $SELECT($IsObject(pFinal): pFinal.ErrorClass, 1: "")

@@ -172,14 +172,12 @@ ClassMethod CheckFix(pMsg As EnsLib.HL7.Message, pFix As %DynamicArray, Output p
 		Set pCopy = tCopy
 		Set tIter = pFix.%GetIterator()
 		While tIter.%GetNext(.tKey, .tStep) {
-			Do ..ParsePath(tStep.path, .tName, .tOcc, .tField, .tSub)
-			Set tIndex = ..FindSegment(tCopy, tName, tOcc)
-			If tIndex = 0 {
-				Do pResult.errors.%Push(tStep.path_": no segment "_tName_"("_tOcc_")")
+			Set tWhy = ..StepValue(tCopy, tStep.path, .tName, .tOcc, .tField, .tSub, .tIndex, .tCurrent)
+			If tWhy '= "" {
+				Do pResult.errors.%Push(tWhy)
 				Continue
 			}
 			Set tVPath = tIndex_":"_tField_tSub
-			Set tCurrent = tCopy.GetValueAt(tVPath)
 			If tStep.%IsDefined("from") && (tStep.from '= tCurrent) {
 				If (tName = "PID") && (..#MASKEDPID [ (","_tField_",")) Set tCurrent = "***"
 				Do pResult.errors.%Push(tStep.path_": current value is '"_tCurrent_"', fix expects '"_tStep.from_"'")
@@ -201,6 +199,105 @@ ClassMethod CheckFix(pMsg As EnsLib.HL7.Message, pFix As %DynamicArray, Output p
 		Set tSC = ex.AsStatus()
 	}
 	Quit tSC
+}
+
+/// Value at fix path pPath ("OBX(1):14") in pMsg, with the parsed path and segment index.
+/// "" when found, else why not.
+ClassMethod StepValue(pMsg As EnsLib.HL7.Message, pPath As %String, Output pName As %String, Output pOcc As %Integer, Output pField As %Integer, Output pSub As %String, Output pIndex As %Integer, Output pValue As %String) As %String [ Internal ]
+{
+	Set (pIndex, pValue) = ""
+	Quit:'..ParsePath(pPath, .pName, .pOcc, .pField, .pSub) "path '"_pPath_"' must look like OBX(1):14 or OBX(1):5.1"
+	Set pIndex = ..FindSegment(pMsg, pName, pOcc)
+	Quit:pIndex=0 pPath_": no segment "_pName_"("_pOcc_")"
+	Set pValue = pMsg.GetValueAt(pIndex_":"_pField_pSub)
+	Quit ""
+}
+
+/// Grounding gate, HL7 v2 part (called by Process.Triage for every agent decision): push
+/// {check, pass, detail} to pChecks for each claim in pDecision (the decision contract as a
+/// %DynamicObject) that can be compared with the message. pKB is the KB row of the proposed LOINC
+/// ({loinc, system, units}) or "" when it is not in the KB. A check that has nothing to compare
+/// (no specimen, no units) passes with a detail saying so.
+ClassMethod GroundingProblems(pMsg As EnsLib.HL7.Message, pDecision As %DynamicObject, pKB As %DynamicObject, pChecks As %DynamicArray) As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		If (pDecision.decision = "MAP_CODE") && $IsObject(pDecision.mapping) {
+			Set tCode = pDecision.mapping."local_code", tOBX = ""
+			For i = 1:1:pMsg.SegCount {
+				Set tSeg = pMsg.GetSegmentAt(i)
+				If $IsObject(tSeg), tSeg.Name = "OBX", tSeg.GetValueAt("3.1") = tCode Set tOBX = tSeg  Quit
+			}
+			Do ..Check(pChecks, "local_code", $IsObject(tOBX), $SELECT($IsObject(tOBX): "'"_tCode_"' is OBX-3.1 in the message", 1: "no OBX-3.1 in the message is '"_tCode_"'"))
+			If $IsObject(pKB) {
+				Set tSpecimen = ..SpecimenText(pMsg), tSystems = ..SpecimenSystems(tSpecimen)
+				If tSystems = "" {
+					Do ..Check(pChecks, "specimen", 1, $SELECT(tSpecimen = "": "no specimen (SPM-4, OBR-15) in the message; not compared", 1: "specimen '"_tSpecimen_"' not recognised; not compared"))
+				} Else {
+					Set tOK = ''$LISTFIND($LISTFROMSTRING(tSystems), pKB.system)
+					Do ..Check(pChecks, "specimen", tOK, "message specimen '"_tSpecimen_"', LOINC "_pKB.loinc_" is for "_pKB.system)
+				}
+				Set tUnits = $SELECT($IsObject(tOBX): tOBX.GetValueAt("6.1"), 1: "")
+				If (tUnits = "") || (pKB.units = "") {
+					Do ..Check(pChecks, "units", 1, "no units to compare (OBX-6 '"_tUnits_"', LOINC "_pKB.loinc_" '"_pKB.units_"')")
+				} Else {
+					// LOINC units are UCUM; senders use the same strings in another case only
+					Set tOK = ($ZCONVERT(tUnits, "L") = $ZCONVERT(pKB.units, "L"))
+					Do ..Check(pChecks, "units", tOK, "OBX-6 '"_tUnits_"', LOINC "_pKB.loinc_" expects '"_pKB.units_"'")
+				}
+			}
+		}
+		If $IsObject(pDecision.fix) && pDecision.fix.%Size() {
+			Set tBad = "", tIter = pDecision.fix.%GetIterator()
+			While tIter.%GetNext(, .tStep) {
+				Set tPath = $SELECT($IsObject(tStep): tStep.%Get("path"), 1: "")
+				Set tWhy = ..StepValue(pMsg, tPath, .tName, .tOcc, .tField, .tSub, .tIndex, .tValue)
+				If (tWhy = "") && (tStep.%Get("from") '= tValue) {
+					If (tName = "PID") && (..#MASKEDPID [ (","_tField_",")) Set tValue = "***"
+					Set tWhy = tPath_": message has '"_tValue_"', fix claims '"_tStep.%Get("from")_"'"
+				}
+				Set:tWhy'="" tBad = tBad_$SELECT(tBad '= "": "; ", 1: "")_tWhy
+			}
+			Do ..Check(pChecks, "fix_from", tBad = "", $SELECT(tBad = "": "every fix path exists and its 'from' is the message value", 1: tBad))
+		}
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// Specimen as sent: SPM-4 text (or code), else OBR-15; "" when neither has one.
+ClassMethod SpecimenText(pMsg As EnsLib.HL7.Message) As %String [ Internal ]
+{
+	Set tText = ""
+	For tRef = "SPM:4", "OBR:15" {
+		Set tIndex = ..FindSegment(pMsg, $PIECE(tRef, ":"), 1)
+		Continue:tIndex=0
+		Set tField = $PIECE(tRef, ":", 2)
+		Set tText = pMsg.GetValueAt(tIndex_":"_tField_".2")
+		Set:tText="" tText = pMsg.GetValueAt(tIndex_":"_tField_".1")
+		Quit:tText'=""
+	}
+	Quit tText
+}
+
+/// LOINC systems a sent specimen allows, comma separated; "" when the specimen is not one we
+/// can classify. SNOMED codes cover senders that send the code without text.
+ClassMethod SpecimenSystems(pSpecimen As %String) As %String [ Internal ]
+{
+	Set tText = $ZCONVERT(pSpecimen, "L")
+	Quit:(tText["serum")||(tText="119364003") "Ser/Plas,Ser"
+	Quit:(tText["plasma")||(tText="119361006") "Ser/Plas,Plas,PPP"
+	Quit:(tText["blood")||(tText="119297000") "Bld,BldV,BldA,BldC"
+	Quit:(tText["urine")||(tText="122575003") "Urine,Urine sed"
+	Quit ""
+}
+
+ClassMethod Check(pChecks As %DynamicArray, pName As %String, pPass As %Boolean, pDetail As %String) [ Internal ]
+{
+	Set tCheck = {"check":(pName), "detail":(pDetail)}
+	Do tCheck.%Set("pass", ''pPass, "boolean")
+	Do pChecks.%Push(tCheck)
 }
 
 /// Push a reason for every step that is not a meaning-preserving change. Whitelist: a TS field

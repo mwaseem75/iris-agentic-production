@@ -2,6 +2,7 @@
 /// Provider configs live in the AI Hub Config Store (AI.LLM.<name>), their API keys in the IRIS
 /// Wallet (COLLECTION.<name>), referenced as secret://; agent, budget and mode values are
 /// production item settings. Keys are write-only: nothing here returns one.
+/// Learned mappings (Data.LearnedMapping) are listed and revoked here too, as memory.
 /// Every change is written to Data.SettingsAudit. Callers check the edit resource (UI.REST).
 Class AgenticProd.Settings.Store Extends %RegisteredObject
 {
@@ -324,7 +325,7 @@ ClassMethod CheckItemSetting(pField As %String, pValue As %String) As %Status
 			"Mode": (pValue = "live") || (pValue = "replay"),
 			"KillSwitch": (pValue = 0) || (pValue = 1),
 			"AutoFixThreshold": $ISVALIDNUM(pValue) && (pValue >= 0) && (pValue <= 1),
-			"GroundingStrictness": (",off,warn,strict," [ (","_pValue_",")) && (pValue '= ""),
+			"GroundingStrictness": (",off,warn,enforce," [ (","_pValue_",")) && (pValue '= ""),
 			"EnabledTiers": (pValue = "readonly") || (pValue = "readonly,write") || (pValue = "readonly,write,critical"),
 			"ToolTiers": ..ListOK(pValue, "tiers"),
 			"DisabledSkills": ..ListOK(pValue, "skills"),
@@ -452,6 +453,97 @@ ClassMethod SavePrice(pData As %DynamicObject) As %Status
 		Set tSC = ex.AsStatus()
 	}
 	Quit tSC
+}
+
+/// Learned mappings, Active first then newest, each with "routed": the header IDs of messages
+/// that went out with it since it was learned (see RoutedWith).
+ClassMethod Memory() As %DynamicArray
+{
+	Set tRows = ##class(AgenticProd.UI.REST).Rows("SELECT ID, LocalCode, Source, Loinc, Display, Origin, DecisionLogId, AgentSessionId, Evidence, Reviewer, ApprovedAt, Warning, Status, RevokedBy, RevokedAt, RevokeReason FROM AgenticProd_Data.LearnedMapping ORDER BY CASE WHEN Status = 'Active' THEN 0 ELSE 1 END, ID DESC")
+	Set tIter = tRows.%GetIterator()
+	While tIter.%GetNext(, .tRow) {
+		Do tRow.%Set("routed", ..RoutedWith(tRow.LocalCode, tRow.ApprovedAt, tRow.DecisionLogId).%Size())
+	}
+	Quit tRows
+}
+
+/// Header IDs of messages routed with a mapping of pCode learned at pSince: the ones that passed
+/// LabRouter on it (Data.SavedCall) and the failed message its approval resent (DecisionLog row
+/// pLogId). Their FHIR results are in the same sessions. A seed has no such record: [].
+ClassMethod RoutedWith(pCode As %String, pSince As %String, pLogId As %String = "") As %DynamicArray
+{
+	Set tList = []
+	If pLogId '= "" {
+		Set tLog = ##class(AgenticProd.Data.DecisionLog).%OpenId(pLogId)
+		If $IsObject(tLog), tLog.Outcome = "APPROVED" Do tList.%Push(tLog.HeaderId)  Set tSeen(tLog.HeaderId) = ""
+	}
+	// SavedCall.Note writes after the approval; ApprovedAt and CreatedAt are both UTC
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT HeaderId FROM AgenticProd_Data.SavedCall WHERE CreatedAt >= ? AND ','||LocalCodes||',' [ ? ORDER BY ID", pSince, ","_pCode_",")
+	If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message))
+	While tRS.%Next() {
+		Continue:$DATA(tSeen(tRS.HeaderId))
+		Set tSeen(tRS.HeaderId) = ""
+		Do tList.%Push(tRS.HeaderId)
+	}
+	Quit tList
+}
+
+/// Revoke learned mapping pId with pReason: remove its LabCodeMap entry (when it still holds this
+/// LOINC), mark the row Revoked, and send a review task for every message routed with it
+/// (MemoryReview). Logged in SettingsAudit. pNote says how many tasks went out.
+ClassMethod RevokeMapping(pId As %String, pReason As %String, Output pNote As %String) As %Status
+{
+	Set pNote = ""
+	Set tSC = $$$OK
+	Try {
+		Set pReason = $ZSTRIP(pReason, "<>W")
+		If pReason = "" $$$ThrowStatus($$$ERROR($$$GeneralError, "A reason is required to revoke a mapping"))
+		Set tRow = ##class(AgenticProd.Data.LearnedMapping).%OpenId(pId)
+		If '$IsObject(tRow) $$$ThrowStatus($$$ERROR($$$GeneralError, "No learned mapping "_pId))
+		If tRow.Status '= "Active" $$$ThrowStatus($$$ERROR($$$GeneralError, "Mapping "_pId_" is already revoked"))
+		Set tTable = ##class(AgenticProd.Tools.Mapping).#CODEMAP
+		// A newer entry for the code is another mapping's; only this LOINC is taken out
+		Set tCurrent = ##class(Ens.Util.FunctionSet).Lookup(tTable, tRow.LocalCode)
+		If $PIECE(tCurrent, "^") = tRow.Loinc $$$ThrowOnError(##class(Ens.Util.LookupTable).%RemoveValue(tTable, tRow.LocalCode))
+		Set tRow.Status = "Revoked", tRow.RevokedBy = $USERNAME, tRow.RevokedAt = $ZDATETIME($ZTIMESTAMP, 3), tRow.RevokeReason = $EXTRACT(pReason, 1, 1000)
+		$$$ThrowOnError(tRow.%Save())
+
+		Set tHeaders = ..RoutedWith(tRow.LocalCode, tRow.ApprovedAt, tRow.DecisionLogId)
+		Set tTasks = ##class(%ListOfObjects).%New()
+		Set tIter = tHeaders.%GetIterator()
+		While tIter.%GetNext(, .tHeaderId) {
+			Do tTasks.Insert(..RevokeTask(tRow, tHeaderId))
+		}
+		Set tSent = 0
+		If tTasks.Count() {
+			Set tSendSC = ##class(AgenticProd.Service.MemoryReview).Send(tTasks, .tSent)
+			If $$$ISERR(tSendSC) Set pNote = (tTasks.Count() - tSent)_" review task(s) not sent: "_$SYSTEM.Status.GetErrorText(tSendSC)_". "
+		}
+		Set pNote = pNote_tSent_" review task(s) sent for messages routed with "_tRow.LocalCode_" -> "_tRow.Loinc_"."
+		$$$ThrowOnError(##class(AgenticProd.Data.SettingsAudit).Log("memory", tRow.LocalCode, "mapping", tRow.Loinc_" "_tRow.Display, "revoked: "_pReason_" ("_tSent_" review tasks)"))
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// Review task for header pHeaderId, routed with revoked mapping pRow.
+ClassMethod RevokeTask(pRow As AgenticProd.Data.LearnedMapping, pHeaderId As %Integer) As AgenticProd.Msg.ApprovalTask [ Internal ]
+{
+	Set tTask = ##class(AgenticProd.Msg.ApprovalTask).%New()
+	Set tTask.HeaderId = pHeaderId, tTask.Decision = "ESCALATE", tTask.ErrorClass = "UNMAPPED_CODE"
+	Set tTask.LocalCode = pRow.LocalCode, tTask.Loinc = pRow.Loinc, tTask.Display = pRow.Display
+	Set tTask.Reason = "mapping revoked, please review: "_pRow.LocalCode_" -> "_pRow.Loinc_" ("_pRow.RevokeReason_")"
+	Set tTask.%Actions = "Reviewed"
+	Set tTask.%Subject = "Mapping revoked, please review message header "_pHeaderId
+	Set tHeader = ##class(Ens.MessageHeader).%OpenId(pHeaderId)
+	Set tFHIR = $SELECT($IsObject(tHeader): ##class(AgenticProd.UI.REST).FHIRStatus(tHeader.SessionId), 1: "")
+	Set tNL = $CHAR(13,10)
+	Set tTask.%Message = "Message header "_pHeaderId_" was sent with "_pRow.LocalCode_" -> "_pRow.Loinc_" "_pRow.Display_"."_tNL
+		_"That mapping was revoked by "_pRow.RevokedBy_" at "_pRow.RevokedAt_" (UTC): "_pRow.RevokeReason_tNL
+		_$SELECT(tFHIR '= "": "FHIR bundle for the same session: "_tFHIR_tNL, 1: "")
+		_"Check the result at the receiver and correct it there if the code was wrong."
+	Quit tTask
 }
 
 ClassMethod ChangeLog(pLimit As %Integer = 50) As %DynamicArray

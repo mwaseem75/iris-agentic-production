@@ -24,6 +24,9 @@ Property ResultLength As %Integer;
 /// validate_fix only: the verdict it returned (PASS, PASS_NEEDS_REVIEW, FAIL, REFUSED).
 Property Verdict As %String(MAXLEN = 30);
 
+/// search_loinc only: the LOINC codes it returned, comma separated, for the grounding gate.
+Property ResultSummary As %String(MAXLEN = 2000);
+
 Property CreatedAt As %TimeStamp [ InitialExpression = {$ZDATETIME($ZTIMESTAMP, 3)} ];
 
 Index HeaderIdx On HeaderId;
@@ -33,7 +36,7 @@ Index SessionIdx On AgentSessionId;
 Index ToolIdx On Tool [ Type = bitmap ];
 
 /// Save one call. pArgs may be a %DynamicObject or JSON text.
-ClassMethod Log(pTool As %String, pArgs, pStatus As %String, pDurationMs As %Integer = "", pResultLength As %Integer = "", pErrorText As %String = "", pHeaderId As %Integer = "", pAgentSessionId As %String = "", Output pId As %String, pVerdict As %String = "") As %Status
+ClassMethod Log(pTool As %String, pArgs, pStatus As %String, pDurationMs As %Integer = "", pResultLength As %Integer = "", pErrorText As %String = "", pHeaderId As %Integer = "", pAgentSessionId As %String = "", Output pId As %String, pVerdict As %String = "", pResultSummary As %String = "") As %Status
 {
 	Set pId = ""
 	Set tSC = $$$OK
@@ -48,6 +51,7 @@ ClassMethod Log(pTool As %String, pArgs, pStatus As %String, pDurationMs As %Int
 		Set tRow.HeaderId = pHeaderId
 		Set tRow.AgentSessionId = pAgentSessionId
 		Set tRow.Verdict = pVerdict
+		Set tRow.ResultSummary = $EXTRACT(pResultSummary, 1, 2000)
 		$$$ThrowOnError(tRow.%Save())
 		Set pId = tRow.%Id()
 	} Catch ex {
@@ -62,6 +66,18 @@ ClassMethod VerdictOf(pResult As %String) As %String
 {
 	Set tMatch = ##class(%Regex.Matcher).%New("""result\\?""\s*:\s*\\?""(PASS_NEEDS_REVIEW|PASS|FAIL|REFUSED)", pResult)
 	Quit $SELECT(tMatch.Locate(): tMatch.Group(1), 1: "")
+}
+
+/// LOINC codes in a search_loinc result text, comma separated, in result order; "" when none.
+/// The result may be JSON-escaped like a validate_fix one.
+ClassMethod LoincCodesOf(pResult As %String) As %String
+{
+	Set tCodes = ""
+	Set tMatch = ##class(%Regex.Matcher).%New("""loinc\\?""\s*:\s*\\?""(\d{1,7}-\d)", pResult)
+	While tMatch.Locate() {
+		Set:'$LISTFIND($LISTFROMSTRING(tCodes), tMatch.Group(1)) tCodes = tCodes_$SELECT(tCodes '= "": ",", 1: "")_tMatch.Group(1)
+	}
+	Quit tCodes
 }
 
 /// Fill Verdict on validate_fix rows logged before it was recorded, from the saved AI Hub
@@ -151,6 +167,9 @@ Storage Default
 </Value>
 <Value name="11">
 <Value>Verdict</Value>
+</Value>
+<Value name="12">
+<Value>ResultSummary</Value>
 </Value>
 </Data>
 <DataLocation>^AgenticProd.Data.ToolCallD</DataLocation>

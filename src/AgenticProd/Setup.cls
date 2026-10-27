@@ -102,6 +102,9 @@ ClassMethod SeedLabCodeMap() As %Status
 		$LISTBUILD("CULT-U", "630-4", "Bacteria identified in Urine by Culture") {
 		Set tSC = ##class(Ens.Util.LookupTable).%UpdateValue("LabCodeMap", $LIST(tRow, 1), $LIST(tRow, 2)_"^"_$LIST(tRow, 3))
 		Quit:$$$ISERR(tSC)
+		// Seeds are memory too: listed with their origin and revocable like learned ones
+		Set tSC = ##class(AgenticProd.Data.LearnedMapping).Seed($LIST(tRow, 1), $LIST(tRow, 2), $LIST(tRow, 3))
+		Quit:$$$ISERR(tSC)
 	}
 	Quit tSC
 }
@@ -227,7 +230,7 @@ ClassMethod DashboardSetup() As %Status
 	Set tSC = $$$OK
 	Try {
 		$$$ThrowOnError(..CreateDashboardApp($NAMESPACE))
-		Set tSql = "GRANT SELECT ON AgenticProd_Data.DecisionLog, AgenticProd_Data.Usage, AgenticProd_Data.EvalRun, AgenticProd_Data.EvalResult, AgenticProd_Data.ToolCall, AgenticProd_Data.Span, AgenticProd_Data.SavedCall, AgenticProd_Data.PriceTable, AgenticProd_Data.SettingsAudit, AgenticProd_Msg.ApprovalTask, AgenticProd_Msg.FHIRResult, AgenticProd_Msg.TriageRequest, Ens.MessageHeader, EnsLib_Workflow.TaskResponse TO "_..#DASHROLE
+		Set tSql = "GRANT SELECT ON AgenticProd_Data.DecisionLog, AgenticProd_Data.Usage, AgenticProd_Data.EvalRun, AgenticProd_Data.EvalResult, AgenticProd_Data.ToolCall, AgenticProd_Data.Span, AgenticProd_Data.SavedCall, AgenticProd_Data.PriceTable, AgenticProd_Data.SettingsAudit, AgenticProd_Data.LearnedMapping, AgenticProd_Msg.ApprovalTask, AgenticProd_Msg.FHIRResult, AgenticProd_Msg.TriageRequest, Ens.MessageHeader, EnsLib_Workflow.TaskResponse TO "_..#DASHROLE
 		Set tRS = ##class(%SQL.Statement).%ExecDirect(, tSql)
 		If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message_" ("_tSql_")"))
 	} Catch ex {

@@ -58,7 +58,7 @@ Parameter RESETDIRS = "/home/irisowner/dev/data/in/,/home/irisowner/dev/data/out
 
 /// Clean state for a demo or a recording, without asking: deletes live (non-eval) DecisionLog,
 /// Usage, ToolCall, Span, SavedCall and FHIRResult rows and their Workflow tasks, purges every
-/// production message, resets LabCodeMap to the Setup seed and empties RESETDIRS. EvalRun,
+/// production message, resets LabCodeMap and LearnedMapping to the Setup seed and empties RESETDIRS. EvalRun,
 /// EvalResult, eval Usage rows and the live runs replay reads (Usage rows with a CaseId) stay.
 /// Writes and logs what it removed.
 ClassMethod Reset() As %Status
@@ -69,6 +69,8 @@ ClassMethod Reset() As %Status
 		// Bodies too and no integrity check: the point is an empty message archive, open sessions included
 		$$$ThrowOnError(##class(Ens.Purge).PurgeMessagesByDate(0, .tPurged, 0, 1))
 		Set tCount("messages") = +$GET(tPurged)
+		// Provenance goes with the DecisionLog rows it points at; the seed rows come back below
+		Set tCount("LearnedMapping") = ..Exec("DELETE FROM AgenticProd_Data.LearnedMapping")
 		Do ##class(Ens.Util.LookupTable).%ClearTable("LabCodeMap")
 		$$$ThrowOnError(##class(AgenticProd.Setup).SeedLabCodeMap())
 		Set tCount("files") = ..ClearFolders(..#RESETDIRS)

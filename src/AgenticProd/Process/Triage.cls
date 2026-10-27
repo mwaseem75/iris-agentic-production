@@ -7,8 +7,8 @@ Include Ensemble
 Class AgenticProd.Process.Triage Extends Ens.BusinessProcess
 {
 
-/// TriageRequest.Format = class with ClassMethod CheckFix(body, fixArray, .result, .fixedCopy),
-/// see Tools.HL7.CheckFix.
+/// TriageRequest.Format = class with ClassMethods CheckFix(body, fixArray, .result, .fixedCopy)
+/// and GroundingProblems(body, decision, kbRow, checks), see Tools.HL7.
 Parameter CHECKERS = "HL7v2=AgenticProd.Tools.HL7";
 
 /// Error classes only the sender can fix, so REJECT is allowed for them alone.
@@ -44,9 +44,9 @@ Property TracingEnabled As %Boolean [ InitialExpression = 0 ];
 /// proposal goes to a person.
 Property AutoFixDisabled As %String(MAXLEN = 500);
 
-/// How the grounding gate (8.6) treats an unsupported claim: off, warn (note it) or strict
-/// (ESCALATE). Stored now, read once the gate exists.
-Property GroundingStrictness As %String(VALUELIST = ",off,warn,strict") [ InitialExpression = "strict" ];
+/// How the grounding gate treats a claim it cannot trace to the message, a tool result or the
+/// KB: off, warn (record it and show it to the reviewer) or enforce (ESCALATE, proposal kept).
+Property GroundingStrictness As %String(VALUELIST = ",off,warn,enforce") [ InitialExpression = "enforce" ];
 
 Parameter SETTINGS = "AgentTarget:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},TargetConfigName:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},ApprovalTarget:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},AutoFixThreshold:Triage,AutoFixDisabled:Triage,GroundingStrictness:Triage,AgentTimeout:Triage,RejectPath:Triage,TracingEnabled:Tracing";
 
@@ -85,12 +85,14 @@ Method OnRequest(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As 
 		// loads no OTel library (a live run with spans in that job ended in a segfault once)
 		If $DATA(tAgentStart) Do ##class(AgenticProd.Telemetry.Trace).AgentSpans(pRequest.TraceParent, pRequest, $SELECT(tNoAnswer = "": tDecision, 1: ""), tAgentStart, tAgentEnd, tNoAnswer)
 		Set tPlanStart = $ZTIMESTAMP
-		$$$ThrowOnError(..Plan(pRequest, tDecision, .pResponse, .tOutcome, .tFixed))
+		// Only an agent's own answer is checked; a system ESCALATE (budget, kill switch) has no claims
+		Set tCheck = (tNoAnswer = "") && $DATA(tAgentStart) && ((tDecision.AgentSessionId '= "") || (tDecision.Decision '= "ESCALATE"))
+		$$$ThrowOnError(..Decide(pRequest, tDecision, tCheck, .pResponse, .tOutcome, .tFixed, .tGrounding))
 		// Logged before the send: the row ID is the approval task's completion key
-		$$$ThrowOnError(##class(AgenticProd.Data.DecisionLog).Record(pRequest, pResponse, .tLogId, tOutcome, $SELECT(tOutcome = "APPLIED": tFixed, 1: "")))
+		$$$ThrowOnError(##class(AgenticProd.Data.DecisionLog).Record(pRequest, pResponse, .tLogId, tOutcome, $SELECT(tOutcome = "APPLIED": tFixed, 1: ""), tGrounding))
 		Set tSendSC = ..Dispatch(pRequest, pResponse, tOutcome, tFixed, tLogId)
 		If $$$ISERR(tSendSC) $$$ThrowOnError(..SetOutcome(tLogId, "ERROR:"_tOutcome))
-		Do ##class(AgenticProd.Telemetry.Trace).DecisionSpan(pRequest.TraceParent, tDecision, pResponse, tOutcome, tPlanStart, $$$ISERR(tSendSC))
+		Do ##class(AgenticProd.Telemetry.Trace).DecisionSpan(pRequest.TraceParent, tDecision, pResponse, tOutcome, tPlanStart, $$$ISERR(tSendSC), tGrounding)
 		$$$TRACE("Triage header "_pRequest.HeaderId_": agent "_tDecision.Decision_", outcome "_tOutcome)
 		$$$ThrowOnError(tSendSC)
 	} Catch ex {
@@ -104,16 +106,40 @@ Method OnRequest(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As 
 	Quit tSC
 }
 
+/// Grounding gate (when pCheck) then the action matrix; Plan's outputs plus pGrounding (Ground's
+/// result, "" when not checked). In warn mode a failure only adds an "ungrounded" evidence line;
+/// in enforce mode Plan downgrades the proposal too. Sends nothing and logs nothing.
+Method Decide(pRequest As AgenticProd.Msg.TriageRequest, pDecision As AgenticProd.Msg.Decision, pCheck As %Boolean, Output pFinal As AgenticProd.Msg.Decision, Output pOutcome As %String, Output pFixed As %Persistent, Output pGrounding As %DynamicObject) As %Status
+{
+	Set (pGrounding, tUngrounded) = ""
+	Set tSC = $$$OK
+	Try {
+		If pCheck {
+			$$$ThrowOnError(..Ground(pRequest, pDecision, .pGrounding))
+			Set:$IsObject(pGrounding)&&'pGrounding.grounded&&(..GroundingStrictness'="warn") tUngrounded = pGrounding.summary
+		}
+		$$$ThrowOnError(..Plan(pRequest, pDecision, .pFinal, .pOutcome, .pFixed, tUngrounded))
+		If $IsObject(pGrounding) && 'pGrounding.grounded Do pFinal.Evidence.Insert("ungrounded ("_..GroundingStrictness_" mode): "_pGrounding.summary)
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
 /// Apply the action matrix. pFinal is the agent's decision, or an ESCALATE copy whose reason
 /// starts "downgraded from X: why". pOutcome is APPLIED, SENT_FOR_APPROVAL, RESENT, REJECTED or
 /// DOWNGRADED:X. On APPLIED pFixed is the new, saved message. Sends nothing and logs nothing.
-Method Plan(pRequest As AgenticProd.Msg.TriageRequest, pDecision As AgenticProd.Msg.Decision, Output pFinal As AgenticProd.Msg.Decision, Output pOutcome As %String, Output pFixed As %Persistent) As %Status
+/// pUngrounded: the grounding gate's failures in enforce mode; any action but ESCALATE is downgraded.
+Method Plan(pRequest As AgenticProd.Msg.TriageRequest, pDecision As AgenticProd.Msg.Decision, Output pFinal As AgenticProd.Msg.Decision, Output pOutcome As %String, Output pFixed As %Persistent, pUngrounded As %String = "") As %Status
 {
 	Set (pFinal, pOutcome, pFixed) = ""
 	Set tSC = $$$OK
 	Try {
 		Set tAction = pDecision.Decision, tWhy = ""
-		If tAction = "AUTO_FIX" {
+		If (pUngrounded '= "") && (tAction '= "ESCALATE") {
+			// Before AUTO_FIX builds its copy: an ungrounded fix is never even saved
+			Set tWhy = "ungrounded: "_pUngrounded
+		} ElseIf tAction = "AUTO_FIX" {
 			// The agent read the flagged text, so its fix may be the injected instruction
 			Set tWhy = $SELECT(pRequest.Flags.Count(): "suspicious instruction in the message text ("_..FlagRefs(pRequest)_")", 1: ..AutoFixRefusal(pRequest, pDecision, .pFixed))
 			Set pOutcome = "APPLIED"
@@ -145,6 +171,145 @@ Method Plan(pRequest As AgenticProd.Msg.TriageRequest, pDecision As AgenticProd.
 	Quit tSC
 }
 
+/// Grounding gate: every claim in pDecision must trace to the message, this agent session's
+/// tool results or the LOINC KB. pResult is "" when GroundingStrictness is off, else
+/// {strictness, grounded, failed (check names), summary (what failed), checks:[{check, pass,
+/// detail}]}. Format-specific checks come from the format's checker (CHECKERS). Acts on nothing.
+Method Ground(pRequest As AgenticProd.Msg.TriageRequest, pDecision As AgenticProd.Msg.Decision, Output pResult As %DynamicObject) As %Status
+{
+	Set pResult = ""
+	Quit:..GroundingStrictness="off" $$$OK
+	Set tSC = $$$OK
+	Try {
+		$$$ThrowOnError(pDecision.%JSONExportToString(.tJSON))
+		Set tDecision = ##class(%DynamicObject).%FromJSON(tJSON)
+		Set tChecks = []
+		Do ..SessionResults(pDecision.AgentSessionId, .tToolText, .tSearched)
+		Set tKB = ""
+		If (tDecision.decision = "MAP_CODE") && $IsObject(tDecision.mapping) {
+			Set tLoinc = tDecision.mapping.loinc, tCode = tDecision.mapping."local_code"
+			Set tKB = ..KBEntry(tLoinc)
+			Do ..AddCheck(tChecks, "loinc_in_kb", $IsObject(tKB), "LOINC "_tLoinc_$SELECT($IsObject(tKB): " is in the KB ("_tKB.system_", "_tKB.units_")", 1: " is not in the LOINC KB"))
+			Do ..AddCheck(tChecks, "loinc_from_search", $LISTFIND($LISTFROMSTRING(tSearched), tLoinc) > 0,
+				$SELECT(tSearched = "": "no search_loinc result in this agent session", 1: "search_loinc in this session returned "_$TRANSLATE(tSearched, ",", " ")))
+			Set tRevoked = ##class(AgenticProd.Data.LearnedMapping).RevokedNote(tCode, tLoinc)
+			Do ..AddCheck(tChecks, "not_revoked", tRevoked = "", $SELECT(tRevoked = "": "mapping was never revoked", 1: tCode_" -> "_tLoinc_" was revoked by "_tRevoked))
+		}
+		Set tChecker = ..CheckerFor(pRequest.Format), tMsgText = ""
+		If $$$ISOK(##class(AgenticProd.Tools.Base).OpenBody(pRequest.HeaderId, .tBody)) {
+			If tChecker '= "" $$$ThrowOnError($CLASSMETHOD(tChecker, "GroundingProblems", tBody, tDecision, tKB, tChecks))
+			Set tMsgText = $SELECT(tBody.%Extends("EnsLib.EDI.Document"): tBody.OutputToString(), 1: "")
+			// The agent saw the masked copy, so a quote of a masked value is grounded too
+			Set tMasker = ##class(AgenticProd.Tools.Base).MaskerFor($CLASSNAME(tBody))
+			If tMasker '= "", $$$ISOK($CLASSMETHOD(tMasker, "MaskedText", tBody, .tMasked)) Set tMsgText = tMsgText_$CHAR(10)_tMasked
+		} Else {
+			Do ..AddCheck(tChecks, "message", 0, "failed message could not be opened")
+		}
+		Set tUnverified = ..UnverifiedQuotes(tDecision, tMsgText_$CHAR(10)_pRequest.ErrorText_$CHAR(10)_tToolText)
+		Do ..AddCheck(tChecks, "evidence_quotes", tUnverified = "", $SELECT(tUnverified = "": "every quoted value is in the message or a tool result", 1: "unverified quote: "_tUnverified))
+
+		Set (tFailed, tSummary) = "", tIter = tChecks.%GetIterator()
+		While tIter.%GetNext(, .tCheck) {
+			Continue:tCheck.pass
+			Set tFailed = tFailed_$SELECT(tFailed '= "": ",", 1: "")_tCheck.check
+			Set tSummary = tSummary_$SELECT(tSummary '= "": "; ", 1: "")_tCheck.check_" ("_tCheck.detail_")"
+		}
+		Set pResult = {"strictness":(..GroundingStrictness), "failed":(tFailed), "summary":(tSummary), "checks":(tChecks)}
+		Do pResult.%Set("grounded", tFailed = "", "boolean")
+		$$$TRACE("Grounding header "_pRequest.HeaderId_": "_$SELECT(tFailed = "": "grounded", 1: "failed "_tFailed))
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// Text of every tool result in AI Hub session pSessionId (masked as the tools return it) and
+/// the LOINC codes search_loinc returned, comma separated: from ToolCall.ResultSummary, or from
+/// the saved session for calls logged before the summary was kept.
+ClassMethod SessionResults(pSessionId As %String, Output pText As %String, Output pSearched As %String) [ Internal ]
+{
+	Set (pText, pSearched, tFromSession) = ""
+	Quit:pSessionId=""
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT ResultSummary FROM AgenticProd_Data.ToolCall WHERE AgentSessionId = ? AND Tool = 'search_loinc' AND Status = 'OK'", pSessionId)
+	While tRS.%Next() {
+		Set:tRS.ResultSummary'="" pSearched = pSearched_$SELECT(pSearched '= "": ",", 1: "")_tRS.ResultSummary
+	}
+	Set tSession = ##class(%AI.Agent.Session).%OpenId(pSessionId)
+	Quit:'$IsObject(tSession)
+	Set tStream = tSession.ContextData
+	Quit:'$IsObject(tStream)
+	Do tStream.Rewind()
+	Set tContext = ##class(%DynamicObject).%FromJSON(tStream)
+	Quit:'$IsObject(tContext.messages)
+	Set tIter = tContext.messages.%GetIterator()
+	While tIter.%GetNext(, .tMsg) {
+		If $IsObject(tMsg."tool_calls") {
+			Set tCalls = tMsg."tool_calls".%GetIterator()
+			While tCalls.%GetNext(, .tCall) {
+				Set:tCall.name="search_loinc" tSearch(tCall.id) = ""
+			}
+		} ElseIf tMsg.role = "tool" {
+			Set pText = pText_$CHAR(10)_tMsg.content
+			Set tId = tMsg."tool_call_id"
+			If (tId '= "") && $DATA(tSearch(tId)) {
+				Set tCodes = ##class(AgenticProd.Data.ToolCall).LoincCodesOf(tMsg.content)
+				Set:tCodes'="" tFromSession = tFromSession_$SELECT(tFromSession '= "": ",", 1: "")_tCodes
+			}
+		}
+	}
+	Set:pSearched="" pSearched = tFromSession
+}
+
+/// {loinc, system, units, display} of pLoinc in the search_loinc KB, "" when it is not there.
+ClassMethod KBEntry(pLoinc As %String) As %DynamicObject [ Internal ]
+{
+	Quit:pLoinc="" ""
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 1 loinc, ""system"" AS Sys, units, text FROM "_##class(AgenticProd.Tools.Mapping).#LOINCTABLE_" WHERE loinc = ?", pLoinc)
+	If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message))
+	Quit:'tRS.%Next() ""
+	Quit {"loinc":(tRS.loinc), "system":(tRS.Sys), "units":(tRS.units), "display":($PIECE(tRS.text, " | "))}
+}
+
+/// Quoted values ('...' or "...") in pDecision's evidence that appear neither in pSources nor
+/// among the decision's own proposed values (fix "to", mapping), as a list; "" when none.
+/// Case and runs of spaces are ignored.
+ClassMethod UnverifiedQuotes(pDecision As %DynamicObject, pSources As %String) As %String
+{
+	Quit:'$IsObject(pDecision.evidence) ""
+	Set tSources = ..Squeeze(pSources)
+	If $IsObject(pDecision.mapping) Set tSources = tSources_" "_..Squeeze(pDecision.mapping.loinc_" "_pDecision.mapping.display_" "_pDecision.mapping."local_code")
+	If $IsObject(pDecision.fix) {
+		Set tIter = pDecision.fix.%GetIterator()
+		While tIter.%GetNext(, .tStep) {
+			Set:$IsObject(tStep) tSources = tSources_" "_..Squeeze(tStep.%Get("to"))
+		}
+	}
+	Set tOut = "", tIter = pDecision.evidence.%GetIterator()
+	While tIter.%GetNext(, .tLine) {
+		// A quote opens after a non-word character, so "doesn't" or "it's" is not one
+		Set tMatch = ##class(%Regex.Matcher).%New("(?:^|[^\w])(?:'([^']+)'|""([^""]+)"")(?!\w)", tLine)
+		While tMatch.Locate() {
+			Set tQuote = tMatch.Group(1)_tMatch.Group(2)
+			Continue:$ZSTRIP(tQuote, "<>W")=""
+			Continue:tSources[..Squeeze(tQuote)
+			Set tOut = tOut_$SELECT(tOut '= "": ", ", 1: "")_"'"_$EXTRACT(tQuote, 1, 80)_"'"
+		}
+	}
+	Quit tOut
+}
+
+ClassMethod Squeeze(pText As %String) As %String [ Internal ]
+{
+	Quit $ZCONVERT($ZSTRIP(pText, "<>=W"), "L")
+}
+
+ClassMethod AddCheck(pChecks As %DynamicArray, pName As %String, pPass As %Boolean, pDetail As %String) [ Internal ]
+{
+	Set tCheck = {"check":(pName), "detail":(pDetail)}
+	Do tCheck.%Set("pass", ''pPass, "boolean")
+	Do pChecks.%Push(tCheck)
+}
+
 /// The reviewer's answer to the ApprovalTask sent for DecisionLog row pCompletionKey.
 Method OnResponse(request As %Library.Persistent, ByRef response As %Library.Persistent, callrequest As %Library.Persistent, callresponse As %Library.Persistent, pCompletionKey As %String) As %Status
 {
@@ -168,7 +333,8 @@ Method OnResponse(request As %Library.Persistent, ByRef response As %Library.Per
 /// Act on pAnswer to pTask and record it on DecisionLog row pLogId (Outcome, Reviewer).
 /// EVALACTION on an eval row: Outcome unchanged, nothing done. Reject: REVIEW_REJECTED.
 /// MAP_CODE approved: ApplyMapping with the reviewer's Loinc, APPROVED and pResend = the failed
-/// header to resend; a bad LOINC is REVIEW_BAD_LOINC, nothing written.
+/// header to resend; a bad LOINC is REVIEW_BAD_LOINC, a revoked mapping approved without a Note
+/// is REVIEW_REVOKED, nothing written for either.
 /// ESCALATE approved: with a fix, CheckFix again; on PASS or PASS_NEEDS_REVIEW pFixed is the
 /// new, saved message to send (REVIEW_APPLIED), else REVIEW_FIX_FAILED. Without a fix,
 /// REVIEW_CLOSED. Sends nothing.
@@ -189,13 +355,22 @@ Method Review(pRequest As AgenticProd.Msg.TriageRequest, pTask As AgenticProd.Ms
 		} ElseIf pTask.Decision = "MAP_CODE" {
 			Set tLoinc = $ZSTRIP(pAnswer.%FormValues.GetAt("Loinc"), "<>W")
 			Set:tLoinc="" tLoinc = pTask.Loinc
-			$$$ThrowOnError(..ApplyMapping(pTask, tLoinc, .tWhy))
-			If tWhy = "" {
-				Set tLog.Loinc = tLoinc, tLog.Outcome = "APPROVED", pResend = pRequest.HeaderId
+			Set tNote = $ZSTRIP(pAnswer.%FormValues.GetAt("Note"), "<>W")
+			Set tRevoked = ##class(AgenticProd.Data.LearnedMapping).RevokedNote(pTask.LocalCode, tLoinc)
+			If (tRevoked '= "") && (tNote = "") {
+				// A revoked memory comes back only with a person's stated reason, never by a click
+				Set tLog.Outcome = "REVIEW_REVOKED", tLog.ReviewNote = pTask.LocalCode_" -> "_tLoinc_" was revoked ("_tRevoked_"); approve again with a Note to learn it again"
+				$$$LOGWARNING("Reviewer "_pAnswer.%UserName_" approved revoked mapping "_pTask.LocalCode_" -> "_tLoinc_" without a note; not applied")
 			} Else {
-				// The message stays failed; the reviewer can answer a new task, not this one
-				Set tLog.Outcome = "REVIEW_BAD_LOINC", tLog.ReviewNote = tWhy
-				$$$LOGWARNING("Reviewer "_pAnswer.%UserName_" approved '"_tLoinc_"' for "_pTask.LocalCode_" (header "_pTask.HeaderId_"), not applied: "_tWhy)
+				$$$ThrowOnError(..ApplyMapping(pTask, tLoinc, .tWhy, pLogId, pAnswer.%UserName, tNote, .tWarning))
+				If tWhy = "" {
+					Set tLog.Loinc = tLoinc, tLog.Outcome = "APPROVED", pResend = pRequest.HeaderId
+					Set:tWarning'="" tLog.ReviewNote = tWarning
+				} Else {
+					// The message stays failed; the reviewer can answer a new task, not this one
+					Set tLog.Outcome = "REVIEW_BAD_LOINC", tLog.ReviewNote = tWhy
+					$$$LOGWARNING("Reviewer "_pAnswer.%UserName_" approved '"_tLoinc_"' for "_pTask.LocalCode_" (header "_pTask.HeaderId_"), not applied: "_tWhy)
+				}
 			}
 		} ElseIf pTask.FixJSON = "" {
 			Set tLog.Outcome = "REVIEW_CLOSED"
@@ -219,12 +394,14 @@ Method Review(pRequest As AgenticProd.Msg.TriageRequest, pTask As AgenticProd.Ms
 }
 
 /// Write LabCodeMap pTask.LocalCode -> "pLoinc^display" for an approved MAP_CODE (pLoinc is the
-/// reviewer's correction, if any). pWhy is "" when written, else why not; then nothing is written.
-/// Display comes from the LOINC subset; a valid code outside it keeps the agent's display only
-/// if the reviewer left the code as proposed.
-ClassMethod ApplyMapping(pTask As AgenticProd.Msg.ApprovalTask, pLoinc As %String, Output pWhy As %String) As %Status
+/// reviewer's correction, if any) and its Data.LearnedMapping row (pLogId = the decision's
+/// DecisionLog row, pNote = the reviewer's note). pWhy is "" when written, else why not; then
+/// nothing is written. Display comes from the LOINC subset; a valid code outside it keeps the
+/// agent's display only if the reviewer left the code as proposed, and pWarning records that it
+/// was learned without being in the KB.
+ClassMethod ApplyMapping(pTask As AgenticProd.Msg.ApprovalTask, pLoinc As %String, Output pWhy As %String, pLogId As %String = "", pReviewer As %String = "", pNote As %String = "", Output pWarning As %String) As %Status
 {
-	Set pWhy = ""
+	Set (pWhy, pWarning) = ""
 	Set tSC = $$$OK
 	Try {
 		Set pWhy = ..LoincProblem(pLoinc)
@@ -234,6 +411,13 @@ ClassMethod ApplyMapping(pTask As AgenticProd.Msg.ApprovalTask, pLoinc As %Strin
 		Set:'tFound tDisplay = $SELECT(pLoinc = pTask.Loinc: pTask.Display, 1: "")
 		$$$ThrowOnError(##class(Ens.Util.LookupTable).%UpdateValue(##class(AgenticProd.Tools.Mapping).#CODEMAP, pTask.LocalCode, pLoinc_"^"_tDisplay))
 		$$$TRACE("LabCodeMap "_pTask.LocalCode_" -> "_pLoinc_"^"_tDisplay)
+		// Grounding of the final code: a reviewer may correct to a code outside the KB, but it is recorded
+		Set:'tFound pWarning = "LOINC "_pLoinc_" is not in the LOINC KB; learned on the reviewer's word"
+		Set:pNote'="" pWarning = pWarning_$SELECT(pWarning '= "": "; ", 1: "")_"reviewer note: "_pNote
+		Set tLog = $SELECT(pLogId '= "": ##class(AgenticProd.Data.DecisionLog).%OpenId(pLogId), 1: "")
+		Set tEvidence = ""
+		For i = 1:1:pTask.Evidence.Count() Set tEvidence = tEvidence_$SELECT(i > 1: $CHAR(10), 1: "")_pTask.Evidence.GetAt(i)
+		$$$ThrowOnError(##class(AgenticProd.Data.LearnedMapping).Approved(pTask.LocalCode, $SELECT($IsObject(tLog): tLog.Source, 1: ""), pLoinc, tDisplay, pLogId, $SELECT($IsObject(tLog): tLog.AgentSessionId, 1: ""), tEvidence, pReviewer, pWarning))
 	} Catch ex {
 		Set tSC = ex.AsStatus()
 	}

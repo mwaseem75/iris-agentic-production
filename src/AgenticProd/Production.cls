@@ -50,6 +50,9 @@ XData ProductionDefinition
     <Setting Target="Host" Name="TargetConfigName">TriageAgent</Setting>
     <Setting Target="Host" Name="ResponseTimeout">120</Setting>
   </Item>
+  <Item Name="MemoryReview" Category="Agent" ClassName="AgenticProd.Service.MemoryReview" PoolSize="0" Enabled="true" Foreground="false" LogTraceEvents="true" Comment="Review tasks for messages routed with a revoked learned mapping (Settings, Memory)">
+    <Setting Target="Host" Name="TargetConfigName">IntegrationSupport</Setting>
+  </Item>
 </Production>
 }
 

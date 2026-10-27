@@ -55,7 +55,8 @@ ClassMethod FromDecision(pRequest As AgenticProd.Msg.TriageRequest, pDecision As
 	For i = 1:1:pRequest.Flags.Count() Do tTask.Flags.Insert(pRequest.Flags.GetAt(i))
 
 	Set tTask.%Actions = "Approve,Reject"
-	Set tTask.%FormFields = "Loinc"
+	// Note: needed to learn again a mapping that was revoked (Triage.Review)
+	Set tTask.%FormFields = "Loinc,Note"
 	Do tTask.%FormValues.SetAt(tTask.Loinc, "Loinc")
 	Set tTask.%Subject = pDecision.Decision_" "_pDecision.ErrorClass_" for message header "_pRequest.HeaderId
 	Set tNL = $CHAR(13,10)

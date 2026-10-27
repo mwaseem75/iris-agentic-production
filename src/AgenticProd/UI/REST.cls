@@ -36,6 +36,7 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
 <Route Url="/settings/key" Method="POST" Call="SettingsKey"/>
 <Route Url="/settings/test-connection" Method="POST" Call="SettingsTest"/>
 <Route Url="/settings/kill-switch" Method="POST" Call="SettingsKillSwitch"/>
+<Route Url="/settings/memory/revoke" Method="POST" Call="SettingsRevoke"/>
 <Route Url="/settings/:section" Method="PUT" Call="SettingsSave"/>
 </Routes>
 }
@@ -80,6 +81,7 @@ ClassMethod SettingsData() As %DynamicObject
 	Do tData.budgets.%Set("KillSwitch", +tData.budgets.KillSwitch, "boolean")
 	Set tData.usedToday = ##class(AgenticProd.Operation.Agent).TokensUsedToday()
 	Set tData.prices = ##class(AgenticProd.Settings.Store).Prices()
+	Set tData.memory = ##class(AgenticProd.Settings.Store).Memory()
 	Set tData.changes = ##class(AgenticProd.Settings.Store).ChangeLog(50)
 	Quit tData
 }
@@ -111,6 +113,12 @@ ClassMethod SettingsTest() As %Status
 ClassMethod SettingsKillSwitch() As %Status
 {
 	Quit ..SettingsWrite("kill-switch")
+}
+
+/// POST /settings/memory/revoke {"id":..., "reason":...}
+ClassMethod SettingsRevoke() As %Status
+{
+	Quit ..SettingsWrite("revoke")
 }
 
 /// Role check, body parse and dispatch for every settings write. A refused or invalid change
@@ -162,6 +170,8 @@ ClassMethod SettingsApply(pAction As %String, pBody As %DynamicObject, Output pS
 		Set:$$$ISOK(pSC) tResult.key = ##class(AgenticProd.Settings.Store).KeyStatus(pBody.%Get("name"))
 	} ElseIf pAction = "kill-switch" {
 		Set pSC = ##class(AgenticProd.Settings.Store).SetKillSwitch(''pBody.%Get("on"), .tNote)
+	} ElseIf pAction = "revoke" {
+		Set pSC = ##class(AgenticProd.Settings.Store).RevokeMapping(pBody.%Get("id"), pBody.%Get("reason"), .tNote)
 	} ElseIf pAction = "test" {
 		Set pSC = ##class(AgenticProd.Settings.Store).TestConnection(pBody.%Get("name"), pBody.%Get("model"), .tResult)
 	} Else {
@@ -262,7 +272,9 @@ ClassMethod SummaryData(pIncludeEval As %Boolean = 0) As %DynamicObject
 		_" SUM(CASE WHEN Outcome = 'SENT_FOR_APPROVAL' OR Outcome %STARTSWITH 'DOWNGRADED:' OR Outcome = 'APPROVED' OR Outcome %STARTSWITH 'REVIEW_' THEN 1 ELSE 0 END) AS SentForApproval,"
 		_" SUM(CASE WHEN (Outcome = 'SENT_FOR_APPROVAL' OR Outcome %STARTSWITH 'DOWNGRADED:') AND ReviewedAt IS NULL THEN 1 ELSE 0 END) AS Waiting,"
 		_" SUM(CASE WHEN Outcome = 'REJECTED' THEN 1 ELSE 0 END) AS Rejected,"
-		_" SUM(CASE WHEN Outcome = 'APPROVED' THEN 1 ELSE 0 END) AS MappingsLearned"
+		_" SUM(CASE WHEN Outcome = 'APPROVED' THEN 1 ELSE 0 END) AS MappingsLearned,"
+		_" SUM(CASE WHEN Grounded = 1 THEN 1 ELSE 0 END) AS GroundingPassed,"
+		_" SUM(CASE WHEN Grounded = 0 THEN 1 ELSE 0 END) AS GroundingCaught"
 		_" FROM AgenticProd_Data.DecisionLog"_tLogWhere).%Get(0)
 	// Triage marks its own changes DOWNGRADED:X; an ESCALATE over a different agent proposal counts too
 	Set tChanged = ..Rows("SELECT COUNT(*) AS N FROM AgenticProd_Data.DecisionLog d WHERE (d.Outcome %STARTSWITH 'DOWNGRADED:'"
@@ -285,6 +297,7 @@ ClassMethod SummaryData(pIncludeEval As %Boolean = 0) As %DynamicObject
 		"triaged": (+tLog.Triaged), "autoFixed": (+tLog.AutoFixed),
 		"sentForApproval": (+tLog.SentForApproval), "waiting": (+tLog.Waiting),
 		"rejected": (+tLog.Rejected), "mappingsLearned": (+tLog.MappingsLearned),
+		"groundingPassed": (+tLog.GroundingPassed), "groundingCaught": (+tLog.GroundingCaught),
 		"changedByTriage": (+tChanged.N),
 		"fhirValid": (+tFHIR.Valid), "fhirInvalid": (+tFHIR.Invalid),
 		"costToday": (+tDay.Cost), "agentRunsToday": (+tDay.Runs),
@@ -387,6 +400,9 @@ ClassMethod StoryData(pId As %String) As %DynamicObject
 
 	Do tSteps.%Push(..AgentStep(tLog, .tSecrets))
 
+	Set tGround = ..GroundingStep(tLog, .tSecrets)
+	Do:$IsObject(tGround) tSteps.%Push(tGround)
+
 	Set tTriage = $SELECT($DATA(tByName("triage decision")): tByName("triage decision").%Get("agentic.final_outcome"), 1: "")
 	Do tSteps.%Push({"step":"triage", "title":"Triage rule", "outcome":(..TriageOutcome(tLog, tTriage)), "text":(..TriageText(tLog, ..TriageOutcome(tLog, tTriage), .tSecrets))})
 
@@ -462,6 +478,29 @@ ClassMethod AgentStep(pLog As AgenticProd.Data.DecisionLog, ByRef pSecrets) As %
 	// AI Hub's load_skill runs outside the audit policy, so it has no ToolCall row
 	Set tUnaudited = tUsage.ToolCalls - tCalls.%Size()
 	Do:tUnaudited>0 tStep.%Set("unauditedToolCalls", tUnaudited)
+	Quit tStep
+}
+
+/// The grounding gate's checks on the agent's decision; "" when none ran (gate off, no agent run,
+/// or a row from before the gate).
+ClassMethod GroundingStep(pLog As AgenticProd.Data.DecisionLog, ByRef pSecrets) As %DynamicObject [ Internal ]
+{
+	Quit:pLog.GroundingJSON="" ""
+	Set tGround = ##class(%DynamicObject).%FromJSON(pLog.GroundingJSON)
+	Set tStep = {"step":"grounding", "title":"Grounding check", "checks":[]}
+	Set tIter = tGround.checks.%GetIterator()
+	While tIter.%GetNext(, .tCheck) {
+		Set tItem = {"check":(tCheck.check), "text":(tCheck.check_": "_..Mask(tCheck.detail, .pSecrets))}
+		Do tItem.%Set("pass", ''tCheck.pass, "boolean")
+		Do tStep.checks.%Push(tItem)
+	}
+	If tGround.grounded {
+		Do tStep.%Set("status", "passed")
+		Do tStep.%Set("text", "Triage traced every claim in the proposal to the message, this run's tool results or the LOINC knowledge base ("_tStep.checks.%Size()_" checks).")
+	} Else {
+		Do tStep.%Set("status", $SELECT(tGround.strictness = "warn": "warned", 1: "caught"))
+		Do tStep.%Set("text", "Some claims could not be traced ("_$TRANSLATE(tGround.failed, ",", " ")_"). "_$SELECT(tGround.strictness = "warn": "Grounding is in warn mode, so this was recorded and shown to the reviewer only.", 1: "Grounding is enforced, so the proposal was not acted on and went to a person."))
+	}
 	Quit tStep
 }
 

@@ -64,6 +64,16 @@ Property EvalRunId As %Integer;
 
 Property CaseId As %String(MAXLEN = 20);
 
+/// Grounding gate result (Triage.Ground): 1 every claim traced to the message, a tool result or
+/// the KB; 0 a check failed; empty when no agent decision was checked (gate off, no agent run).
+Property Grounded As %Boolean;
+
+/// {"strictness", "checks":[{"check","pass","detail"}]} from Triage.Ground.
+Property GroundingJSON As %String(MAXLEN = "");
+
+/// Names of the failed checks, comma separated, for counting without parsing GroundingJSON.
+Property GroundingFailed As %String(MAXLEN = 500);
+
 Index HeaderIdx On HeaderId;
 
 Index EvalCaseIdx On (EvalRunId, CaseId);
@@ -75,8 +85,8 @@ Index ErrorClassIdx On ErrorClass [ Type = bitmap ];
 Index LocalCodeIdx On LocalCode;
 
 /// Copy a Decision and the request it answers into the log. pOutcome is what Triage did;
-/// pFixedBody is the new message of an APPLIED fix.
-ClassMethod Record(pRequest As AgenticProd.Msg.TriageRequest, pDecision As AgenticProd.Msg.Decision, Output pId As %String, pOutcome As %String = "", pFixedBody As %Persistent = "") As %Status
+/// pFixedBody is the new message of an APPLIED fix; pGrounding is Triage.Ground's result.
+ClassMethod Record(pRequest As AgenticProd.Msg.TriageRequest, pDecision As AgenticProd.Msg.Decision, Output pId As %String, pOutcome As %String = "", pFixedBody As %Persistent = "", pGrounding As %DynamicObject = "") As %Status
 {
 	Set pId = ""
 	Set tSC = $$$OK
@@ -105,6 +115,11 @@ ClassMethod Record(pRequest As AgenticProd.Msg.TriageRequest, pDecision As Agent
 		If $IsObject(pFixedBody) {
 			Set tRow.FixedBodyClass = $CLASSNAME(pFixedBody)
 			Set tRow.FixedBodyId = pFixedBody.%Id()
+		}
+		If $IsObject(pGrounding) {
+			Set tRow.Grounded = ''pGrounding.grounded
+			Set tRow.GroundingJSON = pGrounding.%ToJSON()
+			Set tRow.GroundingFailed = $EXTRACT(pGrounding.failed, 1, 500)
 		}
 		$$$ThrowOnError(pDecision.%JSONExportToString(.tJSON))
 		Set tRow.DecisionJSON = tJSON
@@ -196,6 +211,15 @@ Storage Default
 </Value>
 <Value name="26">
 <Value>CaseId</Value>
+</Value>
+<Value name="27">
+<Value>Grounded</Value>
+</Value>
+<Value name="28">
+<Value>GroundingJSON</Value>
+</Value>
+<Value name="29">
+<Value>GroundingFailed</Value>
 </Value>
 </Data>
 <DataLocation>^AgenticProd.Data.DecisionLogD</DataLocation>
