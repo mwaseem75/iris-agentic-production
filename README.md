@@ -38,6 +38,9 @@ The agent proposes. A deterministic business process (`AgenticProd.Process.Triag
 - **Patient identity is never changed.** Any fix touching PID-3, PID-5 or PID-7 is refused.
 - **Prompt injection.** Message text reaches the model only inside marked data blocks. A deterministic scan flags instructions hidden in notes and text results; a flagged message is never auto-fixed and the reviewer sees the warning.
 - **Budgets.** Per-message limits on tool calls and tokens, and a daily token budget. When a limit is hit the message goes to a person; it is never dropped.
+- **Grounding check (hallucination guard).** Before Triage acts, every claim in the agent's decision must trace back to something real: a proposed LOINC must exist in the knowledge base and be one of the codes this run's search returned, with matching specimen and units; fix values must be the real values; quoted evidence must appear in the message or a tool result. If not, the message goes to a person marked "ungrounded". Deterministic, no extra LLM call.
+- **Memory is governed.** Learned mappings are the agent's memory, so each one keeps where it came from (agent run, evidence, reviewer, date). An admin can revoke a mapping; every message sent with a learned mapping since its approval goes back for review.
+- **One switch to stop it.** The AI kill switch in Settings sends every failure to a person with no LLM call, and shows a red banner on every page.
 
 ## The learning loop
 
@@ -51,11 +54,29 @@ The agent proposes. A deterministic business process (`AgenticProd.Process.Triag
 
 ## What changed recently
 
+- **Settings page.** Providers, API keys, models, guardrails, budgets, the AI kill switch and prices are managed in one place, with a change log. Keys live in IRIS Wallet and configuration in the AI Hub Config Store. See [Settings](#settings).
+- **Grounding check and memory governance.** Agent decisions are checked against the message, the tool results and the LOINC knowledge base before anything happens; learned mappings carry their provenance and can be revoked.
 - **FHIR R4 output.** Valid lab results also go out as FHIR R4: HL7 v2 → SDA → FHIR R4, with the LOINC coding taken from `LabCodeMap`. Bundles are checked against the US Core lab profile, which stands in for the NPHIES profiles. See [FHIR output](#fhir-output).
 - **Dashboard tabs.** The dashboard now has three tabs: Overview, Messages and Evaluation. Click a message to open its story view: the steps in plain words, a timeline of its spans and the masked message.
 - **Spans stored in IRIS.** Every failed message gets one trace in `Data.Span`. Export to an OpenTelemetry collector (OTLP) is optional.
 - **Prometheus metrics.** `/api/monitor/metrics` also serves the agent's metrics. Like IRIS's own metrics on that URL, it can be read without a login. It returns totals only, never message content.
 - **Clean demo state.** `AgenticProd.Demo.Reset()` clears live data before a demo or a recording. See [Try it](#try-it).
+
+## Settings
+
+The **Settings** tab of the dashboard controls the AI side of the production. Admins (`SuperUser`, `_SYSTEM`) can change it; the reviewer sees it read-only.
+
+| Section | What you control | Where it is kept |
+|---|---|---|
+| Providers & keys | LLM provider configs: OpenAI, Anthropic, OpenRouter, NVIDIA NIM, and OpenAI-compatible endpoints (Azure OpenAI, Ollama) through a base URL. Keys are write-only: the page only ever shows "set" or "not set". "Test connection" sends one tiny prompt and shows its tokens and cost. | Configs in the AI Hub Config Store (`AI.LLM.<name>`), keys in IRIS Wallet (collection `AgenticProd`), referenced as `secret://AgenticProd.<name>#api_key` |
+| Agents | per agent: provider config, model, temperature, MaxIterations, MaxToolCalls, MaxTokensPerMessage, skills on/off, instructions (read-only) | production item settings |
+| Guardrails | tool tiers (readonly / write / critical, enforced by the authorization policy), AUTO_FIX on/off per error class, auto-fix confidence threshold, grounding strictness (enforce / warn / off) | production item settings |
+| Budgets & mode | daily token budget, live or replay mode, AI kill switch | production item settings |
+| Prices | price per 1M tokens per model, used for cost | `Data.PriceTable` |
+| Memory | learned mappings with provenance, revoke | `Data.LearnedMapping` |
+| Change log | who changed what and when, old → new (keys logged only as "changed") | `Data.SettingsAudit` |
+
+If no provider config is chosen, the agent uses `OPENAI_API_KEY` from `.env`, so a fresh install works without opening Settings.
 
 ## Architecture
 
@@ -77,11 +98,12 @@ Records ─► Data.Span (traces) ─► dashboard (UI.REST) · /api/monitor/met
 
 | Part | Classes |
 |---|---|
-| Agent | `Agent.TriageAgent` (declarative `%AI.Agent`), skills `Skill.HL7Repair`, `Skill.CodeMapping` |
+| Agent | `Agent.TriageAgent` (declarative `%AI.Agent`, built on `Agent.Base`), skills `Skill.HL7Repair`, `Skill.CodeMapping` |
 | Tools | `Tools.Base` (format-neutral), `Tools.HL7`, `Tools.Mapping` |
 | Policies | `Policy.ReadOnly`, `Policy.Audit`, `Policy.InjectionGuard` |
 | Production | `Process.LabRouter`, `Process.Triage`, `Operation.Agent`, `Operation.NphiesOut`, `Operation.NphiesFHIROut`, `DTL.LabToNphies` |
-| Records | `Data.DecisionLog`, `Data.Usage`, `Data.ToolCall`, `Data.Span`, `Data.PriceTable`, `Data.EvalRun`, `Data.EvalResult` |
+| Records | `Data.DecisionLog`, `Data.Usage`, `Data.ToolCall`, `Data.Span`, `Data.PriceTable`, `Data.EvalRun`, `Data.EvalResult`, `Data.LearnedMapping`, `Data.SettingsAudit` |
+| Settings | `Settings.Store` (Config Store + Wallet, item settings, memory), `Agent.Base` (loads the provider from Config Store), `Service.MemoryReview` (review tasks after a revoke) |
 | Monitoring | `Telemetry.Trace` (spans), `Monitor.Metrics` and `Monitor.GenAI` (Prometheus metrics on `/api/monitor/metrics`) |
 | Dashboard | `UI.REST` (read-only JSON at `/agenticprod/api`), `UI.Home` (login page), `web/dashboard.html` |
 

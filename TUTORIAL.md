@@ -283,7 +283,17 @@ If tAction = "AUTO_FIX" {
 
 Triage re-runs the fix check itself on a copy. It does not trust the agent's `validated` flag. An unsafe proposal is downgraded to ESCALATE, and the reason is kept. Why not let the model decide? Because a rule in code behaves the same every time, can be unit tested, and can be read by an auditor. The model is good at reading a messy error. It should not be the last line of defence.
 
-**Try it:** open [`src/AgenticProd/Test/Process/TriageTest.cls`](src/AgenticProd/Test/Process/TriageTest.cls) and read its cases. They use stub decisions, including an agent that lies about `validated` and one that tries to change PID-3.
+**Grounding check: don't trust what the model says it saw.** A model can produce a confident answer that is not backed by anything: a LOINC code it remembers rather than one it found, or a "current value" that is not in the message. Before Triage acts, `Triage.Ground()` checks every claim against real data, with no extra LLM call:
+
+- a proposed LOINC must be in the knowledge base **and** among the codes `search_loinc` returned in this agent session (the audit policy stores the codes each `search_loinc` call returned in `Data.ToolCall.ResultSummary`);
+- the format checker adds format rules; for HL7 v2, `Tools.HL7.GroundingProblems()` checks that the local code is the message's OBX-3.1, that the specimen (SPM-4 or OBR-15) and units (OBX-6) agree with the KB entry, and that each fix's `from` value is the real value;
+- quoted evidence must appear in the message or a tool result.
+
+With the Triage setting `GroundingStrictness` = `enforce` (default), any failure turns the decision into ESCALATE with the reason "ungrounded: …" and the proposal is kept for the reviewer. `warn` records it and acts; `off` skips it. The result is stored in `DecisionLog.GroundingJSON` and shown in the dashboard's story view.
+
+**Memory governance.** Approved mappings are the agent's long-term memory: once a code is in `LabCodeMap`, later messages use it without the agent. A wrong entry would spread quietly, so each one is recorded in `Data.LearnedMapping` with its source (seed or approval), the decision, the agent session, the evidence and the reviewer. An admin can revoke it on the Settings page: the lookup entry is removed and every message sent with it since its approval gets a review task (`Settings.Store.RevokeMapping()`). Seed mappings can be revoked too, but messages routed with a seed are not recorded, so no tasks are created for them.
+
+**Try it:** open [`src/AgenticProd/Test/Process/TriageTest.cls`](src/AgenticProd/Test/Process/TriageTest.cls) and read its cases. They use stub decisions, including an agent that lies about `validated`, one that tries to change PID-3, and one that proposes a LOINC its own search never returned.
 
 ## 8. RAG: the LOINC knowledge base
 
@@ -305,7 +315,7 @@ Do tKB.ReindexDocument(tLoinc, tName_" | "_tComponent_" | "_tSystem_..., {"loinc
 - **`VectorStore.IRIS`** stores them in an IRIS table (`AgenticProd_KB.Loinc`). The fields passed to `Build()` (loinc, system, method, units) become real columns, so the search result carries them as metadata.
 - **`ReindexDocument`** keys each row by its LOINC code, so building again replaces rows instead of adding copies.
 
-The `search_loinc` tool in [`Tools/Mapping.cls`](src/AgenticProd/Tools/Mapping.cls) runs the knowledge base's own search tool through a private tool manager (see section 11 for why), then adds a check the model cannot skip: if no specimen was given and the top hits differ only by specimen, the result carries a `warning` and the description tells the model to ESCALATE.
+The `search_loinc` tool in [`Tools/Mapping.cls`](src/AgenticProd/Tools/Mapping.cls) runs the knowledge base's own search tool through a private tool manager (see section 12 for why), then adds a check the model cannot skip: if no specimen was given and the top hits differ only by specimen, the result carries a `warning` and the description tells the model to ESCALATE.
 
 **Try it:** open [`kb/loinc_subset.csv`](kb/loinc_subset.csv) (46 codes) and look for the glucose rows: serum, blood and urine. That is why the specimen check exists.
 
@@ -353,7 +363,34 @@ do ##class(AgenticProd.Demo).SendCase("01", "MSG90001")
 do ##class(AgenticProd.Eval.Runner).Run("gpt-4o-mini", "replay demo", "all", "replay")
 ```
 
-## 11. Build 154 notes
+## 11. Configuration and keys: Config Store and IRIS Wallet
+
+Putting an API key in `.env` is fine on a laptop. In a shared system you want keys that nobody can read back, configuration that is governed by IRIS roles, and a record of every change. AI Hub comes with two features for this.
+
+- **IRIS Wallet** (`%Wallet.Collection`, `%Wallet.KeyValue`) stores secrets. A collection has a use resource and an edit resource; only users holding them can read or change a secret.
+- **Config Store** (`%ConfigStore.Configuration`) stores configuration as JSON under a name such as `AI.LLM.openai`. A value can point at a Wallet secret with `secret://Collection.Key#field`.
+
+[`Settings/Store.cls`](src/AgenticProd/Settings/Store.cls) saves a provider like this (simplified):
+
+```objectscript
+Set tDetails = {"model_provider":"openai", "model":"gpt-4o-mini",
+                "api_key":("secret://AgenticProd."_tName_"#api_key")}
+$$$ThrowOnError(##class(%ConfigStore.Configuration).Create("AI", "LLM", "", tName, tDetails, ...))
+$$$ThrowOnError(##class(%Wallet.KeyValue).Create("AgenticProd."_tName, {"Usage":"CUSTOM", "Secret":{"api_key":(pKey)}}))
+```
+
+At run time the agent reads it back with the secret resolved, then builds its provider. [`Agent/Base.cls`](src/AgenticProd/Agent/Base.cls) overrides `%CreateProvider()` so the config can be chosen per production item on the Settings page:
+
+```objectscript
+$$$ThrowOnError(##class(AgenticProd.Settings.Store).ProviderSettings(..ProviderConfig, .tProvider, .tModel, .tSettings))
+Set ..Provider = ##class(%AI.Provider).Create(tProvider, tSettings)
+```
+
+The Settings page never returns a key, only "set" or "not set", and every change goes to `Data.SettingsAudit`.
+
+**Try it:** open the dashboard as `SuperUser`, go to **Settings → Providers & keys**, add a provider and press **Test connection** (one tiny call). Then look at the **Change log**.
+
+## 12. Build 154 notes
 
 These are facts and workarounds found while building this app, **as of build 154**. Check them again on newer builds.
 
@@ -370,12 +407,17 @@ These are facts and workarounds found while building this app, **as of build 154
 - **A bare `<` in an XData `<Description>`** breaks the ToolSet generator. Write `&lt;`.
 - **Skill classes are ToolSets.** Define no methods in them, or the methods become tools.
 - **The openai provider has no timeout option.** Use the caller's `SendRequestSync` timeout.
+- **Config Store's descriptor registry starts empty.** `Configuration.Create("AI","LLM",...)` fails with "No descriptor found" until `%ConfigStore.DescriptorManager.RebuildRegistry()` has run once (`Settings.Store.Prepare()` does it).
+- **`PROVIDERCONFIG` is a class parameter.** To choose a Config Store entry at run time, override `%CreateProvider()` as `Agent.Base` does.
+- **`%AI.Provider.Create()` rejects unknown fields**, and knows openai, anthropic, openrouter and nim. Azure OpenAI and Ollama work as `openai` with a `base_url`.
+- **Wallet and Config Store need resources.** Reading a config needs its read resource; resolving its `secret://` key needs the collection's use resource. Without them the agent gets an access error, and `%Wallet.KeyValue.Exists()` simply answers 0.
 
 **Try it:** search the code for `build 154` to see each workaround where it is used.
 
-## 12. Where to go next
+## 13. Where to go next
 
 - **FHIR.** Valid results already go out as FHIR R4 (`Operation.NphiesFHIROut`). The next step is a `Tools.FHIR` class with its own `validate_fix` and a `FHIRRepair` skill. The core does not change: error classes and decisions are format-neutral, and Triage looks up the fix checker per format in its `CHECKERS` parameter.
+- **Any production.** Next on the roadmap: enabling the triage agent on an existing production that was never built for AI, starting in observe-only mode.
 - **Other formats.** X12 or JSON would follow the same pattern: a tool class with masking and a fix checker, a skill with instructions, one line in `CHECKERS`.
 - **AI Hub docs.** The [AI Hub EAP repo](https://github.com/intersystems-community/ai-hub-eap), the [ObjectScript SDK Guide](https://github.com/intersystems-community/ai-hub-eap/blob/master/ObjectScript_SDK_Guide.md) and [Advanced features](https://github.com/intersystems-community/ai-hub-eap/blob/master/ObjectScript_SDK_Advanced.md).
 - **Template.** [ai-hub-dev-template](https://github.com/intersystems-community/ai-hub-dev-template), the starting point for this repo.
