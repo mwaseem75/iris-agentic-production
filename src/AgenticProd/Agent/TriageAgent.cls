@@ -1,7 +1,7 @@
 /// Triage agent for failed interoperability messages. Declarative %AI.Agent.
 /// Read-only: it proposes a decision; AgenticProd.Process.Triage acts on it.
 /// Its final answer must parse with AgenticProd.Msg.Decision.FromAgentText().
-Class AgenticProd.Agent.TriageAgent Extends %AI.Agent
+Class AgenticProd.Agent.TriageAgent Extends AgenticProd.Agent.Base
 {
 
 Parameter PROVIDER = "openai";

@@ -38,7 +38,17 @@ Property MaxTokensPerMessage As %Integer(MINVAL = 0) [ InitialExpression = 50000
 /// same eval case and Model, no LLM call and no key needed (eval and demo reruns).
 Property Mode As %String(VALUELIST = ",live,replay") [ InitialExpression = "live" ];
 
-Parameter SETTINGS = "Model:Agent,Mode:Agent,MaxIterations:Agent,MaxToolCalls:Agent,MaxTokensPerMessage:Agent,DailyTokenBudget:Agent,RunAsUser:Agent";
+/// Config Store LLM entry (AI.LLM.<name>) set up on the dashboard's Settings tab, key in the
+/// IRIS Wallet. Empty: TriageAgent's own provider with the OPENAI_API_KEY environment variable.
+Property ProviderConfig As %String(MAXLEN = 100);
+
+/// Sampling temperature 0-2; empty leaves it to the model (some models reject any value).
+Property Temperature As %String(MAXLEN = 10);
+
+/// AI kill switch: on, every message is escalated to a person without an LLM call.
+Property KillSwitch As %Boolean [ InitialExpression = 0 ];
+
+Parameter SETTINGS = "ProviderConfig:Agent,Model:Agent,Temperature:Agent,Mode:Agent,KillSwitch:Agent,MaxIterations:Agent,MaxToolCalls:Agent,MaxTokensPerMessage:Agent,DailyTokenBudget:Agent,RunAsUser:Agent";
 
 /// Fail closed: if the switch fails the item does not start, rather than run the agent with %All.
 /// The switch lasts for the job's life, so this item must keep its own pool (no shared jobs).
@@ -66,6 +76,12 @@ Method Triage(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As Age
 	Set tSession = ""
 	Set tStart = $ZHOROLOG
 	Try {
+		// Before replay too: the switch means no agent answer at all, recorded or live
+		If ..KillSwitch {
+			$$$LOGINFO("AI kill switch is on, escalating header "_pRequest.HeaderId_" without the agent")
+			Set pResponse = ..EscalateDecision(pRequest, "AI kill switch is on; agent not called")
+			Quit
+		}
 		If ..Mode = "replay" {
 			$$$ThrowOnError(..Replay(pRequest, .pResponse))
 			Quit
@@ -79,8 +95,10 @@ Method Triage(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As Age
 		}
 
 		Set tAgent = ##class(AgenticProd.Agent.TriageAgent).%New()
+		Set tAgent.ProviderConfig = ..ProviderConfig
 		Set tAgent.Model = ..Model
 		Set tAgent.MaxIterations = ..MaxIterations
+		Set:..Temperature'="" tAgent.Temperature = +..Temperature
 		$$$ThrowOnError(tAgent.%Init())
 		Set tSession = tAgent.CreateSession({"cache":{"enabled":1,"cache_system_prompt":1,"cache_tool_definitions":1}})
 		// Saved early so ToolCall rows carry the session ID
@@ -102,7 +120,7 @@ Method Triage(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As Age
 		Set pResponse.PromptTokens = tStats."total_prompt_tokens"
 		Set pResponse.CompletionTokens = tStats."total_completion_tokens"
 		Set pResponse.AgentSessionId = tSession.%Id()
-		Set tUsage = ##class(AgenticProd.Data.Usage).FromStats(tStats, ##class(AgenticProd.Agent.TriageAgent).#PROVIDER, ..Model)
+		Set tUsage = ##class(AgenticProd.Data.Usage).FromStats(tStats, tAgent.ProviderName, ..Model)
 		Set tUsage.HeaderId = pRequest.HeaderId
 		Set tUsage.SessionId = pRequest.SessionId
 		Set tUsage.AgentSessionId = pResponse.AgentSessionId

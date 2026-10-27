@@ -1,4 +1,5 @@
-/// Read-only JSON for the dashboard page (web/dashboard.html), served at /agenticprod/api.
+/// JSON for the dashboard page (web/dashboard.html), served at /agenticprod/api. Read-only
+/// except /settings writes, which need the AgenticProd_Admin role (Settings.Store).
 /// The page app /agenticprod does the login; both apps share one login group (Setup.DashboardSetup).
 /// The *Data methods build the JSON so tests can call them without HTTP.
 Class AgenticProd.UI.REST Extends %CSP.REST
@@ -31,7 +32,129 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
 <Route Url="/metrics/summary" Method="GET" Call="Metrics"/>
 <Route Url="/evalruns" Method="GET" Call="EvalRuns"/>
 <Route Url="/evalruns/:id" Method="GET" Call="EvalResults"/>
+<Route Url="/settings" Method="GET" Call="Settings"/>
+<Route Url="/settings/key" Method="POST" Call="SettingsKey"/>
+<Route Url="/settings/test-connection" Method="POST" Call="SettingsTest"/>
+<Route Url="/settings/kill-switch" Method="POST" Call="SettingsKillSwitch"/>
+<Route Url="/settings/:section" Method="PUT" Call="SettingsSave"/>
 </Routes>
+}
+
+ClassMethod Settings() As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		Write ..SettingsData().%ToJSON()
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// Everything the Settings tab shows. Keys appear only as "set" / "not set".
+/// canEdit tells the page whether to offer the forms; every write checks it again.
+ClassMethod SettingsData() As %DynamicObject
+{
+	Set tData = {"user":($USERNAME)}
+	Do tData.%Set("canEdit", ..CanEditSettings(), "boolean")
+	Set tData.providerKinds = []
+	Set tKinds = ##class(AgenticProd.Settings.Store).#PROVIDERS
+	For i = 1:1:$LENGTH(tKinds, ",") Do tData.providerKinds.%Push($PIECE(tKinds, ",", i))
+	Set tData.providers = ##class(AgenticProd.Settings.Store).Providers()
+	Set tData.agents = ##class(AgenticProd.Settings.Store).ItemSettings(##class(AgenticProd.Settings.Store).#AGENTFIELDS)
+	Set tData.budgets = ##class(AgenticProd.Settings.Store).ItemSettings(##class(AgenticProd.Settings.Store).#BUDGETFIELDS)
+	Do tData.budgets.%Set("KillSwitch", +tData.budgets.KillSwitch, "boolean")
+	Set tData.usedToday = ##class(AgenticProd.Operation.Agent).TokensUsedToday()
+	Set tData.prices = ##class(AgenticProd.Settings.Store).Prices()
+	Set tData.changes = ##class(AgenticProd.Settings.Store).ChangeLog(50)
+	Quit tData
+}
+
+ClassMethod CanEditSettings() As %Boolean
+{
+	Quit $SYSTEM.Security.Check(##class(AgenticProd.Settings.Store).#EDITRESOURCE, "WRITE")
+}
+
+/// PUT /settings/providers|agents|budgets|prices with the section's fields as JSON.
+ClassMethod SettingsSave(pSection As %String) As %Status
+{
+	Quit ..SettingsWrite(pSection)
+}
+
+/// POST /settings/key {"name":..., "key":...}. The response never echoes the key.
+ClassMethod SettingsKey() As %Status
+{
+	Quit ..SettingsWrite("key")
+}
+
+/// POST /settings/test-connection {"name":..., "model":...}: one real LLM call.
+ClassMethod SettingsTest() As %Status
+{
+	Quit ..SettingsWrite("test")
+}
+
+/// POST /settings/kill-switch {"on":true|false}
+ClassMethod SettingsKillSwitch() As %Status
+{
+	Quit ..SettingsWrite("kill-switch")
+}
+
+/// Role check, body parse and dispatch for every settings write. A refused or invalid change
+/// answers 403 / 400 with the reason, not a 500.
+ClassMethod SettingsWrite(pAction As %String) As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		If '..CanEditSettings() {
+			Set %response.Status = ..#HTTP403FORBIDDEN
+			Write {"error":"Changing settings needs the AgenticProd_Admin role"}.%ToJSON()
+			Quit
+		}
+		Try {
+			Set tBody = {}.%FromJSON(%request.Content)
+		} Catch {
+			Set tBody = ""
+		}
+		If '$IsObject(tBody) {
+			Set %response.Status = ..#HTTP400BADREQUEST
+			Write {"error":"Body must be a JSON object"}.%ToJSON()
+			Quit
+		}
+		Set tResult = ..SettingsApply(pAction, tBody, .tWriteSC)
+		If $$$ISERR(tWriteSC) {
+			Set %response.Status = ..#HTTP400BADREQUEST
+			Write {"error":($SYSTEM.Status.GetErrorText(tWriteSC))}.%ToJSON()
+			Quit
+		}
+		Write tResult.%ToJSON()
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// The write itself, without HTTP, so tests can call it. pSC is the store's status.
+ClassMethod SettingsApply(pAction As %String, pBody As %DynamicObject, Output pSC As %Status) As %DynamicObject
+{
+	Set tResult = {"ok":true}
+	If pAction = "providers" {
+		Set pSC = ##class(AgenticProd.Settings.Store).SaveProvider(pBody)
+	} ElseIf (pAction = "agents") || (pAction = "budgets") {
+		Set pSC = ##class(AgenticProd.Settings.Store).SaveItemSettings(pAction, pBody, .tNote)
+	} ElseIf pAction = "prices" {
+		Set pSC = ##class(AgenticProd.Settings.Store).SavePrice(pBody)
+	} ElseIf pAction = "key" {
+		Set pSC = ##class(AgenticProd.Settings.Store).SetKey(pBody.%Get("name"), pBody.%Get("key"))
+		Set:$$$ISOK(pSC) tResult.key = ##class(AgenticProd.Settings.Store).KeyStatus(pBody.%Get("name"))
+	} ElseIf pAction = "kill-switch" {
+		Set pSC = ##class(AgenticProd.Settings.Store).SetKillSwitch(''pBody.%Get("on"), .tNote)
+	} ElseIf pAction = "test" {
+		Set pSC = ##class(AgenticProd.Settings.Store).TestConnection(pBody.%Get("name"), pBody.%Get("model"), .tResult)
+	} Else {
+		Set pSC = $$$ERROR($$$GeneralError, "Unknown settings section "_pAction)
+	}
+	Set:$GET(tNote)'="" tResult.note = tNote
+	Quit tResult
 }
 
 ClassMethod Summary() As %Status

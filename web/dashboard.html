@@ -64,6 +64,22 @@ tbody tr:last-child td { border-bottom: 0; }
 tr.click { cursor: pointer; }
 tr.click:hover td, tr.sel td { background: var(--info-bg); }
 a { color: var(--accent); text-decoration: none; }
+input, select { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; min-width: 0; }
+input:focus, select:focus { outline: 2px solid var(--info-bg); border-color: var(--accent); }
+.form { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px 12px; align-items: end; margin: 10px 0 4px; }
+.form label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
+.form .actions { display: flex; gap: 8px; align-items: center; }
+td input { width: 100%; min-width: 70px; }
+button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+button:disabled { opacity: .5; cursor: default; }
+.kill { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; margin-top: 12px; }
+.kill.on { border-color: var(--bad); background: var(--bad-bg); }
+button.danger { color: var(--bad); border-color: var(--bad); }
+.kill.on button.danger { background: var(--bad); color: #fff; }
+.msg { font-size: 13px; margin: 6px 0 0; min-height: 1.2em; }
+.msg.ok { color: var(--good); }
+.msg.bad { color: var(--bad); }
+.readonly-note { background: var(--warn-bg); color: var(--warn); border-radius: 6px; padding: 8px 12px; margin: 0 0 14px; }
 a:hover { text-decoration: underline; }
 .tag { display: inline-block; padding: 0 7px; border-radius: 10px; font-size: 12px; line-height: 19px; }
 .t-good { background: var(--good-bg); color: var(--good); }
@@ -116,6 +132,7 @@ summary { cursor: pointer; color: var(--accent); }
     <button type="button" role="tab" data-tab="overview" aria-selected="true">Overview</button>
     <button type="button" role="tab" data-tab="messages" aria-selected="false">Messages</button>
     <button type="button" role="tab" data-tab="evaluation" aria-selected="false">Evaluation</button>
+    <button type="button" role="tab" data-tab="settings" aria-selected="false">Settings</button>
   </nav>
   <p class="err hidden" id="error"></p>
 
@@ -205,6 +222,88 @@ summary { cursor: pointer; color: var(--accent); }
             <th>Final outcome</th><th>Result</th><th class="num opt">Seconds</th><th class="num opt">Cost</th>
           </tr></thead>
           <tbody id="results"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <div class="tabpanel hidden" id="tab-settings" role="tabpanel">
+    <p class="readonly-note hidden" id="set-readonly">Read-only: changing settings needs the AgenticProd_Admin role.</p>
+
+    <section class="panel">
+      <h2>Providers &amp; keys</h2>
+      <p class="muted">Provider configs live in the AI Hub Config Store (<code>AI.LLM.&lt;name&gt;</code>); their API keys live in the IRIS Wallet and are never shown again once saved.</p>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Name</th><th>Kind</th><th>Model</th><th class="opt">Base URL</th><th>Key</th><th class="edit-only">New key</th></tr></thead>
+          <tbody id="set-providers"></tbody>
+        </table>
+      </div>
+      <form class="form edit-only" id="f-provider">
+        <label>Name <input name="name" required pattern="[a-z][a-z0-9_]{0,31}" placeholder="openai_main"></label>
+        <label>Kind <select name="model_provider" id="f-kinds"></select></label>
+        <label>Model <input name="model" required placeholder="gpt-4o-mini"></label>
+        <label>Base URL (optional) <input name="base_url" placeholder="https://..."></label>
+        <div class="actions"><button type="submit" class="primary">Save provider</button></div>
+      </form>
+      <p class="msg" id="m-provider"></p>
+      <form class="form edit-only" id="f-test">
+        <label>Test provider <select name="name" id="f-test-name"></select></label>
+        <label>Model (optional) <input name="model" placeholder="config's model"></label>
+        <div class="actions"><button type="submit">Test connection</button><span class="muted">One short LLM call per click</span></div>
+      </form>
+      <p class="msg" id="m-test"></p>
+    </section>
+
+    <section class="panel">
+      <h2>Agents <span class="muted">TriageAgent</span></h2>
+      <form class="form" id="f-agents">
+        <label>Provider config <select name="ProviderConfig" id="f-agent-provider"></select></label>
+        <label>Model <input name="Model" required></label>
+        <label>Temperature (empty = model default) <input name="Temperature" inputmode="decimal"></label>
+        <label>Max iterations <input name="MaxIterations" type="number" min="1" max="20" required></label>
+        <label>Max tool calls / message <input name="MaxToolCalls" type="number" min="0" required></label>
+        <label>Max tokens / message <input name="MaxTokensPerMessage" type="number" min="0" required></label>
+        <div class="actions edit-only"><button type="submit" class="primary">Apply</button></div>
+      </form>
+      <p class="muted">Applied as production item settings; the TriageAgent item restarts (about 20 s).</p>
+      <p class="msg" id="m-agents"></p>
+    </section>
+
+    <section class="panel">
+      <h2>Budgets &amp; mode</h2>
+      <form class="form" id="f-budgets">
+        <label>Daily token budget (0 = none) <input name="DailyTokenBudget" type="number" min="0" required></label>
+        <label>Mode <select name="Mode"><option value="live">live (calls the LLM)</option><option value="replay">replay (recorded runs, no LLM)</option></select></label>
+        <div class="actions edit-only"><button type="submit" class="primary">Apply</button></div>
+      </form>
+      <p class="muted" id="set-used"></p>
+      <p class="msg" id="m-budgets"></p>
+      <div class="kill" id="kill">
+        <div><strong>AI kill switch</strong> <span id="kill-state"></span><br><span class="muted">On: every failed message goes to a person, no LLM call.</span></div>
+        <span class="spacer"></span>
+        <button type="button" class="danger edit-only" id="kill-btn"></button>
+      </div>
+      <p class="msg" id="m-kill"></p>
+    </section>
+
+    <section class="panel">
+      <h2>Prices <span class="muted">USD per 1M tokens</span></h2>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Provider</th><th>Model</th><th class="num">Input</th><th class="num">Output</th><th class="num">Cache read</th><th class="num">Cache write</th><th class="opt">Updated (UTC)</th><th class="edit-only"></th></tr></thead>
+          <tbody id="set-prices"></tbody>
+        </table>
+      </div>
+      <p class="msg" id="m-prices"></p>
+    </section>
+
+    <section class="panel">
+      <h2>Change log <span class="muted">(last 50)</span></h2>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>When (UTC)</th><th>Who</th><th>Area</th><th>Item</th><th>Field</th><th>Old</th><th>New</th></tr></thead>
+          <tbody id="set-changes"></tbody>
         </table>
       </div>
     </section>
@@ -683,8 +782,196 @@ function load() {
   }).catch(showError);
 }
 
+// Settings writes. The server checks the admin role again on every call; the error text it
+// sends back (400/403) is shown as is.
+function send(method, path, body) {
+  return fetch(path, {
+    method: method, credentials: "same-origin",
+    headers: { "Accept": "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify(body || {})
+  }).then(function (r) {
+    if (r.status === 401) { location.reload(); throw new Error("login expired"); }
+    return r.json().catch(function () { return {}; }).then(function (j) {
+      if (!r.ok) throw new Error(j.error || (path + ": HTTP " + r.status));
+      return j;
+    });
+  });
+}
+function say(id, text, ok) {
+  var p = document.getElementById(id);
+  p.textContent = text || "";
+  p.className = "msg" + (text ? (ok ? " ok" : " bad") : "");
+}
+function formData(form) {
+  var o = {};
+  Array.prototype.forEach.call(form.elements, function (e) { if (e.name) o[e.name] = e.value.trim(); });
+  return o;
+}
+function fillSelect(sel, items, value) {
+  sel.textContent = "";
+  items.forEach(function (it) {
+    var o = el("option", it[1]);
+    o.value = it[0];
+    sel.appendChild(o);
+  });
+  sel.value = value == null ? "" : value;
+}
+
+var settings = null;
+function loadSettings() {
+  get("api/settings").then(renderSettings).catch(showError);
+}
+function renderSettings(s) {
+  settings = s;
+  var edit = s.canEdit;
+  document.getElementById("set-readonly").classList.toggle("hidden", edit);
+  Array.prototype.forEach.call(document.querySelectorAll("#tab-settings .edit-only"), function (e) { e.classList.toggle("hidden", !edit); });
+  Array.prototype.forEach.call(document.querySelectorAll("#f-agents input, #f-agents select, #f-budgets input, #f-budgets select"), function (e) { e.disabled = !edit; });
+
+  var body = document.getElementById("set-providers");
+  body.textContent = "";
+  if (!s.providers.length) {
+    var tr = el("tr");
+    cell(tr, "No provider configs yet: the agent uses OPENAI_API_KEY from .env.", "muted").colSpan = 6;
+    body.appendChild(tr);
+  }
+  s.providers.forEach(function (p) {
+    var tr = el("tr");
+    cell(tr, p.name);
+    cell(tr, p.model_provider);
+    cell(tr, p.model);
+    cell(tr, p.base_url || "—", "opt");
+    cell(tr, tag(p.key, p.key === "set" ? "good" : "warn"));
+    if (edit) {
+      var f = el("form");
+      f.style.display = "flex"; f.style.gap = "6px";
+      var inp = el("input");
+      inp.type = "password"; inp.autocomplete = "off"; inp.placeholder = "paste key"; inp.required = true;
+      var b = el("button", "Save key");
+      b.type = "submit";
+      f.appendChild(inp); f.appendChild(b);
+      f.addEventListener("submit", function (ev) {
+        ev.preventDefault();
+        send("POST", "api/settings/key", { name: p.name, key: inp.value }).then(function (r) {
+          inp.value = "";
+          say("m-provider", "Key for " + p.name + " saved (" + r.key + ").", true);
+          loadSettings();
+        }).catch(function (e) { say("m-provider", e.message); });
+      });
+      cell(tr, f, "edit-only");
+    }
+    body.appendChild(tr);
+  });
+  fillSelect(document.getElementById("f-kinds"), s.providerKinds.map(function (k) { return [k, k]; }), "openai");
+  var choices = [["", "(.env default: OPENAI_API_KEY)"]].concat(s.providers.map(function (p) { return [p.name, p.name + " — " + p.model_provider + " " + p.model]; }));
+  fillSelect(document.getElementById("f-test-name"), choices, s.agents.ProviderConfig);
+  fillSelect(document.getElementById("f-agent-provider"), choices, s.agents.ProviderConfig);
+
+  var fa = document.getElementById("f-agents");
+  ["Model", "Temperature", "MaxIterations", "MaxToolCalls", "MaxTokensPerMessage"].forEach(function (k) { fa.elements[k].value = s.agents[k]; });
+  var fb = document.getElementById("f-budgets");
+  fb.elements.DailyTokenBudget.value = s.budgets.DailyTokenBudget;
+  fb.elements.Mode.value = s.budgets.Mode;
+  var budget = Number(s.budgets.DailyTokenBudget);
+  document.getElementById("set-used").textContent = "Used today (UTC): " + num(s.usedToday) + " tokens" + (budget ? " of " + num(budget) + " (" + Math.round(s.usedToday / budget * 100) + "%)" : "");
+  var on = s.budgets.KillSwitch;
+  document.getElementById("kill").classList.toggle("on", on);
+  document.getElementById("kill-state").replaceChildren(tag(on ? "ON — agent not called" : "off", on ? "bad" : "good"));
+  document.getElementById("kill-btn").textContent = on ? "Turn AI back on" : "Stop AI now";
+
+  var pb = document.getElementById("set-prices");
+  pb.textContent = "";
+  s.prices.forEach(function (p) {
+    var tr = el("tr");
+    cell(tr, p.Provider);
+    cell(tr, p.Model);
+    var inputs = {};
+    ["InputPer1M", "OutputPer1M", "CacheReadPer1M", "CacheWritePer1M"].forEach(function (k) {
+      if (!edit) { cell(tr, p[k] == null ? "—" : p[k], "num"); return; }
+      var i = el("input");
+      i.type = "number"; i.min = "0"; i.step = "any"; i.value = p[k] == null ? "" : p[k];
+      inputs[k] = i;
+      cell(tr, i, "num");
+    });
+    cell(tr, p.UpdatedAt, "opt");
+    if (edit) {
+      var b = el("button", "Save");
+      b.type = "button";
+      b.addEventListener("click", function () {
+        var body = { Model: p.Model };
+        Object.keys(inputs).forEach(function (k) { if (inputs[k].value !== "") body[k] = Number(inputs[k].value); });
+        send("PUT", "api/settings/prices", body).then(function () {
+          say("m-prices", "Prices for " + p.Model + " saved.", true);
+          loadSettings();
+        }).catch(function (e) { say("m-prices", e.message); });
+      });
+      cell(tr, b, "edit-only");
+    }
+    pb.appendChild(tr);
+  });
+
+  var cb = document.getElementById("set-changes");
+  cb.textContent = "";
+  if (!s.changes.length) {
+    var tr0 = el("tr");
+    cell(tr0, "No changes yet.", "muted").colSpan = 7;
+    cb.appendChild(tr0);
+  }
+  s.changes.forEach(function (c) {
+    var tr = el("tr");
+    [c.ChangedAt, c.ChangedBy, c.Scope, c.Item, c.Field].forEach(function (v) { cell(tr, v); });
+    cell(tr, c.OldValue == null ? "" : String(c.OldValue), "wrap-cell");
+    cell(tr, c.NewValue == null ? "" : String(c.NewValue), "wrap-cell");
+    cb.appendChild(tr);
+  });
+}
+
+document.getElementById("f-provider").addEventListener("submit", function (ev) {
+  ev.preventDefault();
+  var d = formData(ev.target);
+  send("PUT", "api/settings/providers", d).then(function () {
+    say("m-provider", "Provider " + d.name + " saved. Set its key in the table.", true);
+    ev.target.reset();
+    loadSettings();
+  }).catch(function (e) { say("m-provider", e.message); });
+});
+document.getElementById("f-test").addEventListener("submit", function (ev) {
+  ev.preventDefault();
+  var btn = ev.target.querySelector("button");
+  btn.disabled = true;
+  say("m-test", "Calling the model…", true);
+  send("POST", "api/settings/test-connection", formData(ev.target)).then(function (r) {
+    if (r.ok) say("m-test", "OK: " + r.kind + " " + r.model + " replied \"" + r.reply + "\" in " + r.ms + " ms; " + r.promptTokens + " + " + r.completionTokens + " tokens, " + money(r.costUsd, 6) + ".", true);
+    else say("m-test", "Failed: " + r.error);
+    loadSettings();
+  }).catch(function (e) { say("m-test", e.message); }).then(function () { btn.disabled = false; });
+});
+function applyItem(section, form, msgId) {
+  var d = formData(form);
+  var btn = form.querySelector("button");
+  btn.disabled = true;
+  say(msgId, "Applying…", true);
+  send("PUT", "api/settings/" + section, d).then(function (r) {
+    say(msgId, r.note || "Applied.", !r.note);
+    loadSettings();
+  }).catch(function (e) { say(msgId, e.message); }).then(function () { btn.disabled = false; });
+}
+document.getElementById("f-agents").addEventListener("submit", function (ev) { ev.preventDefault(); applyItem("agents", ev.target, "m-agents"); });
+document.getElementById("f-budgets").addEventListener("submit", function (ev) { ev.preventDefault(); applyItem("budgets", ev.target, "m-budgets"); });
+document.getElementById("kill-btn").addEventListener("click", function () {
+  var btn = this;
+  var on = !(settings && settings.budgets.KillSwitch);
+  btn.disabled = true;
+  say("m-kill", on ? "Stopping the AI…" : "Turning the AI back on…", true);
+  send("POST", "api/settings/kill-switch", { on: on }).then(function (r) {
+    say("m-kill", r.note || (on ? "Kill switch on: failures go to a person." : "Kill switch off: the agent triages again."), !r.note);
+    loadSettings();
+  }).catch(function (e) { say("m-kill", e.message); }).then(function () { btn.disabled = false; });
+});
+
 function showTab(name) {
   if (!document.getElementById("tab-" + name)) name = "overview";
+  if (name === "settings") loadSettings();
   Array.prototype.forEach.call(document.querySelectorAll(".tabs button"), function (b) {
     b.setAttribute("aria-selected", b.dataset.tab === name ? "true" : "false");
   });

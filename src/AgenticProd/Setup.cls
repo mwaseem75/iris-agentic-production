@@ -39,7 +39,16 @@ Parameter DASHRESOURCE = "AgenticProd_Dashboard";
 Parameter DASHROLE = "AgenticProd_Dashboard";
 
 /// Read-only databases: the dashboard never writes. IRISTEMP is RW for SQL work globals.
-Parameter DASHRESOURCES = "AgenticProd_Dashboard:U,%DB_IRISAPP_DATA:R,%DB_IRISAPP_CODE:R,%DB_ENSLIB:R,%DB_HSLIB:R,%DB_HSSYS:R,%DB_IRISLIB:R,%DB_IRISSYS:R,%DB_IRISTEMP:RW";
+/// AgenticProd_AIRead: the Settings tab shows provider configs (secret:// references, no keys).
+Parameter DASHRESOURCES = "AgenticProd_Dashboard:U,AgenticProd_AIRead:RU,%DB_IRISAPP_DATA:R,%DB_IRISAPP_CODE:R,%DB_ENSLIB:R,%DB_HSLIB:R,%DB_HSSYS:R,%DB_IRISLIB:R,%DB_IRISSYS:R,%DB_IRISTEMP:RW";
+
+/// Settings tab write access, on top of the dashboard role (granted role). Given to SuperUser
+/// and _SYSTEM; the reviewer stays read-only.
+Parameter ADMINROLE = "AgenticProd_Admin";
+
+/// AIUse resolves Wallet keys (test connection); ProductionConfig and the code database for
+/// applying item settings through Ens.Production.ApplySettings.
+Parameter ADMINRESOURCES = "AgenticProd_Settings:RWU,AgenticProd_AIRead:RU,AgenticProd_AIUse:RU,%Ens_ProductionConfig:RWU,%DB_IRISAPP_DATA:RW,%DB_IRISAPP_CODE:RW";
 
 /// Role added to /api/monitor so Monitor.Metrics can run in IRISAPP (Setup.MonitorSetup).
 Parameter MONITORROLE = "AgenticProd_Monitor";
@@ -52,7 +61,8 @@ Parameter LOINCFILE = "/home/irisowner/dev/kb/loinc_subset.csv";
 /// Database resources only cover what an interop job needs to store messages and read code.
 /// Data access inside IRISAPP_DATA is still all-or-nothing for globals; SQL grants narrow it
 /// for %SQL.Statement, which is the only way agent tools may query.
-Parameter AGENTRESOURCES = "%DB_IRISAPP_DATA:RW,%DB_IRISAPP_CODE:R,%DB_ENSLIB:R,%DB_HSLIB:R,%DB_HSSYS:R,%DB_IRISLIB:R,%DB_IRISSYS:R,%DB_IRISTEMP:RW";
+/// AIRead and AIUse: the provider config chosen on the Settings tab and its Wallet key.
+Parameter AGENTRESOURCES = "%DB_IRISAPP_DATA:RW,%DB_IRISAPP_CODE:R,%DB_ENSLIB:R,%DB_HSLIB:R,%DB_HSSYS:R,%DB_IRISLIB:R,%DB_IRISSYS:R,%DB_IRISTEMP:RW,AgenticProd_AIRead:RU,AgenticProd_AIUse:RU";
 
 ClassMethod Run() As %Status
 {
@@ -61,9 +71,12 @@ ClassMethod Run() As %Status
 		$$$ThrowOnError(##class(AgenticProd.Data.PriceTable).Seed())
 		$$$ThrowOnError(..SeedLabCodeMap())
 		$$$ThrowOnError(..BuildLoincKB())
+		// Before the roles: they list the settings resources
+		$$$ThrowOnError(##class(AgenticProd.Settings.Store).Prepare())
 		$$$ThrowOnError(..AgentSecurity())
 		$$$ThrowOnError(..WorkflowSetup())
 		$$$ThrowOnError(..DashboardSetup())
+		$$$ThrowOnError(..AdminSetup())
 		$$$ThrowOnError(..MonitorSetup())
 		$$$ThrowOnError(..PortalFavorites())
 		// Setup runs at image build with IRIS about to stop, so starting it here would not last
@@ -214,9 +227,52 @@ ClassMethod DashboardSetup() As %Status
 	Set tSC = $$$OK
 	Try {
 		$$$ThrowOnError(..CreateDashboardApp($NAMESPACE))
-		Set tSql = "GRANT SELECT ON AgenticProd_Data.DecisionLog, AgenticProd_Data.Usage, AgenticProd_Data.EvalRun, AgenticProd_Data.EvalResult, AgenticProd_Data.ToolCall, AgenticProd_Data.Span, AgenticProd_Data.SavedCall, AgenticProd_Msg.ApprovalTask, AgenticProd_Msg.FHIRResult, AgenticProd_Msg.TriageRequest, Ens.MessageHeader, EnsLib_Workflow.TaskResponse TO "_..#DASHROLE
+		Set tSql = "GRANT SELECT ON AgenticProd_Data.DecisionLog, AgenticProd_Data.Usage, AgenticProd_Data.EvalRun, AgenticProd_Data.EvalResult, AgenticProd_Data.ToolCall, AgenticProd_Data.Span, AgenticProd_Data.SavedCall, AgenticProd_Data.PriceTable, AgenticProd_Data.SettingsAudit, AgenticProd_Msg.ApprovalTask, AgenticProd_Msg.FHIRResult, AgenticProd_Msg.TriageRequest, Ens.MessageHeader, EnsLib_Workflow.TaskResponse TO "_..#DASHROLE
 		Set tRS = ##class(%SQL.Statement).%ExecDirect(, tSql)
 		If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message_" ("_tSql_")"))
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// ADMINROLE (dashboard role plus Settings write) for SuperUser and _SYSTEM, and the SQL it
+/// writes with: settings audit, prices, the test-connection Usage row. Needs DashboardSetup first.
+ClassMethod AdminSetup() As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		$$$ThrowOnError(..CreateAdminRole())
+		For tSql = "GRANT SELECT, INSERT ON AgenticProd_Data.SettingsAudit TO "_..#ADMINROLE,
+			"GRANT SELECT, INSERT, UPDATE ON AgenticProd_Data.PriceTable TO "_..#ADMINROLE,
+			"GRANT INSERT ON AgenticProd_Data.Usage TO "_..#ADMINROLE {
+			Set tRS = ##class(%SQL.Statement).%ExecDirect(, tSql)
+			If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message_" ("_tSql_")"))
+		}
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+ClassMethod CreateAdminRole() As %Status [ Private ]
+{
+	New $NAMESPACE
+	Set $NAMESPACE = "%SYS"
+	Set tSC = $$$OK
+	Try {
+		Set tProps("Description") = "AgenticProd Settings tab: change providers, keys, agents, budgets, prices"
+		Set tProps("Resources") = ..#ADMINRESOURCES
+		Set tProps("GrantedRoles") = ..#DASHROLE
+		If ##class(Security.Roles).Exists(..#ADMINROLE) {
+			$$$ThrowOnError(##class(Security.Roles).Modify(..#ADMINROLE, .tProps))
+		} Else {
+			$$$ThrowOnError(##class(Security.Roles).Create(..#ADMINROLE, tProps("Description"), tProps("Resources"), tProps("GrantedRoles")))
+		}
+		For tUser = "SuperUser", "_SYSTEM" {
+			Continue:'..UserEnabled(tUser)
+			$$$ThrowOnError(..AddUserRole(tUser, ..#ADMINROLE))
+		}
 	} Catch ex {
 		Set tSC = ex.AsStatus()
 	}
@@ -346,7 +402,7 @@ ClassMethod CreateDashboardApp(pNamespace As %String) As %Status [ Private ]
 				Set tProps("Description") = "AgenticProd dashboard libraries (web/vendor)"
 				Set tProps("DispatchClass") = "", tProps("Path") = ..#DASHDIR_"vendor/", tProps("ServeFiles") = 3, tProps("Recurse") = 1
 			} Else {
-				Set tProps("Description") = "AgenticProd dashboard API (read-only)"
+				Set tProps("Description") = "AgenticProd dashboard API (read-only; settings writes need AgenticProd_Admin)"
 				Set tProps("DispatchClass") = "AgenticProd.UI.REST"
 			}
 			If ##class(Security.Applications).Exists(tApp) {
