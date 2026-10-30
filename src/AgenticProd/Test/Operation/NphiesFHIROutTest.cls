@@ -1,6 +1,6 @@
 /// HL7 -> SDA3 -> FHIR R4 build and validation on eval cases, called directly (no production, no LLM).
 /// The first profile check starts the Java validator, so the first test can take about 35 s.
-Class AgenticProd.Test.Operation.NphiesFHIROutTest Extends %UnitTest.TestCase
+Class AgenticProd.Test.Operation.NphiesFHIROutTest Extends AgenticProd.Test.Case
 {
 
 Parameter PROFILE = "http://hl7.org/fhir/us/core/StructureDefinition/us-core-observation-lab|3.1.0";

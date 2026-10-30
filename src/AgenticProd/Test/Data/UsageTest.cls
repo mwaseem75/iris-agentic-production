@@ -1,5 +1,5 @@
 /// Unit tests for AgenticProd.Data.Usage. Stub GetStats() output, no LLM.
-Class AgenticProd.Test.Data.UsageTest Extends %UnitTest.TestCase
+Class AgenticProd.Test.Data.UsageTest Extends AgenticProd.Test.Case
 {
 
 Parameter TESTMODEL = "unittest-usage-model";

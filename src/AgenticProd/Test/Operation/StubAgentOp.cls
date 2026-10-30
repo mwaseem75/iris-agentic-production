@@ -8,6 +8,12 @@ Property Script As list Of %String(MAXLEN = "");
 
 Property Calls As %Integer [ InitialExpression = 0 ];
 
+/// Scripted replies are not live calls, so the test-run block does not apply.
+Method LLMBlocked() As %String
+{
+	Quit ""
+}
+
 Method AgentChat(pAgent As %AI.Agent, pSession As %AI.Agent.Session, pText As %String) As %RegisteredObject
 {
 	Set ..Calls = ..Calls + 1

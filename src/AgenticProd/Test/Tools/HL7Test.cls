@@ -1,6 +1,6 @@
 /// Tools.HL7 against eval cases 05, 08, 11, 13. Each case is saved as an HL7 message with a
 /// synthetic header so the tools run the same lookup path as in the production. No LLM.
-Class AgenticProd.Test.Tools.HL7Test Extends %UnitTest.TestCase
+Class AgenticProd.Test.Tools.HL7Test Extends AgenticProd.Test.Case
 {
 
 Parameter CASEDIR = "/home/irisowner/dev/eval/cases/";

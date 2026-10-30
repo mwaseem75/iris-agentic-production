@@ -1,6 +1,6 @@
 /// Telemetry.Trace with capture on: span names, parent links and attributes for one failed message,
 /// recorded in-process, and the same spans stored in Data.Span. Nothing is exported. No LLM.
-Class AgenticProd.Test.Telemetry.TraceTest Extends %UnitTest.TestCase
+Class AgenticProd.Test.Telemetry.TraceTest Extends AgenticProd.Test.Case
 {
 
 /// Planted in the error text; no attribute may carry it.

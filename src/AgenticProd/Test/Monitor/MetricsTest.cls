@@ -1,6 +1,6 @@
 /// SAM metric classes: GetSensors runs clean, and /api/monitor/metrics serves the agentic and
 /// gen_ai metrics. The HTTP test needs Setup.MonitorSetup to have run. No LLM.
-Class AgenticProd.Test.Monitor.MetricsTest Extends %UnitTest.TestCase
+Class AgenticProd.Test.Monitor.MetricsTest Extends AgenticProd.Test.Case
 {
 
 Method TestGetSensors()

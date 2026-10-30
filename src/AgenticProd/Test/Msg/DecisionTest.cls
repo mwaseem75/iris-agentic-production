@@ -1,5 +1,5 @@
 /// Unit tests for AgenticProd.Msg.Decision.FromAgentText. Stub agent text only, no LLM.
-Class AgenticProd.Test.Msg.DecisionTest Extends %UnitTest.TestCase
+Class AgenticProd.Test.Msg.DecisionTest Extends AgenticProd.Test.Case
 {
 
 Method TestValidJSON()

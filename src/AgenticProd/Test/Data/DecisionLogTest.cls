@@ -1,5 +1,5 @@
 /// Unit tests for AgenticProd.Data.DecisionLog. Stub decision text, no LLM.
-Class AgenticProd.Test.Data.DecisionLogTest Extends %UnitTest.TestCase
+Class AgenticProd.Test.Data.DecisionLogTest Extends AgenticProd.Test.Case
 {
 
 Method TestRecord()

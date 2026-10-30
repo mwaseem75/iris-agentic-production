@@ -1,6 +1,6 @@
 /// Tools.Mapping on the search_loinc knowledge base (FastEmbed, local) and LabCodeMap. No LLM.
 /// Needs Setup.BuildLoincKB() and Setup.SeedLabCodeMap().
-Class AgenticProd.Test.Tools.MappingTest Extends %UnitTest.TestCase
+Class AgenticProd.Test.Tools.MappingTest Extends AgenticProd.Test.Case
 {
 
 /// Local code used only by these tests' DecisionLog rows.

@@ -1,5 +1,5 @@
 /// NphiesOut timeout matching on control IDs and eval case IDs. No production run.
-Class AgenticProd.Test.Operation.NphiesOutTest Extends %UnitTest.TestCase
+Class AgenticProd.Test.Operation.NphiesOutTest Extends AgenticProd.Test.Case
 {
 
 Method TestIsSimulated()

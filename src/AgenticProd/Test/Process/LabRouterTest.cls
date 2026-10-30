@@ -1,5 +1,5 @@
 /// LabRouter checks and the DTL on eval cases, called directly (no production, no LLM).
-Class AgenticProd.Test.Process.LabRouterTest Extends %UnitTest.TestCase
+Class AgenticProd.Test.Process.LabRouterTest Extends AgenticProd.Test.Case
 {
 
 Method OnBeforeAllTests() As %Status

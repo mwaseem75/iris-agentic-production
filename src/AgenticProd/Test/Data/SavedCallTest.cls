@@ -1,6 +1,6 @@
 /// Data.SavedCall.Note: a message passing on a learned mapping counts once; the resend of the
 /// approved message itself does not. No production, no LLM.
-Class AgenticProd.Test.Data.SavedCallTest Extends %UnitTest.TestCase
+Class AgenticProd.Test.Data.SavedCallTest Extends AgenticProd.Test.Case
 {
 
 Parameter CODE = "TST-SAVED-1";

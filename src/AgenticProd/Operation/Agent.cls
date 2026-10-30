@@ -59,6 +59,47 @@ Property DisabledSkills As %String(MAXLEN = 500);
 
 Parameter SETTINGS = "ProviderConfig:Agent,Model:Agent,Temperature:Agent,Mode:Agent,KillSwitch:Agent,MaxIterations:Agent,MaxToolCalls:Agent,MaxTokensPerMessage:Agent,DailyTokenBudget:Agent,DisabledSkills:Agent,ToolTiers:Guardrails,EnabledTiers:Guardrails,RunAsUser:Agent";
 
+/// Seconds live calls stay blocked after a test class ends: messages it sent may still be on
+/// their way to an agent.
+Parameter TESTGRACE = 120;
+
+/// Why a live LLM call must not happen now, "" when it may. Test stubs override this; their
+/// AgentChat never reaches a model.
+Method LLMBlocked() As %String
+{
+	Quit $SELECT(..TestRunActive(): "test run", 1: "")
+}
+
+/// Unit test classes (Test.Case) mark their job in ^IRIS.Temp.AgenticProdNoLLM: "" while the
+/// class runs, then the time (Seconds) the block ends. IRISTEMP is shared by every namespace, so a
+/// plug-in agent in LEGACY sees an IRISAPP test run, and a restart empties it.
+ClassMethod MarkTestRun(pActive As %Boolean)
+{
+	Set ^IRIS.Temp.AgenticProdNoLLM($JOB) = $SELECT(pActive: "", 1: ..Seconds() + ..#TESTGRACE)
+}
+
+/// 1 while any test job is running, or ended less than TESTGRACE seconds ago. A job that died
+/// mid-run (no end time) stops counting once it is gone; finished marks are cleared.
+ClassMethod TestRunActive() As %Boolean
+{
+	Set tNow = ..Seconds(), tJob = "", tActive = 0
+	For {
+		Set tJob = $ORDER(^IRIS.Temp.AgenticProdNoLLM(tJob), 1, tUntil)
+		Quit:tJob=""
+		If (tUntil = "") && $DATA(^$JOB(tJob)) Set tActive = 1 Quit
+		If (tUntil '= "") && (tUntil > tNow) Set tActive = 1 Quit
+		Kill ^IRIS.Temp.AgenticProdNoLLM(tJob)
+	}
+	Quit tActive
+}
+
+/// UTC seconds, comparable between processes ($ZHOROLOG is not).
+ClassMethod Seconds() As %Integer [ Internal ]
+{
+	Set tNow = $ZTIMESTAMP
+	Quit (+tNow * 86400) + ($PIECE(tNow, ",", 2) \ 1)
+}
+
 /// Fail closed: if the switch fails the item does not start, rather than run the agent with %All.
 /// The switch lasts for the job's life, so this item must keep its own pool (no shared jobs).
 Method OnInit() As %Status
@@ -100,6 +141,13 @@ Method Triage(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As Age
 		If ..DailyTokenBudget, tUsed >= ..DailyTokenBudget {
 			$$$LOGWARNING("Daily token budget used up ("_tUsed_" of "_..DailyTokenBudget_"), escalating header "_pRequest.HeaderId_" without an LLM call")
 			Set pResponse = ..EscalateDecision(pRequest, "Daily token budget used up ("_tUsed_" of "_..DailyTokenBudget_" tokens); agent not called")
+			Quit
+		}
+		// Last gate before a live call: a unit test run never spends credit, whatever the settings say
+		Set tBlocked = ..LLMBlocked()
+		If tBlocked '= "" {
+			$$$LOGWARNING("LLM blocked: "_tBlocked_", escalating header "_pRequest.HeaderId_" without an LLM call")
+			Set pResponse = ..EscalateDecision(pRequest, "LLM blocked: "_tBlocked)
 			Quit
 		}
 

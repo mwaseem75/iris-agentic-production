@@ -1,5 +1,5 @@
 /// Eval.Runner scoring, collection and summary on stub rows. No production run, no LLM.
-Class AgenticProd.Test.Eval.RunnerTest Extends %UnitTest.TestCase
+Class AgenticProd.Test.Eval.RunnerTest Extends AgenticProd.Test.Case
 {
 
 /// Fake run ID for stub DecisionLog, Usage and EvalResult rows.

@@ -1,5 +1,5 @@
 /// Unit tests for AgenticProd.Data.PriceTable. Uses its own test model row, removed afterwards.
-Class AgenticProd.Test.Data.PriceTableTest Extends %UnitTest.TestCase
+Class AgenticProd.Test.Data.PriceTableTest Extends AgenticProd.Test.Case
 {
 
 Parameter TESTMODEL = "unittest-model";

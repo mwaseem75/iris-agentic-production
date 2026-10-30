@@ -1,5 +1,5 @@
 /// Agent operation tests. No LLM: they cover the task text and the ESCALATE fallback.
-Class AgenticProd.Test.Operation.AgentTest Extends %UnitTest.TestCase
+Class AgenticProd.Test.Operation.AgentTest Extends AgenticProd.Test.Case
 {
 
 Method TestBuildTaskMarksErrorTextUntrusted()
@@ -53,6 +53,48 @@ Method TestOverBudgetEscalatesWithoutAgent()
 	Do $$$AssertTrue(tDecision.Reason [ "budget", "reason names the budget")
 	Do $$$AssertEquals(tDecision.AgentSessionId, "", "no agent session created")
 	Do $$$AssertEquals(..CountUsage(), tUsageRows, "no Usage row for a skipped run")
+}
+
+/// During a test run the real operation escalates before building the agent, kill switch off,
+/// live mode, budget unlimited. The provider config does not exist, so even a broken block could
+/// not reach a model.
+Method TestLiveCallBlockedDuringTestRun()
+{
+	Do $$$AssertTrue(##class(AgenticProd.Operation.Agent).TestRunActive(), "this run is marked")
+	Quit:'##class(AgenticProd.Operation.Agent).TestRunActive()
+	Set tOp = ##class(AgenticProd.Operation.Agent).%New("TestAgentOp")
+	Set tOp.KillSwitch = 0, tOp.Mode = "live", tOp.DailyTokenBudget = 0, tOp.ProviderConfig = "no_such_provider"
+	Set tUsageRows = ..CountUsage()
+	Do $$$AssertStatusOK(tOp.Triage(..StubRequest(), .tDecision))
+	Do $$$AssertEquals(tDecision.Decision, "ESCALATE")
+	Do $$$AssertEquals(tDecision.Reason, "LLM blocked: test run")
+	Do $$$AssertEquals(tDecision.AgentSessionId, "", "no agent session created")
+	Do $$$AssertEquals(..CountUsage(), tUsageRows, "no Usage row")
+}
+
+/// Marks: active while the job runs, then a grace period; a dead job's open mark does not count.
+Method TestTestRunMarks()
+{
+	Set tNow = ##class(AgenticProd.Operation.Agent).Seconds()
+	Merge tSaved = ^IRIS.Temp.AgenticProdNoLLM
+	Try {
+		Kill ^IRIS.Temp.AgenticProdNoLLM
+		Do $$$AssertNotTrue(##class(AgenticProd.Operation.Agent).TestRunActive(), "no marks")
+		// No such job: a crashed run
+		Set ^IRIS.Temp.AgenticProdNoLLM(999999999) = ""
+		Do $$$AssertNotTrue(##class(AgenticProd.Operation.Agent).TestRunActive(), "dead job ignored")
+		Do $$$AssertEquals($DATA(^IRIS.Temp.AgenticProdNoLLM(999999999)), 0, "and cleared")
+		Set ^IRIS.Temp.AgenticProdNoLLM(999999999) = tNow + 60
+		Do $$$AssertTrue(##class(AgenticProd.Operation.Agent).TestRunActive(), "inside the grace period")
+		Set ^IRIS.Temp.AgenticProdNoLLM(999999999) = tNow - 1
+		Do $$$AssertNotTrue(##class(AgenticProd.Operation.Agent).TestRunActive(), "grace over")
+		Do ##class(AgenticProd.Operation.Agent).MarkTestRun(1)
+		Do $$$AssertTrue(##class(AgenticProd.Operation.Agent).TestRunActive(), "this job running")
+	} Catch ex {
+		Do $$$AssertStatusOK(ex.AsStatus())
+	}
+	Kill ^IRIS.Temp.AgenticProdNoLLM
+	Merge ^IRIS.Temp.AgenticProdNoLLM = tSaved
 }
 
 /// Stub stats in the GetStats() shape; no agent or session needed.

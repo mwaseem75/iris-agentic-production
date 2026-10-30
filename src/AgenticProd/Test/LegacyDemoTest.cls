@@ -1,6 +1,6 @@
 /// Legacy demo (Setup.LegacyDemo): namespace, lookup, and the two components that fail on purpose.
 /// Runs the label renderer and the DTL in LEGACY directly; nothing goes through the production.
-Class AgenticProd.Test.LegacyDemoTest Extends %UnitTest.TestCase
+Class AgenticProd.Test.LegacyDemoTest Extends AgenticProd.Test.Case
 {
 
 Parameter SAMPLES = "/home/irisowner/dev/legacy/samples/";

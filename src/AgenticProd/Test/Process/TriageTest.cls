@@ -2,7 +2,7 @@ Include Ensemble
 
 /// Process.Triage action matrix with stub decisions on eval cases. Calls Plan, Review and
 /// ApplyMapping directly, no LLM. Only TestLearningLoop01 sends, into the running production.
-Class AgenticProd.Test.Process.TriageTest Extends %UnitTest.TestCase
+Class AgenticProd.Test.Process.TriageTest Extends AgenticProd.Test.Case
 {
 
 /// Request Source of the DecisionLog rows these tests write, so cleanup finds them.

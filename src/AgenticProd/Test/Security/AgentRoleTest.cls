@@ -1,6 +1,6 @@
 /// SQL privileges of the agent role, checked in a child job that switches to the agent user the
 /// way Operation.Agent does, so the test process keeps its own rights. Needs Setup.AgentSecurity().
-Class AgenticProd.Test.Security.AgentRoleTest Extends %UnitTest.TestCase
+Class AgenticProd.Test.Security.AgentRoleTest Extends AgenticProd.Test.Case
 {
 
 Method TestAgentSqlIsSelectOnlyPlusAuditInserts()

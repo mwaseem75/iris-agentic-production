@@ -1,5 +1,5 @@
 /// Tools.Base on a saved eval case (05) and synthetic DecisionLog rows. No LLM.
-Class AgenticProd.Test.Tools.BaseTest Extends %UnitTest.TestCase
+Class AgenticProd.Test.Tools.BaseTest Extends AgenticProd.Test.Case
 {
 
 /// Local code used only by these tests, so other DecisionLog rows never match.

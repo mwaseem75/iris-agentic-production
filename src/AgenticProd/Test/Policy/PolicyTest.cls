@@ -1,5 +1,5 @@
 /// ReadOnly and Audit policies, called directly with the call/metadata shapes AI Hub passes. No LLM.
-Class AgenticProd.Test.Policy.PolicyTest Extends %UnitTest.TestCase
+Class AgenticProd.Test.Policy.PolicyTest Extends AgenticProd.Test.Case
 {
 
 Method TestReadOnlyDeniesRequiresAuth()

@@ -1,5 +1,5 @@
 /// Unit tests for AgenticProd.Data.ToolCall.
-Class AgenticProd.Test.Data.ToolCallTest Extends %UnitTest.TestCase
+Class AgenticProd.Test.Data.ToolCallTest Extends AgenticProd.Test.Case
 {
 
 Method TestLog()

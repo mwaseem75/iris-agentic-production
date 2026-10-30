@@ -1,7 +1,7 @@
 /// Plug-in on the LEGACY demo production: installer enable/disable, Sentinel scan and request,
 /// Triage observe mode. Stub headers only, no LLM. Enable/Disable change the running LEGACY
 /// production and put it back as it was.
-Class AgenticProd.Test.Plugin.PluginTest Extends %UnitTest.TestCase
+Class AgenticProd.Test.Plugin.PluginTest Extends AgenticProd.Test.Case
 {
 
 Parameter NS = "LEGACY";

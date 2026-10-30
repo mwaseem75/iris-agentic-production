@@ -1,6 +1,6 @@
 /// Demo sender: file copy and MSH-10 rewrite only. Writes to a scratch folder, never data/in,
 /// so nothing reaches the production or the agent. Reset is tested on stub rows only.
-Class AgenticProd.Test.DemoTest Extends %UnitTest.TestCase
+Class AgenticProd.Test.DemoTest Extends AgenticProd.Test.Case
 {
 
 Property Dir As %String;

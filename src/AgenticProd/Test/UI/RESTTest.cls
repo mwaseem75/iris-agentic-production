@@ -1,6 +1,6 @@
 /// UI.REST data builders on stub rows, and the /agenticprod web app over HTTP. No LLM.
 /// The HTTP tests need Setup.DashboardSetup to have run (web app, reviewer in the dashboard role).
-Class AgenticProd.Test.UI.RESTTest Extends %UnitTest.TestCase
+Class AgenticProd.Test.UI.RESTTest Extends AgenticProd.Test.Case
 {
 
 /// Fake run ID for stub DecisionLog, EvalRun and EvalResult rows.

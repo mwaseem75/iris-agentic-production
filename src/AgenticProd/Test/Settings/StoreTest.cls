@@ -1,7 +1,7 @@
 /// Unit tests for AgenticProd.Settings.Store, the settings REST writes and the kill switch.
 /// Uses its own provider config, Wallet key and price row, removed afterwards. No LLM call:
 /// %Init only builds the provider. Item settings are checked, never applied to the production.
-Class AgenticProd.Test.Settings.StoreTest Extends %UnitTest.TestCase
+Class AgenticProd.Test.Settings.StoreTest Extends AgenticProd.Test.Case
 {
 
 Parameter TESTPROVIDER = "unittest_p";
