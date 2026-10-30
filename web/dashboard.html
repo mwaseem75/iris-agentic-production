@@ -1003,7 +1003,7 @@ function renderCost(c) {
   document.getElementById("tiles-cost-spend").replaceChildren(
     tile("AI cost today", m(c.cost.today), "UTC day"),
     tile("AI cost this month", m(c.cost.month), "day " + c.cost.dayOfMonth + " of " + c.cost.daysInMonth),
-    tile("Cost per failure handled", f.costPer == null ? "—" : m(f.costPer, 5), num(f.triaged) + " failures in " + c.days + " days"),
+    tile("Cost per failure triaged", f.costPer == null ? "—" : m(f.costPer, 5), num(f.triaged) + " failures in " + c.days + " days"),
     tile("Monthly forecast (estimate)", m(c.cost.forecast), "daily average x " + c.cost.daysInMonth + " days"),
     tile("Budget used today", b.percent == null ? "no budget" : b.percent + "%", num(b.tokensToday) + " of " + (b.dailyTokenBudget ? num(b.dailyTokenBudget) : "—") + " tokens", b.percent == null ? undefined : b.percent / 100)
   );
@@ -1012,9 +1012,9 @@ function renderCost(c) {
     tile("LLM calls saved by learned mappings", num(sv.savedCalls), sv.savedCallsUsd == null ? "no MAP_CODE run to price it" : "about " + m(sv.savedCallsUsd) + " (estimate, " + num(sv.basedOnRuns) + " runs)")
   );
   document.getElementById("tiles-cost-roi").replaceChildren(
-    tile("Handled without an engineer", num(r.handled), r.hoursSaved + " engineer hours"),
-    tile("Engineer time saved", m(r.engineerValue, 2), "vs AI cost " + m(r.aiCost, 2)),
-    tile("Net", m(r.net, 2), r.aiCost > 0 ? "about " + (r.engineerValue / r.aiCost).toFixed(0) + "x the AI cost" : "no AI cost in the period", undefined, r.net < 0 ? "over" : "")
+    tile("Handled without an engineer (estimate)", num(r.handled), r.hoursSaved + " engineer hours, live traffic"),
+    tile("Engineer time saved (estimate)", m(r.engineerValue, 2), "AI cost " + m(r.aiCost, 2) + " vs about " + m(r.engineerValue, 2) + " of engineer time (estimate)"),
+    tile("Net (estimate)", m(r.net, 2), "engineer time minus AI cost, live traffic", undefined, r.net < 0 ? "over" : "")
   );
   document.getElementById("cost-assume").textContent = "Assumes " + r.minutesPerFailure + " min per failure at " + cur + r.hourlyRate + "/h; handled = applied, resent, rejected or approved mappings. Change both in Settings, Budgets.";
 

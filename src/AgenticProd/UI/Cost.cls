@@ -59,17 +59,18 @@ ClassMethod Data(pIncludeEval As %Boolean = 0, pDays As %Integer = {..#DEFAULTDA
 	Set tEvalWhere = $SELECT(pIncludeEval: "", 1: " AND u.EvalRunId IS NULL")
 
 	// One pass over the usage rows feeds the day, production and error class breakdowns
-	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT u.CreatedAt, u.Model, u.Namespace, u.CostUsd, u.CacheReadTokens,"
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT u.CreatedAt, u.Model, u.Namespace, u.CostUsd, u.CacheReadTokens, u.EvalRunId,"
 		_" (SELECT MAX(d.ErrorClass) FROM AgenticProd_Data.DecisionLog d WHERE d.HeaderId = u.HeaderId AND d.Namespace = u.Namespace) AS ErrorClass"
 		_" FROM AgenticProd_Data.Usage u WHERE u.CreatedAt >= ? AND (u.Replay = 0 OR u.Replay IS NULL)"_tEvalWhere, tFrom_" 00:00:00")
 	If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message))
-	Set (tCostToday, tCostMonth, tCostWindow) = 0
+	Set (tCostToday, tCostMonth, tCostWindow, tLiveWindow) = 0
 	While tRS.%Next() {
 		Set tDay = $EXTRACT(tRS.CreatedAt, 1, 10), tCost = +tRS.CostUsd
 		Set:tDay=tToday tCostToday = tCostToday + tCost
 		Set:'(tMonthStart]tDay) tCostMonth = tCostMonth + tCost
 		Continue:tWindowStart]tDay
 		Set tCostWindow = tCostWindow + tCost
+		Set:tRS.EvalRunId="" tLiveWindow = tLiveWindow + tCost
 		Set tByDay(tDay, tRS.Model) = $GET(tByDay(tDay, tRS.Model)) + tCost, tModels(tRS.Model) = ""
 		Set tNs = $SELECT(tRS.Namespace'="": tRS.Namespace, 1: "(none)"), tByNs(tNs) = $GET(tByNs(tNs)) + tCost
 		Set tEc = $SELECT(tRS.ErrorClass'="": tRS.ErrorClass, 1: "(none)"), tByEc(tEc) = $GET(tByEc(tEc)) + tCost
@@ -86,19 +87,22 @@ ClassMethod Data(pIncludeEval As %Boolean = 0, pDays As %Integer = {..#DEFAULTDA
 		Set tCacheSaved = tCacheSaved + ..CacheSavings(tCached(tModel), tPrice.InputPer1M, +tPrice.CacheReadPer1M)
 	}
 
-	// Failures handled in the window, and how many needed no engineer
+	// Failures triaged in the window
 	Set tLogWhere = $SELECT(pIncludeEval: "", 1: " AND EvalRunId IS NULL")
-	// Handled = nobody fixed the message by hand: applied, resent, rejected, or a mapping a reviewer approved
-	Set tLog = ##class(AgenticProd.UI.REST).Rows("SELECT COUNT(DISTINCT HeaderId) AS Triaged,"
-		_" SUM(CASE WHEN Outcome IN ('APPLIED','RESENT','REJECTED','APPROVED') THEN 1 ELSE 0 END) AS Handled"
+	Set tLog = ##class(AgenticProd.UI.REST).Rows("SELECT COUNT(DISTINCT HeaderId) AS Triaged"
 		_" FROM AgenticProd_Data.DecisionLog WHERE CreatedAt >= ?"_tLogWhere, tWindowStart_" 00:00:00").%Get(0)
+
+	// Handled = nobody fixed the message by hand: applied, resent, rejected, or a mapping a reviewer approved.
+	// ROI is always live traffic: eval cases are not failures an engineer would have handled
+	Set tLiveHandled = +##class(AgenticProd.UI.REST).Rows("SELECT COUNT(*) AS N FROM AgenticProd_Data.DecisionLog WHERE EvalRunId IS NULL AND CreatedAt >= ?"
+		_" AND Outcome IN ('APPLIED','RESENT','REJECTED','APPROVED')", tWindowStart_" 00:00:00").%Get(0).N
 
 	// A learned mapping saves one average MAP_CODE run per message
 	Set tSaved = ##class(AgenticProd.UI.REST).Rows("SELECT COUNT(*) AS N FROM AgenticProd_Data.SavedCall WHERE CreatedAt >= ?"_$SELECT(pIncludeEval: "", 1: " AND EvalRunId IS NULL"), tWindowStart_" 00:00:00").%Get(0)
 	Set tRun = ##class(AgenticProd.UI.REST).Rows("SELECT COUNT(*) AS Runs, AVG(CostUsd) AS Cost FROM AgenticProd_Data.Usage WHERE Decision = 'MAP_CODE' AND (Replay = 0 OR Replay IS NULL)").%Get(0)
 
 	Set tMinutes = ..RoiSetting("MinutesPerFailure"), tRate = ..RoiSetting("EngineerHourlyRate")
-	Set tHandled = +tLog.Handled, tTriaged = +tLog.Triaged
+	Set tTriaged = +tLog.Triaged, tHandled = tLiveHandled
 	Set tValue = ..EngineerValue(tHandled, tMinutes, tRate)
 	Set tItem = ##class(AgenticProd.Eval.Runner).#AGENTITEM
 	Set tBudget = +##class(AgenticProd.UI.REST).AgentSetting(tItem, "DailyTokenBudget")
@@ -115,7 +119,7 @@ ClassMethod Data(pIncludeEval As %Boolean = 0, pDays As %Integer = {..#DEFAULTDA
 	Set tOut.savings = {"cacheUsd":($NORMALIZE(tCacheSaved, 6)), "savedCalls":(+tSaved.N), "savedCallsUsd":null, "basedOnRuns":(+tRun.Runs)}
 	Do:tRun.Runs tOut.savings.%Set("savedCallsUsd", $NORMALIZE(tSaved.N * tRun.Cost, 6), "number")
 	Set tOut.roi = {"handled":(tHandled), "minutesPerFailure":(tMinutes), "hourlyRate":(tRate), "engineerValue":(tValue),
-		"aiCost":($NORMALIZE(tCostWindow, 6)), "net":($NORMALIZE(tValue - tCostWindow, 2)), "hoursSaved":($NORMALIZE(tHandled * tMinutes / 60, 1))}
+		"aiCost":($NORMALIZE(tLiveWindow, 6)), "net":($NORMALIZE(tValue - tLiveWindow, 2)), "hoursSaved":($NORMALIZE(tHandled * tMinutes / 60, 1))}
 
 	// Chart series: one value per day and model, zero where a model had no cost
 	Set tOut.byDay = {"days":[], "models":[], "series":{}}
