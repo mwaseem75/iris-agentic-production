@@ -528,6 +528,10 @@ ClassMethod TriageOutcome(pLog As AgenticProd.Data.DecisionLog, pSpanOutcome As 
 
 ClassMethod TriageText(pLog As AgenticProd.Data.DecisionLog, pOutcome As %String, ByRef pSecrets) As %String [ Internal ]
 {
+	If $EXTRACT(pOutcome, 1, 9) = "OBSERVED:" {
+		Set tWould = $EXTRACT(pOutcome, 10, *)
+		Quit "Observe mode: Triage checked the proposal (result "_tWould_") and logged it, but sent, resent, rejected and asked nothing. The message is still where the production left it."
+	}
 	Set tAction = $PIECE(pOutcome, ":", 2)
 	If $EXTRACT(pOutcome, 1, 11) = "DOWNGRADED:" {
 		Set tWhy = $PIECE($PIECE($EXTRACT(pLog.Reason, 17, *), ": ", 2, *), " (agent: ")

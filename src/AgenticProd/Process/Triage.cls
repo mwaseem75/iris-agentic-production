@@ -48,7 +48,11 @@ Property AutoFixDisabled As %String(MAXLEN = 500);
 /// KB: off, warn (record it and show it to the reviewer) or enforce (ESCALATE, proposal kept).
 Property GroundingStrictness As %String(VALUELIST = ",off,warn,enforce") [ InitialExpression = "enforce" ];
 
-Parameter SETTINGS = "AgentTarget:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},TargetConfigName:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},ApprovalTarget:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},AutoFixThreshold:Triage,AutoFixDisabled:Triage,GroundingStrictness:Triage,AgentTimeout:Triage,RejectPath:Triage,TracingEnabled:Tracing";
+/// observe: decide and log what would be done (Outcome OBSERVED:<outcome>) but send, resend,
+/// reject and ask nobody. The plug-in installs Triage in observe mode; act is the full pipeline.
+Property ActionMode As %String(VALUELIST = ",observe,act") [ InitialExpression = "act" ];
+
+Parameter SETTINGS = "AgentTarget:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},TargetConfigName:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},ApprovalTarget:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},AutoFixThreshold:Triage,AutoFixDisabled:Triage,GroundingStrictness:Triage,ActionMode:Triage,AgentTimeout:Triage,RejectPath:Triage,TracingEnabled:Tracing";
 
 /// Ask the agent, apply the action matrix, act, and log what was done in Data.DecisionLog.
 /// pResponse is the decision Triage acted on (the agent's, or its ESCALATE downgrade).
@@ -88,6 +92,7 @@ Method OnRequest(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As 
 		// Only an agent's own answer is checked; a system ESCALATE (budget, kill switch) has no claims
 		Set tCheck = (tNoAnswer = "") && $DATA(tAgentStart) && ((tDecision.AgentSessionId '= "") || (tDecision.Decision '= "ESCALATE"))
 		$$$ThrowOnError(..Decide(pRequest, tDecision, tCheck, .pResponse, .tOutcome, .tFixed, .tGrounding))
+		Set:..ActionMode="observe" tOutcome = "OBSERVED:"_tOutcome
 		// Logged before the send: the row ID is the approval task's completion key
 		$$$ThrowOnError(##class(AgenticProd.Data.DecisionLog).Record(pRequest, pResponse, .tLogId, tOutcome, $SELECT(tOutcome = "APPLIED": tFixed, 1: ""), tGrounding))
 		Set tSendSC = ..Dispatch(pRequest, pResponse, tOutcome, tFixed, tLogId)
@@ -509,6 +514,10 @@ Method RecheckFix(pRequest As AgenticProd.Msg.TriageRequest, pFix As %DynamicArr
 /// Carry out pOutcome from Plan. pLogId (DecisionLog row) comes back as the approval's completion key.
 Method Dispatch(pRequest As AgenticProd.Msg.TriageRequest, pDecision As AgenticProd.Msg.Decision, pOutcome As %String, pFixed As %Persistent, pLogId As %String = "") As %Status
 {
+	If $EXTRACT(pOutcome, 1, 9) = "OBSERVED:" {
+		$$$LOGINFO("Observe mode: header "_pRequest.HeaderId_" would be "_$EXTRACT(pOutcome, 10, *)_"; nothing sent")
+		Quit $$$OK
+	}
 	If pOutcome = "APPLIED" Quit ..SendRequestAsync(..TargetConfigName, pFixed, 0)
 	If pOutcome = "RESENT" Quit ##class(Ens.MessageHeader).ResendDuplicatedMessage(pRequest.HeaderId)
 	If pOutcome = "REJECTED" {
@@ -619,6 +628,9 @@ Storage Default
 </Value>
 <Value name="9">
 <Value>GroundingStrictness</Value>
+</Value>
+<Value name="10">
+<Value>ActionMode</Value>
 </Value>
 </Data>
 <DefaultData>TriageDefaultData</DefaultData>

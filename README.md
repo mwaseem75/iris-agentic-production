@@ -193,6 +193,32 @@ Copy the samples in `legacy/samples` to `data/legacy/in` to see it work and fail
 | 04-result-unmapped-code | router fails: `HBA1C-L` is not in `LegacyLabCodes` |
 | 05-result-no-obr | router fails validation: OBR missing |
 
+### AI plug-in (observe mode)
+
+Setup maps the `AgenticProd` package and the shared tables (`AgenticProd.Data.*`, the hashed
+`AgenticProd8110.*` and the LOINC KB `EMZU.*`) from IRISAPP into LEGACY and repeats the agent's
+SQL grants there. Messages, lookups and Workflow data stay in LEGACY. Every decision, usage,
+span and tool-call row carries the `Namespace` its header and session IDs belong to. The dashboard
+lists LEGACY rows next to IRISAPP ones, and the story view reads the message and opens Visual
+Trace in the row's own namespace.
+
+```objectscript
+do ##class(AgenticProd.Plugin.Installer).Enable("LEGACY", , "observe", .added)   // AI.Sentinel, AI.Triage, AI.Agent
+do ##class(AgenticProd.Plugin.Installer).Disable("LEGACY", , .removed)           // removes exactly those
+```
+
+- `AI.Sentinel` uses a custom inbound adapter (`Plugin.SentinelAdapter`) that polls the production's
+  own errored or suspended headers and session alerts. It starts from "now", so an old backlog is
+  never sent to the agent. It hands each failed session to Triage once and skips the plug-in's own
+  `AI.*` items.
+- `AI.Triage` runs with `ActionMode=observe`: the agent runs, Triage checks the proposal (grounding,
+  action matrix) and logs `OBSERVED:<outcome>`, but nothing is sent, resent, rejected or asked.
+  Propose and act modes come next.
+- `AI.Agent` starts with the IRISAPP `TriageAgent` settings (provider, model, budgets).
+- Items are tracked in `AgenticProd.Data.PluginItem`. Disable never touches an item it did not add,
+  and Enable refuses to adopt a customer item that has the same name.
+- HL7 v2 failures get the full agent. Other formats are escalated without an agent run.
+
 ## FHIR output
 
 Every lab result that passes LabRouter also goes out as FHIR R4, built with the converters that
