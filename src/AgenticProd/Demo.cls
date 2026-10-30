@@ -97,11 +97,12 @@ ClassMethod DeleteLiveRows(pStubOnly As %Boolean, Output pCount) As %Status
 	Set tSC = $$$OK
 	Kill pCount
 	Try {
-		Set tStub = $SELECT(pStubOnly: " AND HeaderId < 0", 1: "")
+		// Data.* is shared with plug-in namespaces: a reset here keeps their history
+		Set tStub = " AND Namespace = '"_$NAMESPACE_"'"_$SELECT(pStubOnly: " AND HeaderId < 0", 1: "")
 		// Tasks first: they are found through the DecisionLog rows deleted below
 		Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT r.ID, r.TaskStatus_Request AS TaskId FROM EnsLib_Workflow.TaskResponse r"
-			_" JOIN AgenticProd_Msg.ApprovalTask t ON t.ID = r.TaskStatus_Request JOIN AgenticProd_Data.DecisionLog d ON d.HeaderId = t.HeaderId"
-			_" WHERE d.EvalRunId IS NULL"_$SELECT(pStubOnly: " AND d.HeaderId < 0", 1: ""))
+			_" JOIN AgenticProd_Msg.ApprovalTask t ON t.ID = r.TaskStatus_Request JOIN AgenticProd_Data.DecisionLog d ON d.HeaderId = t.HeaderId AND d.Namespace = ?"
+			_" WHERE d.EvalRunId IS NULL"_$SELECT(pStubOnly: " AND d.HeaderId < 0", 1: ""), $NAMESPACE)
 		If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message))
 		Set pCount("workflow tasks") = 0
 		While tRS.%Next() {
@@ -115,7 +116,7 @@ ClassMethod DeleteLiveRows(pStubOnly As %Boolean, Output pCount) As %Status
 		Set pCount("Usage") = ..Exec("DELETE FROM AgenticProd_Data.Usage WHERE EvalRunId IS NULL AND (CaseId IS NULL OR CaseId = '')"_tStub)
 		// ToolCall has no EvalRunId: a call goes when no remaining Usage row has its session
 		Set pCount("ToolCall") = ..Exec("DELETE FROM AgenticProd_Data.ToolCall WHERE (AgentSessionId IS NULL"
-			_" OR AgentSessionId NOT IN (SELECT AgentSessionId FROM AgenticProd_Data.Usage WHERE AgentSessionId IS NOT NULL))"_tStub)
+			_" OR AgentSessionId NOT IN (SELECT u.AgentSessionId FROM AgenticProd_Data.Usage u WHERE u.AgentSessionId IS NOT NULL AND u.Namespace = AgenticProd_Data.ToolCall.Namespace))"_tStub)
 		Set pCount("Span") = ..Exec("DELETE FROM AgenticProd_Data.Span WHERE EvalRunId IS NULL"_tStub)
 		Set pCount("SavedCall") = ..Exec("DELETE FROM AgenticProd_Data.SavedCall WHERE EvalRunId IS NULL"_tStub)
 		Set pCount("FHIRResult") = ..Exec("DELETE FROM AgenticProd_Msg.FHIRResult WHERE (ControlId IS NULL OR ControlId NOT LIKE 'EV%-%')"

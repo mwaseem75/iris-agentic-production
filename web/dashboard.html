@@ -590,12 +590,14 @@ function showStory(id) {
 
 function renderStory(st) {
   document.getElementById("story-title").textContent = "What happened: " + (st.case || "header " + st.headerId);
-  document.getElementById("story-sub").textContent = st.createdAt + " UTC, final " + (st.outcome || "—");
+  document.getElementById("story-sub").textContent = st.createdAt + " UTC, final " + (st.outcome || "—") + (st.namespace ? ", namespace " + st.namespace : "");
   var links = document.getElementById("story-links");
   links.replaceChildren();
-  if (st.sessionId && traceUrl) {
+  // Session IDs are per namespace: the story carries the trace URL of the row's own namespace
+  var storyTrace = st.traceUrl || traceUrl;
+  if (st.sessionId && storyTrace) {
     var a = el("a", "Open in Visual Trace");
-    a.href = traceUrl + encodeURIComponent(st.sessionId);
+    a.href = storyTrace + encodeURIComponent(st.sessionId);
     a.target = "_blank"; a.rel = "noopener";
     links.appendChild(a);
   }

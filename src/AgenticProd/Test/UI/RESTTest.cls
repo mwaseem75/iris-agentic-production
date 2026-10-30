@@ -225,6 +225,75 @@ Method TestStoryWaitingNoAgent()
 	Do $$$AssertTrue(tStory.steps.%Get(1).text [ "no instruction-like text", "no flags")
 }
 
+/// A plug-in row (Namespace LEGACY): the story reads the header and masked body in LEGACY, links
+/// Visual Trace there, and ignores an IRISAPP Usage row that has the same header ID.
+Method TestStoryOtherNamespace()
+{
+	Set tNS = ##class(AgenticProd.Setup).#LEGACYNS
+	Do $$$AssertStatusOK(..StubHeader(tNS, .tHeader, .tMsgId), "stub header in "_tNS)
+	Quit:$GET(tHeader)=""
+	Do $$$AssertStatusOK(..AddLogRow(tHeader, "ESCALATE", "SENT_FOR_APPROVAL", "", "", "", .tLogId))
+	Set tLog = ##class(AgenticProd.Data.DecisionLog).%OpenId(tLogId)
+	Set tLog.Namespace = tNS, tLog.SessionId = tHeader
+	Do $$$AssertStatusOK(tLog.%Save())
+	// Same header ID, this namespace: must not be read as the plug-in row's agent run
+	Do $$$AssertStatusOK(..AddUsageRow(tHeader, "MAP_CODE", "gpt-4o-mini", 0, ""))
+
+	Set tStory = ##class(AgenticProd.UI.REST).StoryData(tLogId)
+	Do $$$AssertEquals(tStory.namespace, tNS)
+	Do $$$AssertTrue(tStory.traceUrl [ ("/"_$ZCONVERT(tNS, "L")_"/EnsPortal.VisualTrace.zen"), tStory.traceUrl)
+	Do $$$AssertTrue(tStory.message [ "GLU1", "body read in "_tNS)
+	Do $$$AssertTrue(tStory.message '[ "STUBPATIENT", "PID-5 masked")
+	Do $$$AssertTrue(tStory.steps.%Get(2).text [ "not used", "IRISAPP Usage row ignored: "_tStory.steps.%Get(2).text)
+	Set tRows = ##class(AgenticProd.UI.REST).DecisionsData(10, 0), tFound = ""
+	For i = 0:1:tRows.%Size() - 1 Set:tRows.%Get(i).ID=tLogId tFound = tRows.%Get(i)
+	Do $$$AssertTrue($IsObject(tFound), "row listed")
+	If $IsObject(tFound) {
+		Do $$$AssertEquals(tFound.Namespace, tNS)
+		Do $$$AssertEquals(tFound.traceUrl, tStory.traceUrl)
+		Do $$$AssertEquals(tFound.agentCalled, 0, "Usage of the other namespace not counted")
+		Do $$$AssertEquals(tFound.ControlId, "", "TriageRequest bodies of another namespace are not joined")
+	}
+
+	Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM AgenticProd_Data.DecisionLog WHERE ID = ?", tLogId)
+	Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM AgenticProd_Data.Usage WHERE HeaderId = ? AND EvalRunId IS NULL AND Model = 'gpt-4o-mini' AND PromptTokens = 0", tHeader)
+	Do ..DropStubHeader(tNS, tHeader, tMsgId)
+}
+
+/// Synthetic HL7 message and header saved in pNamespace.
+ClassMethod StubHeader(pNamespace As %String, Output pHeader As %String, Output pMsgId As %String) As %Status
+{
+	Set (pHeader, pMsgId) = ""
+	New $NAMESPACE
+	Set tSC = $$$OK
+	Try {
+		Set $NAMESPACE = pNamespace
+		Set tText = "MSH|^~\&|LIS|LAB|EHR|HOSP|20261030101500||ORU^R01|STUBNS1|P|2.5.1"_$CHAR(13)
+			_"PID|1||MRN-NS-1^^^LAB^MR||STUBPATIENT^NSTEST||19800101|F"_$CHAR(13)
+			_"OBX|1|NM|GLU1^Glucose^L||5.4|mmol/L|||||F"_$CHAR(13)
+		Set tMsg = ##class(EnsLib.HL7.Message).ImportFromString(tText, .tSC)
+		$$$ThrowOnError(tSC)
+		$$$ThrowOnError(tMsg.%Save())
+		Set tHdr = ##class(Ens.MessageHeader).%New()
+		Set tHdr.MessageBodyClassName = "EnsLib.HL7.Message", tHdr.MessageBodyId = tMsg.%Id()
+		$$$ThrowOnError(tHdr.%Save())
+		Set tHdr.SessionId = tHdr.%Id()
+		$$$ThrowOnError(tHdr.%Save())
+		Set pHeader = tHdr.%Id(), pMsgId = tMsg.%Id()
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+ClassMethod DropStubHeader(pNamespace As %String, pHeader As %String, pMsgId As %String)
+{
+	New $NAMESPACE
+	Set $NAMESPACE = pNamespace
+	Do ##class(Ens.MessageHeader).%DeleteId(pHeader)
+	Do ##class(EnsLib.HL7.Message).%DeleteId(pMsgId)
+}
+
 /// Metrics on stub rows (eval run RUNID, so they show with eval included only): tokens split so the
 /// parts add up, quantiles, tool and validate_fix counts, decision groups, saved calls, steps.
 Method TestMetricsSummary()

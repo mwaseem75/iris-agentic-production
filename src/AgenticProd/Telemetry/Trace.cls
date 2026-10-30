@@ -185,7 +185,7 @@ ClassMethod AgentSpans(pParent As %String, pRequest As AgenticProd.Msg.TriageReq
 			Set:pDecision.Model'="" tAttrs("gen_ai.request.model") = pDecision.Model
 		}
 		// Usage rows are written by the agent job for this header; the latest one is this run's
-		Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 1 Model, PromptTokens, CompletionTokens, ReasoningTokens, ToolCalls, CostUsd, Replay, AgentSessionId FROM AgenticProd_Data.Usage WHERE HeaderId = ? AND CreatedAt >= ? ORDER BY ID DESC", pRequest.HeaderId, $ZDATETIME($PIECE(..ZtsAdd(pStart, -1000), "."), 3))
+		Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 1 Model, PromptTokens, CompletionTokens, ReasoningTokens, ToolCalls, CostUsd, Replay, AgentSessionId FROM AgenticProd_Data.Usage WHERE HeaderId = ? AND Namespace = ? AND CreatedAt >= ? ORDER BY ID DESC", pRequest.HeaderId, $NAMESPACE, $ZDATETIME($PIECE(..ZtsAdd(pStart, -1000), "."), 3))
 		Set tSession = "", tReplay = 0, tToolCalls = 0
 		If tRS.%Next() {
 			Set tAttrs("gen_ai.request.model") = tRS.Model
@@ -202,7 +202,7 @@ ClassMethod AgentSpans(pParent As %String, pRequest As AgenticProd.Msg.TriageReq
 		Set tSpan = ..Start("agent run", pParent, .tAttrs, pStart, "Client")
 		Set tAgent = ..Context(tSpan)
 		If (tAgent '= "") && (tSession '= "") && 'tReplay {
-			Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT Tool, Status, DurationMs, ResultLength, CreatedAt FROM AgenticProd_Data.ToolCall WHERE AgentSessionId = ? ORDER BY ID", tSession)
+			Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT Tool, Status, DurationMs, ResultLength, CreatedAt FROM AgenticProd_Data.ToolCall WHERE AgentSessionId = ? AND Namespace = ? ORDER BY ID", tSession, $NAMESPACE)
 			Set tAudited = 0
 			While tRS.%Next() {
 				Set tAudited = tAudited + 1

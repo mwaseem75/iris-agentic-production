@@ -29,6 +29,58 @@ Method TestAgentSqlIsSelectOnlyPlusAuditInserts()
 	Do $$$AssertTrue($GET(^AgenticProd.Test.RoleProbe("lookup")) [ "2951-2", "lookup_code works as the agent: "_$GET(^AgenticProd.Test.RoleProbe("lookup")))
 }
 
+/// The same grants in the plug-in namespace (SQL privileges are per namespace), where the agent
+/// job of a plug-in production runs; the shared Data tables are mapped there.
+Method TestAgentSqlInPluginNamespace()
+{
+	Set tUser = ##class(AgenticProd.Setup).#AGENTUSER, tNS = ##class(AgenticProd.Setup).#LEGACYNS
+	Kill ^AgenticProd.Test.RoleProbe
+	Job ##class(AgenticProd.Test.Security.AgentRoleTest).ProbeIn(tUser, tNS)::10
+	If '$TEST {
+		Do $$$AssertFailure("could not start the probe job")
+		Quit
+	}
+	For i = 1:1:50 Quit:$DATA(^AgenticProd.Test.RoleProbe("done"))  Hang 0.2
+	Do $$$AssertTrue($DATA(^AgenticProd.Test.RoleProbe("done")), "probe job finished")
+	Do $$$AssertEquals($GET(^AgenticProd.Test.RoleProbe("login")), 1, "job switched to "_tUser)
+	Do $$$AssertEquals($GET(^AgenticProd.Test.RoleProbe("select")), 0, "SELECT on shared Data allowed in "_tNS)
+	Do $$$AssertEquals($GET(^AgenticProd.Test.RoleProbe("header")), 0, "SELECT on "_tNS_" headers allowed")
+	Do $$$AssertEquals($GET(^AgenticProd.Test.RoleProbe("insert")), 0, "INSERT on Usage allowed in "_tNS)
+	Do $$$AssertEquals($GET(^AgenticProd.Test.RoleProbe("update")), -99, "UPDATE refused in "_tNS)
+	Do $$$AssertEquals($GET(^AgenticProd.Test.RoleProbe("delete")), -99, "DELETE refused in "_tNS)
+	Do $$$AssertEquals($GET(^AgenticProd.Test.RoleProbe("insertOther")), -99, "INSERT on a non-audit table refused in "_tNS)
+}
+
+/// Child job for the plug-in namespace test. Results are kept in locals until the job is back in
+/// this namespace: the probe global is not mapped into pNamespace.
+ClassMethod ProbeIn(pUser As %String, pNamespace As %String)
+{
+	Set tHome = $NAMESPACE
+	Set tRes("login") = $SYSTEM.Security.Login(pUser)
+	Try {
+		Set $NAMESPACE = pNamespace
+		For tKey = "select", "header", "insert", "update", "delete", "insertOther" {
+			Set tSql = $CASE(tKey,
+				"select": "SELECT COUNT(*) FROM AgenticProd_Data.DecisionLog",
+				"header": "SELECT TOP 1 ID FROM Ens.MessageHeader",
+				"insert": "INSERT INTO AgenticProd_Data.Usage (HeaderId, Model) VALUES (-9103, 'role-probe')",
+				"update": "UPDATE AgenticProd_Data.DecisionLog SET Outcome = 'probe' WHERE 1 = 0",
+				"delete": "DELETE FROM AgenticProd_Data.Usage WHERE HeaderId = -9103",
+				"insertOther": "INSERT INTO AgenticProd_Data.PriceTable (Model) VALUES ('role-probe')")
+			Try {
+				Set tRes(tKey) = ##class(%SQL.Statement).%ExecDirect(, tSql).%SQLCODE
+			} Catch ex {
+				Set tRes(tKey) = "exception: "_ex.DisplayString()
+			}
+		}
+	} Catch ex {
+		Set tRes("select") = "exception: "_ex.DisplayString()
+	}
+	Set $NAMESPACE = tHome
+	Merge ^AgenticProd.Test.RoleProbe = tRes
+	Set ^AgenticProd.Test.RoleProbe("done") = 1
+}
+
 /// Child job body. Uses %SQL.Statement, the same path agent tools must use; embedded SQL
 /// skips privilege checks, so it would prove nothing here.
 ClassMethod Probe(pUser As %String)

@@ -7,6 +7,10 @@ Class AgenticProd.Data.DecisionLog Extends %Persistent
 /// Ens.MessageHeader ID of the TriageRequest.
 Property HeaderId As %Integer [ Required ];
 
+/// Namespace the row's header and session IDs belong to: they are only unique within it
+/// (IRISAPP, or a plug-in namespace such as LEGACY that shares this table).
+Property Namespace As %String(MAXLEN = 64) [ InitialExpression = {$NAMESPACE} ];
+
 Property SessionId As %Integer;
 
 Property Source As %String(MAXLEN = 128);
@@ -220,6 +224,9 @@ Storage Default
 </Value>
 <Value name="29">
 <Value>GroundingFailed</Value>
+</Value>
+<Value name="30">
+<Value>Namespace</Value>
 </Value>
 </Data>
 <DataLocation>^AgenticProd.Data.DecisionLogD</DataLocation>

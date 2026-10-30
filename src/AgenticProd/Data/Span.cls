@@ -29,6 +29,10 @@ Property Attributes As %String(MAXLEN = "");
 
 Property HeaderId As %Integer;
 
+/// Namespace the row's header and session IDs belong to: they are only unique within it
+/// (IRISAPP, or a plug-in namespace such as LEGACY that shares this table).
+Property Namespace As %String(MAXLEN = 64) [ InitialExpression = {$NAMESPACE} ];
+
 Property ControlId As %String(MAXLEN = 200);
 
 Property EvalRunId As %Integer;
@@ -116,6 +120,9 @@ Storage Default
 </Value>
 <Value name="14">
 <Value>Exported</Value>
+</Value>
+<Value name="15">
+<Value>Namespace</Value>
 </Value>
 </Data>
 <DataLocation>^AgenticProd.Data.SpanD</DataLocation>

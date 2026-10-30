@@ -230,7 +230,7 @@ ClassMethod SessionResults(pSessionId As %String, Output pText As %String, Outpu
 {
 	Set (pText, pSearched, tFromSession) = ""
 	Quit:pSessionId=""
-	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT ResultSummary FROM AgenticProd_Data.ToolCall WHERE AgentSessionId = ? AND Tool = 'search_loinc' AND Status = 'OK'", pSessionId)
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT ResultSummary FROM AgenticProd_Data.ToolCall WHERE AgentSessionId = ? AND Namespace = ? AND Tool = 'search_loinc' AND Status = 'OK'", pSessionId, $NAMESPACE)
 	While tRS.%Next() {
 		Set:tRS.ResultSummary'="" pSearched = pSearched_$SELECT(pSearched '= "": ",", 1: "")_tRS.ResultSummary
 	}
@@ -563,9 +563,9 @@ ClassMethod FixedByTriage(pHeaderId As %Integer) As %Boolean
 /// body, so headers sharing the body count too.
 ClassMethod ResendCount(pHeaderId As %Integer) As %Integer
 {
-	Set tSQL = "SELECT COUNT(*) AS N FROM AgenticProd_Data.DecisionLog WHERE Outcome = 'RESENT' AND (HeaderId = ? OR HeaderId IN ("
+	Set tSQL = "SELECT COUNT(*) AS N FROM AgenticProd_Data.DecisionLog WHERE Outcome = 'RESENT' AND Namespace = ? AND (HeaderId = ? OR HeaderId IN ("
 		_"SELECT h.ID FROM Ens.MessageHeader h, Ens.MessageHeader o WHERE o.ID = ? AND h.MessageBodyClassName = o.MessageBodyClassName AND h.MessageBodyId = o.MessageBodyId))"
-	Set tRS = ##class(%SQL.Statement).%ExecDirect(, tSQL, pHeaderId, pHeaderId)
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, tSQL, $NAMESPACE, pHeaderId, pHeaderId)
 	If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message))
 	Do tRS.%Next()
 	Quit +tRS.N

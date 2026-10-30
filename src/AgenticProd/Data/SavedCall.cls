@@ -6,6 +6,10 @@ Class AgenticProd.Data.SavedCall Extends %Persistent
 
 Property HeaderId As %Integer;
 
+/// Namespace the row's header and session IDs belong to: they are only unique within it
+/// (IRISAPP, or a plug-in namespace such as LEGACY that shares this table).
+Property Namespace As %String(MAXLEN = 64) [ InitialExpression = {$NAMESPACE} ];
+
 /// Learned local codes the message used, comma separated.
 Property LocalCodes As %String(MAXLEN = 500);
 
@@ -32,7 +36,7 @@ ClassMethod Note(pMsg As EnsLib.HL7.Message, pHeaderId As %Integer) As %Status
 			// Learned, and not the resend of any approval of this code (same body as the approved message)
 			Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 1 d.ID FROM AgenticProd_Data.DecisionLog d WHERE d.LocalCode = ? AND d.Outcome = 'APPROVED'"
 				_" AND NOT EXISTS (SELECT 1 FROM AgenticProd_Data.DecisionLog a JOIN Ens.MessageHeader h ON h.ID = a.HeaderId"
-				_" WHERE a.LocalCode = ? AND a.Outcome = 'APPROVED' AND h.MessageBodyId = ?)", tCode, tCode, pMsg.%Id())
+				_" WHERE a.LocalCode = ? AND a.Outcome = 'APPROVED' AND a.Namespace = ? AND h.MessageBodyId = ?)", tCode, tCode, $NAMESPACE, pMsg.%Id())
 			If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message))
 			Set:tRS.%Next() tCodes = tCodes_$SELECT(tCodes '= "": ",", 1: "")_tCode
 		}
@@ -65,6 +69,9 @@ Storage Default
 </Value>
 <Value name="5">
 <Value>CreatedAt</Value>
+</Value>
+<Value name="6">
+<Value>Namespace</Value>
 </Value>
 </Data>
 <DataLocation>^AgenticProd.Data.SavedCallD</DataLocation>

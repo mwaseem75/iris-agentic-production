@@ -7,6 +7,10 @@ Class AgenticProd.Data.Usage Extends %Persistent
 /// Ens.MessageHeader ID of the TriageRequest.
 Property HeaderId As %Integer;
 
+/// Namespace the row's header and session IDs belong to: they are only unique within it
+/// (IRISAPP, or a plug-in namespace such as LEGACY that shares this table).
+Property Namespace As %String(MAXLEN = 64) [ InitialExpression = {$NAMESPACE} ];
+
 /// Production (Visual Trace) session ID.
 Property SessionId As %Integer;
 
@@ -176,6 +180,9 @@ Storage Default
 </Value>
 <Value name="26">
 <Value>Replay</Value>
+</Value>
+<Value name="27">
+<Value>Namespace</Value>
 </Value>
 </Data>
 <DataLocation>^AgenticProd.Data.UsageD</DataLocation>

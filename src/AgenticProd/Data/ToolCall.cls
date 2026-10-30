@@ -5,6 +5,10 @@ Class AgenticProd.Data.ToolCall Extends %Persistent
 
 Property HeaderId As %Integer;
 
+/// Namespace the row's header and session IDs belong to: they are only unique within it
+/// (IRISAPP, or a plug-in namespace such as LEGACY that shares this table).
+Property Namespace As %String(MAXLEN = 64) [ InitialExpression = {$NAMESPACE} ];
+
 Property AgentSessionId As %String(MAXLEN = 50);
 
 Property Tool As %String(MAXLEN = 200) [ Required ];
@@ -86,13 +90,13 @@ ClassMethod BackfillVerdicts(Output pFilled As %Integer) As %Status
 {
 	Set tSC = $$$OK, pFilled = 0
 	Try {
-		Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT DISTINCT AgentSessionId FROM AgenticProd_Data.ToolCall WHERE Tool = 'validate_fix' AND Verdict IS NULL AND Status = 'OK' AND AgentSessionId IS NOT NULL")
+		Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT DISTINCT AgentSessionId FROM AgenticProd_Data.ToolCall WHERE Tool = 'validate_fix' AND Verdict IS NULL AND Status = 'OK' AND AgentSessionId IS NOT NULL AND Namespace = ?", $NAMESPACE)
 		While tRS.%Next() {
 			Set tSession = ##class(%AI.Agent.Session).%OpenId(tRS.AgentSessionId)
 			Continue:'$IsObject(tSession)
 			Kill tVerdicts
 			Do ..SessionVerdicts(tSession, .tVerdicts)
-			Set tRows = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID FROM AgenticProd_Data.ToolCall WHERE AgentSessionId = ? AND Tool = 'validate_fix' AND Status = 'OK' ORDER BY ID", tRS.AgentSessionId), tN = 0
+			Set tRows = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID FROM AgenticProd_Data.ToolCall WHERE AgentSessionId = ? AND Namespace = ? AND Tool = 'validate_fix' AND Status = 'OK' ORDER BY ID", tRS.AgentSessionId, $NAMESPACE), tN = 0
 			While tRows.%Next() {
 				Set tN = tN + 1
 				Continue:$GET(tVerdicts(tN))=""
@@ -170,6 +174,9 @@ Storage Default
 </Value>
 <Value name="12">
 <Value>ResultSummary</Value>
+</Value>
+<Value name="13">
+<Value>Namespace</Value>
 </Value>
 </Data>
 <DataLocation>^AgenticProd.Data.ToolCallD</DataLocation>

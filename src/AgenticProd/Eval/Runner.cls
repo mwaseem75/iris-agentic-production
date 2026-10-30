@@ -112,11 +112,11 @@ ClassMethod CloseEvalTasks(pRunId As %String = "", pCaseId As %String = "", Outp
 	Try {
 		Set tSQL = "SELECT DISTINCT r.ID FROM EnsLib_Workflow.TaskResponse r"
 			_" JOIN AgenticProd_Msg.ApprovalTask t ON t.ID = r.TaskStatus_Request"
-			_" JOIN AgenticProd_Data.DecisionLog d ON d.HeaderId = t.HeaderId"
+			_" JOIN AgenticProd_Data.DecisionLog d ON d.HeaderId = t.HeaderId AND d.Namespace = ?"
 			_" WHERE r.TaskStatus_IsComplete = 0 AND d.EvalRunId IS NOT NULL"
 			_" AND (? IS NULL OR d.EvalRunId = ?) AND (? IS NULL OR d.CaseId = ?)"
 		// An empty argument is SQL NULL, so "" switches its filter off
-		Set tRS = ##class(%SQL.Statement).%ExecDirect(, tSQL, pRunId, pRunId, pCaseId, pCaseId)
+		Set tRS = ##class(%SQL.Statement).%ExecDirect(, tSQL, $NAMESPACE, pRunId, pRunId, pCaseId, pCaseId)
 		If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message))
 		While tRS.%Next() {
 			Set tTask = ##class(EnsLib.Workflow.TaskResponse).%OpenId(tRS.ID, , .tSC)

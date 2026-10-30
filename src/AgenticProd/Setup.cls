@@ -40,7 +40,8 @@ Parameter DASHROLE = "AgenticProd_Dashboard";
 
 /// Read-only databases: the dashboard never writes. IRISTEMP is RW for SQL work globals.
 /// AgenticProd_AIRead: the Settings tab shows provider configs (secret:// references, no keys).
-Parameter DASHRESOURCES = "AgenticProd_Dashboard:U,AgenticProd_AIRead:RU,%DB_IRISAPP_DATA:R,%DB_IRISAPP_CODE:R,%DB_ENSLIB:R,%DB_HSLIB:R,%DB_HSSYS:R,%DB_IRISLIB:R,%DB_IRISSYS:R,%DB_IRISTEMP:RW";
+/// LEGACY: the story view reads plug-in rows' headers and bodies in their own namespace.
+Parameter DASHRESOURCES = "AgenticProd_Dashboard:U,AgenticProd_AIRead:RU,%DB_IRISAPP_DATA:R,%DB_IRISAPP_CODE:R,%DB_LEGACY_DATA:R,%DB_LEGACY_CODE:R,%DB_ENSLIB:R,%DB_HSLIB:R,%DB_HSSYS:R,%DB_IRISLIB:R,%DB_IRISSYS:R,%DB_IRISTEMP:RW";
 
 /// Settings tab write access, on top of the dashboard role (granted role). Given to SuperUser
 /// and _SYSTEM; the reviewer stays read-only.
@@ -62,18 +63,24 @@ Parameter LOINCFILE = "/home/irisowner/dev/kb/loinc_subset.csv";
 /// Data access inside IRISAPP_DATA is still all-or-nothing for globals; SQL grants narrow it
 /// for %SQL.Statement, which is the only way agent tools may query.
 /// AIRead and AIUse: the provider config chosen on the Settings tab and its Wallet key.
-Parameter AGENTRESOURCES = "%DB_IRISAPP_DATA:RW,%DB_IRISAPP_CODE:R,%DB_ENSLIB:R,%DB_HSLIB:R,%DB_HSSYS:R,%DB_IRISLIB:R,%DB_IRISSYS:R,%DB_IRISTEMP:RW,AgenticProd_AIRead:RU,AgenticProd_AIUse:RU";
+Parameter AGENTRESOURCES = "%DB_IRISAPP_DATA:RW,%DB_IRISAPP_CODE:R,%DB_LEGACY_DATA:RW,%DB_LEGACY_CODE:R,%DB_ENSLIB:R,%DB_HSLIB:R,%DB_HSSYS:R,%DB_IRISLIB:R,%DB_IRISSYS:R,%DB_IRISTEMP:RW,AgenticProd_AIRead:RU,AgenticProd_AIUse:RU";
 
 /// Legacy demo production (customer side, no AI). Its own namespace: one production per namespace.
 Parameter LEGACYNS = "LEGACY";
 
 Parameter LEGACYSRC = "/home/irisowner/dev/legacy/src/";
 
+/// Globals LEGACY shares with IRISAPP: decision history, usage, spans, prices and the eval tables
+/// (Data.*), LearnedMapping and SettingsAudit (hashed storage 8110) and the LOINC KB (^EMZU is
+/// AgenticProd.KB's hashed storage). Messages, lookups and Workflow data stay in LEGACY.
+Parameter LEGACYGLOBALS = "AgenticProd.Data.*,AgenticProd8110.*,EMZU.*";
+
 ClassMethod Run() As %Status
 {
 	Set tSC = $$$OK
 	Try {
 		$$$ThrowOnError(##class(AgenticProd.Data.PriceTable).Seed())
+		$$$ThrowOnError(..BackfillNamespace())
 		$$$ThrowOnError(..SeedLabCodeMap())
 		$$$ThrowOnError(..BuildLoincKB())
 		// Before the roles: they list the settings resources
@@ -87,6 +94,21 @@ ClassMethod Run() As %Status
 		$$$ThrowOnError(..LegacyDemo())
 		// Setup runs at image build with IRIS about to stop, so starting it here would not last
 		$$$ThrowOnError(##class(Ens.Director).SetAutoStart("AgenticProd.Production"))
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// Rows from before Data.* had a Namespace column all came from this namespace.
+ClassMethod BackfillNamespace() As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		For tTable = "DecisionLog", "Usage", "Span", "SavedCall", "ToolCall" {
+			Set tRS = ##class(%SQL.Statement).%ExecDirect(, "UPDATE AgenticProd_Data."_tTable_" SET Namespace = ? WHERE Namespace IS NULL", $NAMESPACE)
+			If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message))
+		}
 	} Catch ex {
 		Set tSC = ex.AsStatus()
 	}
@@ -185,14 +207,16 @@ ClassMethod CSVRow(pLine As %String) As %List [ Internal ]
 	Quit tRow_$LISTBUILD(tField)
 }
 
-/// Create or update the agent role and user, then the SQL grants:
+/// Create or update the agent role and user, then the SQL grants in pNamespace:
 /// SELECT on the schemas tools read, INSERT only on the three audit/usage tables, nothing else.
-ClassMethod AgentSecurity() As %Status
+ClassMethod AgentSecurity(pNamespace As %String = {$NAMESPACE}) As %Status
 {
 	Set tSC = $$$OK
 	Try {
-		Set tNS = $NAMESPACE
-		$$$ThrowOnError(..CreateRoleAndUser(tNS))
+		$$$ThrowOnError(..CreateRoleAndUser($NAMESPACE))
+		// SQL privileges are kept per namespace, so a plug-in namespace needs its own grants
+		New $NAMESPACE
+		Set $NAMESPACE = pNamespace
 		For tSql = "GRANT SELECT ON SCHEMA AgenticProd_Data TO "_..#AGENTROLE,
 			"GRANT SELECT ON SCHEMA Ens TO "_..#AGENTROLE,
 			"GRANT SELECT ON SCHEMA Ens_Util TO "_..#AGENTROLE,
@@ -333,6 +357,9 @@ ClassMethod LegacyDemo() As %Status
 	Set tSC = $$$OK
 	Try {
 		$$$ThrowOnError(..CreateLegacyNamespace())
+		$$$ThrowOnError(..LegacyMappings())
+		$$$ThrowOnError(..AgentSecurity(..#LEGACYNS))
+		$$$ThrowOnError(..LegacyDashboardGrants())
 		New $NAMESPACE
 		Set $NAMESPACE = ..#LEGACYNS
 		$$$ThrowOnError($system.OBJ.LoadDir(..#LEGACYSRC, "ck-d", .tErrors, 1))
@@ -341,6 +368,68 @@ ClassMethod LegacyDemo() As %Status
 		Set tSC = ex.AsStatus()
 	}
 	Quit tSC
+}
+
+/// Map the AgenticProd package (this namespace's code database) and LEGACYGLOBALS (its data
+/// database) into LEGACY, so plug-in items run there on the one copy compiled here.
+ClassMethod LegacyMappings() As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		Set tHome = $NAMESPACE
+		New $NAMESPACE
+		Set $NAMESPACE = "%SYS"
+		$$$ThrowOnError(##class(Config.Namespaces).Get(tHome, .tNSProps))
+		Set tNS = ..#LEGACYNS
+		If '##class(Config.MapPackages).Exists(tNS, "AgenticProd") {
+			Kill tProps
+			Set tProps("Database") = tNSProps("Routines")
+			$$$ThrowOnError(##class(Config.MapPackages).Create(tNS, "AgenticProd", .tProps))
+		}
+		For i = 1:1:$LENGTH(..#LEGACYGLOBALS, ",") {
+			Set tName = $PIECE(..#LEGACYGLOBALS, ",", i)
+			Continue:##class(Config.MapGlobals).Exists(tNS, tName)
+			Kill tProps
+			Set tProps("Database") = tNSProps("Globals")
+			$$$ThrowOnError(##class(Config.MapGlobals).Create(tNS, tName, .tProps))
+		}
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// Undo LegacyMappings: removes exactly the package and global mappings it adds.
+ClassMethod RemoveLegacyMappings() As %Status
+{
+	New $NAMESPACE
+	Set $NAMESPACE = "%SYS"
+	Set tSC = $$$OK
+	Try {
+		Set tNS = ..#LEGACYNS
+		For i = 1:1:$LENGTH(..#LEGACYGLOBALS, ",") {
+			Set tName = $PIECE(..#LEGACYGLOBALS, ",", i)
+			Continue:'##class(Config.MapGlobals).Exists(tNS, tName)
+			$$$ThrowOnError(##class(Config.MapGlobals).Delete(tNS, tName))
+		}
+		If ##class(Config.MapPackages).Exists(tNS, "AgenticProd") {
+			$$$ThrowOnError(##class(Config.MapPackages).Delete(tNS, "AgenticProd"))
+		}
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// What the story view reads in LEGACY for a plug-in row: the header and the FHIR result table.
+ClassMethod LegacyDashboardGrants() As %Status
+{
+	New $NAMESPACE
+	Set $NAMESPACE = ..#LEGACYNS
+	Set tSql = "GRANT SELECT ON Ens.MessageHeader, AgenticProd_Msg.FHIRResult TO "_..#DASHROLE
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, tSql)
+	Quit:tRS.%SQLCODE<0 $$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message_" ("_tSql_")")
+	Quit $$$OK
 }
 
 ClassMethod CreateLegacyNamespace() As %Status [ Private ]

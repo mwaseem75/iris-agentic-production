@@ -278,7 +278,7 @@ ClassMethod SummaryData(pIncludeEval As %Boolean = 0) As %DynamicObject
 		_" FROM AgenticProd_Data.DecisionLog"_tLogWhere).%Get(0)
 	// Triage marks its own changes DOWNGRADED:X; an ESCALATE over a different agent proposal counts too
 	Set tChanged = ..Rows("SELECT COUNT(*) AS N FROM AgenticProd_Data.DecisionLog d WHERE (d.Outcome %STARTSWITH 'DOWNGRADED:'"
-		_" OR (d.Decision = 'ESCALATE' AND EXISTS (SELECT 1 FROM AgenticProd_Data.Usage u WHERE u.HeaderId = d.HeaderId AND u.Decision <> 'ESCALATE')))"
+		_" OR (d.Decision = 'ESCALATE' AND EXISTS (SELECT 1 FROM AgenticProd_Data.Usage u WHERE u.HeaderId = d.HeaderId AND u.Namespace = d.Namespace AND u.Decision <> 'ESCALATE')))"
 		_$SELECT(pIncludeEval: "", 1: " AND d.EvalRunId IS NULL")).%Get(0)
 	Set tToday = $ZDATE($PIECE($ZTIMESTAMP, ","), 3)_" 00:00:00"
 	// Replay rows repeat a recorded cost; counting them would bill the same run twice
@@ -306,7 +306,7 @@ ClassMethod SummaryData(pIncludeEval As %Boolean = 0) As %DynamicObject
 		"tokensToday": (tTokens), "dailyTokenBudget": (tBudget),
 		"tokensPercent": ($SELECT(tBudget: $NORMALIZE(tTokens / tBudget * 100, 0), 1: "")),
 		"overBudget": (tBudget && (tTokens >= tBudget)),
-		"traceUrl": ($SYSTEM.CSP.GetDefaultApp($NAMESPACE)_"/EnsPortal.VisualTrace.zen?SESSIONID="),
+		"traceUrl": (..TraceUrl()),
 		"productionUrl": ($SYSTEM.CSP.GetDefaultApp($NAMESPACE)_"/EnsPortal.ProductionConfig.zen?PRODUCTION="_##class(AgenticProd.Production).%ClassName(1)),
 		// the portal's Workflow Inbox menu entry opens this User Portal page
 		"inboxUrl": ($SYSTEM.CSP.GetDefaultApp($NAMESPACE)_"/_DeepSee.UserPortal.Workflow.zen")
@@ -328,12 +328,13 @@ ClassMethod DecisionsData(pLimit As %Integer = {..#DEFAULTLIMIT}, pIncludeEval A
 	Set pLimit = pLimit \ 1
 	Set:pLimit<1 pLimit = ..#DEFAULTLIMIT
 	Set:pLimit>..#MAXLIMIT pLimit = ..#MAXLIMIT
-	Set tRows = ..Rows("SELECT TOP ? d.ID, d.CreatedAt, d.EvalRunId, d.CaseId, d.HeaderId, d.SessionId, d.Source, d.ErrorClass, d.Decision, d.Outcome, d.Confidence, d.CostUsd, d.Model, d.Reason, d.DecisionJSON,"
-		_" (SELECT MAX(t.ControlId) FROM AgenticProd_Msg.TriageRequest t WHERE t.HeaderId = d.HeaderId) AS ControlId,"
-		_" (SELECT MAX(u.Decision) FROM AgenticProd_Data.Usage u WHERE u.HeaderId = d.HeaderId) AS AgentDecision,"
-		_" (SELECT COUNT(*) FROM AgenticProd_Data.Usage u WHERE u.HeaderId = d.HeaderId AND (u.Replay = 0 OR u.Replay IS NULL)) AS AgentCalls,"
-		_" (SELECT COUNT(*) FROM AgenticProd_Data.Usage u WHERE u.HeaderId = d.HeaderId AND u.Replay = 1) AS Replays"
-		_" FROM AgenticProd_Data.DecisionLog d"_$SELECT(pIncludeEval: "", 1: " WHERE d.EvalRunId IS NULL")_" ORDER BY d.ID DESC", pLimit)
+	// TriageRequest bodies are messages, local to each namespace: only this one's can be joined
+	Set tRows = ..Rows("SELECT TOP ? d.ID, d.CreatedAt, d.EvalRunId, d.CaseId, d.HeaderId, d.SessionId, d.Namespace, d.Source, d.ErrorClass, d.Decision, d.Outcome, d.Confidence, d.CostUsd, d.Model, d.Reason, d.DecisionJSON,"
+		_" CASE WHEN d.Namespace = ? THEN (SELECT MAX(t.ControlId) FROM AgenticProd_Msg.TriageRequest t WHERE t.HeaderId = d.HeaderId) END AS ControlId,"
+		_" (SELECT MAX(u.Decision) FROM AgenticProd_Data.Usage u WHERE u.HeaderId = d.HeaderId AND u.Namespace = d.Namespace) AS AgentDecision,"
+		_" (SELECT COUNT(*) FROM AgenticProd_Data.Usage u WHERE u.HeaderId = d.HeaderId AND u.Namespace = d.Namespace AND (u.Replay = 0 OR u.Replay IS NULL)) AS AgentCalls,"
+		_" (SELECT COUNT(*) FROM AgenticProd_Data.Usage u WHERE u.HeaderId = d.HeaderId AND u.Namespace = d.Namespace AND u.Replay = 1) AS Replays"
+		_" FROM AgenticProd_Data.DecisionLog d"_$SELECT(pIncludeEval: "", 1: " WHERE d.EvalRunId IS NULL")_" ORDER BY d.ID DESC", pLimit, $NAMESPACE)
 	Set tIter = tRows.%GetIterator()
 	While tIter.%GetNext(, .tRow) {
 		Set tFlags = []
@@ -356,7 +357,8 @@ ClassMethod DecisionsData(pLimit As %Integer = {..#DEFAULTLIMIT}, pIncludeEval A
 				tRow.Reason [ "no fix checker for format": "no checker for format", 1: "")
 			Do tRow.%Set("noAgentReason", tWhy)
 		}
-		Do tRow.%Set("fhirOut", ..FHIRStatus(tRow.SessionId))
+		Do tRow.%Set("fhirOut", ..FHIRStatus(tRow.SessionId, tRow.Namespace))
+		Do tRow.%Set("traceUrl", ..TraceUrl(tRow.Namespace))
 		For tKey = "DecisionJSON", "Reason", "AgentCalls", "Replays" Do tRow.%Remove(tKey)
 	}
 	Quit tRows
@@ -370,8 +372,9 @@ ClassMethod StoryData(pId As %String) As %DynamicObject
 {
 	Quit:(pId'?1.N)||'##class(AgenticProd.Data.DecisionLog).%ExistsId(pId) ""
 	Set tLog = ##class(AgenticProd.Data.DecisionLog).%OpenId(pId)
-	Set tMessage = ..MaskedMessage(tLog.HeaderId, .tSecrets)
-	Set tTrace = ..Rows("SELECT TOP 1 TraceId FROM AgenticProd_Data.Span WHERE HeaderId = ? ORDER BY ID DESC", tLog.HeaderId).%Get(0)
+	Set tNS = tLog.Namespace
+	Set tMessage = ..MaskedMessage(tLog.HeaderId, .tSecrets, tNS)
+	Set tTrace = ..Rows("SELECT TOP 1 TraceId FROM AgenticProd_Data.Span WHERE HeaderId = ? AND Namespace = ? ORDER BY ID DESC", tLog.HeaderId, tNS).%Get(0)
 	// Root first: the review span starts at DecisionLog.CreatedAt, which has whole seconds only
 	Set tSpans = $SELECT($IsObject(tTrace): ..Rows("SELECT ID, SpanId, ParentSpanId, Name, StartTs, EndTs, DurationMs, Status, Attributes, Exported FROM AgenticProd_Data.Span WHERE TraceId = ? ORDER BY CASE WHEN ParentSpanId IS NULL THEN 0 ELSE 1 END, StartTs, ID", tTrace.TraceId), 1: [])
 	Set tIter = tSpans.%GetIterator()
@@ -408,7 +411,7 @@ ClassMethod StoryData(pId As %String) As %DynamicObject
 
 	Do tSteps.%Push(..ReviewStep(tLog, ..TriageOutcome(tLog, tTriage), .tSecrets))
 
-	Set tFHIR = ..FHIRStatus(tLog.SessionId)
+	Set tFHIR = ..FHIRStatus(tLog.SessionId, tNS)
 	Do:tFHIR'="" tSteps.%Push({"step":"fhir", "title":"FHIR out", "text":("FHIR R4 bundle "_tFHIR_$SELECT(tFHIR = "valid": ", written to the simulated NPHIES FHIR endpoint.", 1: ", not sent; the issues went to Triage."))})
 
 	Set tN = 0, tIter = tSteps.%GetIterator()
@@ -416,7 +419,7 @@ ClassMethod StoryData(pId As %String) As %DynamicObject
 		Do tStep.%Set("n", $INCREMENT(tN))
 	}
 	Set tCase = $SELECT(tLog.EvalRunId '= "": "EV"_tLog.EvalRunId_"-"_tLog.CaseId, 1: "")
-	Set tOut = {"id":(+pId), "headerId":(tLog.HeaderId), "sessionId":(tLog.SessionId), "case":(tCase),
+	Set tOut = {"id":(+pId), "headerId":(tLog.HeaderId), "sessionId":(tLog.SessionId), "namespace":(tNS), "traceUrl":(..TraceUrl(tNS)), "case":(tCase),
 		"decision":(tLog.Decision), "outcome":(tLog.Outcome), "createdAt":(tLog.CreatedAt),
 		"traceId":($SELECT($IsObject(tTrace): tTrace.TraceId, 1: "")), "steps":(tSteps), "spans":(tSpans), "message":(tMessage)}
 	Do:tOut.message="" tOut.%Set("message", "", "null")
@@ -424,11 +427,19 @@ ClassMethod StoryData(pId As %String) As %DynamicObject
 	Quit tOut
 }
 
-/// "valid" or "invalid (n issues)" for the latest NphiesFHIROut result in session pSessionId,
-/// "" when the session has none (FHIR output off, or the message never got that far).
-ClassMethod FHIRStatus(pSessionId As %Integer) As %String
+/// Visual Trace URL up to SESSIONID= for a session in pNamespace (default this one).
+ClassMethod TraceUrl(pNamespace As %String = "") As %String
+{
+	Quit $SYSTEM.CSP.GetDefaultApp($SELECT(pNamespace '= "": pNamespace, 1: $NAMESPACE))_"/EnsPortal.VisualTrace.zen?SESSIONID="
+}
+
+/// "valid" or "invalid (n issues)" for the latest NphiesFHIROut result in session pSessionId of
+/// pNamespace, "" when the session has none (FHIR output off, or the message never got that far).
+ClassMethod FHIRStatus(pSessionId As %Integer, pNamespace As %String = "") As %String
 {
 	Quit:pSessionId="" ""
+	New $NAMESPACE
+	Set:pNamespace'="" $NAMESPACE = pNamespace
 	Set tRow = ..Rows("SELECT TOP 1 r.Valid, r.IssueCount FROM Ens.MessageHeader h JOIN AgenticProd_Msg.FHIRResult r ON r.ID = h.MessageBodyId"
 		_" WHERE h.SessionId = ? AND h.MessageBodyClassName = 'AgenticProd.Msg.FHIRResult' ORDER BY h.ID DESC", pSessionId).%Get(0)
 	Quit:'$IsObject(tRow) ""
@@ -440,7 +451,7 @@ ClassMethod FHIRStatus(pSessionId As %Integer) As %String
 ClassMethod AgentStep(pLog As AgenticProd.Data.DecisionLog, ByRef pSecrets) As %DynamicObject [ Internal ]
 {
 	Set tStep = {"step":"agent", "title":"Agent", "tools":[]}
-	Set tUsage = ..Rows("SELECT TOP 1 Model, Replay, Decision, Confidence, AgentSessionId, PromptTokens, CompletionTokens, CostUsd, ToolCalls, DecisionJSON FROM AgenticProd_Data.Usage WHERE HeaderId = ? ORDER BY ID DESC", pLog.HeaderId).%Get(0)
+	Set tUsage = ..Rows("SELECT TOP 1 Model, Replay, Decision, Confidence, AgentSessionId, PromptTokens, CompletionTokens, CostUsd, ToolCalls, DecisionJSON FROM AgenticProd_Data.Usage WHERE HeaderId = ? AND Namespace = ? ORDER BY ID DESC", pLog.HeaderId, pLog.Namespace).%Get(0)
 	If '$IsObject(tUsage) || (tUsage.Decision = "") {
 		Set tWhy = $SELECT(pLog.Reason [ "agent not called a second time": "this message was built by a Triage fix that failed again, so a second agent round could loop",
 			pLog.Reason [ "Daily token budget": "the daily token budget was used up",
@@ -465,7 +476,7 @@ ClassMethod AgentStep(pLog As AgenticProd.Data.DecisionLog, ByRef pSecrets) As %
 	Do tStep.%Set("text", tHow_" proposed "_tWhat_$SELECT(tUsage.Confidence '= "": ", confidence "_$FNUMBER(tUsage.Confidence, "", 2), 1: "")_".")
 	Do tStep.%Set("replay", +tUsage.Replay, "boolean")
 	Quit:tUsage.AgentSessionId="" tStep
-	Set tCalls = ..Rows("SELECT Tool, Status, DurationMs, ResultLength, ErrorText FROM AgenticProd_Data.ToolCall WHERE AgentSessionId = ? ORDER BY ID", tUsage.AgentSessionId)
+	Set tCalls = ..Rows("SELECT Tool, Status, DurationMs, ResultLength, ErrorText FROM AgenticProd_Data.ToolCall WHERE AgentSessionId = ? AND Namespace = ? ORDER BY ID", tUsage.AgentSessionId, pLog.Namespace)
 	Set tIter = tCalls.%GetIterator()
 	While tIter.%GetNext(, .tCall) {
 		Set tResult = $CASE(tCall.Status, "OK": "returned "_+tCall.ResultLength_" characters", "DENIED": "refused by the read-only policy", : "failed")
@@ -560,12 +571,14 @@ ClassMethod ReviewStep(pLog As AgenticProd.Data.DecisionLog, pTriageOutcome As %
 
 /// Masked text of the message body (the masking get_failed_message uses); "" when the body
 /// was purged or its class has no masking rule. pSecrets(value) = the values that masking hides,
-/// for Mask.
-ClassMethod MaskedMessage(pHeaderId As %Integer, Output pSecrets) As %String [ Internal ]
+/// for Mask. pNamespace: where the header lives (default this namespace).
+ClassMethod MaskedMessage(pHeaderId As %Integer, Output pSecrets, pNamespace As %String = "") As %String [ Internal ]
 {
 	Kill pSecrets
 	Set tText = ""
+	New $NAMESPACE
 	Try {
+		Set:pNamespace'="" $NAMESPACE = pNamespace
 		Quit:$$$ISERR(##class(AgenticProd.Tools.Base).OpenBody(pHeaderId, .tBody))
 		Set tMasker = ##class(AgenticProd.Tools.Base).MaskerFor($CLASSNAME(tBody))
 		Quit:tMasker=""
@@ -665,7 +678,7 @@ ClassMethod MetricsData(pIncludeEval As %Boolean = 0) As %DynamicObject
 	Set tOut.decisionMix = ..DecisionMix(pIncludeEval)
 	Set tOut.outcomes = {"applied":0, "approval":0, "rejected":0, "resent":0, "other":0}
 	Set tOut.agentVsFinal = []
-	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT d.Outcome, (SELECT MAX(u.Decision) FROM AgenticProd_Data.Usage u WHERE u.HeaderId = d.HeaderId) AS AgentDecision"
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT d.Outcome, (SELECT MAX(u.Decision) FROM AgenticProd_Data.Usage u WHERE u.HeaderId = d.HeaderId AND u.Namespace = d.Namespace) AS AgentDecision"
 		_" FROM AgenticProd_Data.DecisionLog d"_$SELECT(pIncludeEval: "", 1: " WHERE d.EvalRunId IS NULL"))
 	While tRS.%Next() {
 		Set tGroup = ..OutcomeGroup(tRS.Outcome)
@@ -687,9 +700,10 @@ ClassMethod MetricsData(pIncludeEval As %Boolean = 0) As %DynamicObject
 	// Eval tasks are closed by Eval.Runner, not answered: their wait time is not a person's
 	Set tApproval = ..Quantiles("SELECT 'all' AS K, DATEDIFF('s', d.CreatedAt, d.ReviewedAt) AS V FROM AgenticProd_Data.DecisionLog d"
 		_" WHERE d.ReviewedAt IS NOT NULL AND (d.Reviewer IS NULL OR d.Reviewer <> 'eval')"_tLogWhere, "key").%Get(0)
+	// Tasks are messages in this namespace, so only this namespace's log rows can match them
 	Set tWaiting = ..Rows("SELECT COUNT(*) AS N, MIN(d.CreatedAt) AS Oldest FROM EnsLib_Workflow.TaskResponse r"
-		_" JOIN AgenticProd_Msg.ApprovalTask t ON t.ID = r.TaskStatus_Request JOIN AgenticProd_Data.DecisionLog d ON d.HeaderId = t.HeaderId"
-		_" WHERE r.TaskStatus_IsComplete = 0"_tLogWhere).%Get(0)
+		_" JOIN AgenticProd_Msg.ApprovalTask t ON t.ID = r.TaskStatus_Request JOIN AgenticProd_Data.DecisionLog d ON d.HeaderId = t.HeaderId AND d.Namespace = ?"
+		_" WHERE r.TaskStatus_IsComplete = 0"_tLogWhere, $NAMESPACE).%Get(0)
 	Set tOut.approval = {"answered":0, "p50Seconds":null, "p95Seconds":null, "waiting":(+tWaiting.N), "oldestWaitingSeconds":null}
 	If $IsObject(tApproval) Set tOut.approval.answered = tApproval.count, tOut.approval.p50Seconds = tApproval.p50, tOut.approval.p95Seconds = tApproval.p95
 	Do:tWaiting.Oldest'="" tOut.approval.%Set("oldestWaitingSeconds", ##class(AgenticProd.Telemetry.Trace).ZtsDiff($ZTIMESTAMP, $ZDATETIMEH(tWaiting.Oldest, 3)) \ 1)
