@@ -113,6 +113,37 @@ h3 { font-size: 13px; margin: 0 0 8px; font-weight: 650; color: var(--muted); }
 .wf { width: 100%; margin-bottom: 14px; }
 details pre { font: 12px/1.4 ui-monospace, Consolas, monospace; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; overflow-x: auto; margin: 8px 0 0; }
 summary { cursor: pointer; color: var(--accent); }
+/* Flow replay follows the dark, focused replay panel in the reference dashboard. */
+.replay-backdrop { position: fixed; inset: 0; z-index: 20; background: rgba(3, 7, 15, .78); display: grid; place-items: center; padding: 12px; }
+.replay-window { width: min(1120px, 100%); height: min(88vh, 980px); background: #151515; color: #e8e8e8; border: 1px solid #292929; border-radius: 18px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 24px 80px rgba(0,0,0,.5); }
+.replay-head { flex: 0 0 auto; display: flex; align-items: flex-start; gap: 16px; padding: 17px 20px; background: #191919; border-bottom: 1px solid #292929; }
+.replay-head h2 { color: #f3f3f3; font-size: 16px; margin: 0; }
+.replay-head p { color: #aaa; margin: 4px 0 0; font-size: 12px; }
+.replay-head a { color: #66a0ff; }
+.replay-close { margin-left: auto; border: 0; color: #aaa; font-size: 24px; line-height: 1; padding: 0 4px; }
+.replay-body { overflow: auto; padding: 14px 16px 22px; }
+.replay-flow { background: #090909; border-radius: 16px; min-height: 300px; padding: 20px; overflow: auto; }
+.replay-flow svg { display: block; width: 100%; min-width: 720px; height: 300px; }
+.replay-node { fill: #1b1b1b; stroke: #242424; stroke-width: 1; }
+.replay-node.agent { fill: #241b32; stroke: #38284b; }
+.replay-edge { fill: none; stroke: #373737; stroke-width: 2; }
+.replay-label { fill: #e6e6e6; font: 600 14px system-ui, sans-serif; text-anchor: middle; }
+.replay-detail { fill: #999; font: 11px system-ui, sans-serif; text-anchor: middle; }
+.replay-caption { color: #999; font-size: 13px; margin: 12px 4px 22px; }
+.replay-section-title { color: #aaa; font-size: 13px; font-weight: 650; letter-spacing: .05em; text-transform: uppercase; margin: 18px 2px 8px; }
+.replay-queue { display: grid; gap: 8px; }
+.replay-item { display: flex; align-items: center; gap: 10px; background: #1d1d1d; border-radius: 12px; padding: 12px 14px; color: #ccc; }
+.replay-item .spacer { flex: 1; }
+.replay-reasoning { border: 1px solid #292929; background: #1b1b1b; border-radius: 12px; padding: 12px 14px; margin: 8px 0; }
+.replay-role { color: #6da1ff; font-size: 11px; font-weight: 700; margin-bottom: 5px; }
+.replay-role.tool { color: #f2a62a; }
+.replay-note { color: #aaa; font-size: 12px; margin: 10px 2px; }
+body.replay-open { overflow: hidden; }
+.demo-controls { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; margin: 8px 0 16px; }
+.demo-controls button { padding: 8px 14px; border-radius: 9px; font-weight: 650; background: var(--panel); }
+.demo-controls button.primary { background: #4d8df4; border-color: #4d8df4; }
+.demo-status { min-height: 1.2em; text-align: right; color: var(--muted); font-size: 12px; margin: -10px 0 12px; }
+@media (max-width: 650px) { .replay-window { height: 94vh; border-radius: 12px; } .replay-body { padding: 10px; } .replay-flow { padding: 8px; } }
 @media (max-width: 600px) {
   .tiles, .tiles.three, .tiles.five { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .tabs button { padding: 8px 10px; }
@@ -135,12 +166,20 @@ summary { cursor: pointer; color: var(--accent); }
     <a class="btn hidden" id="inbox-link" target="_blank" rel="noopener">Workflow inbox</a>
     <button id="refresh" type="button">Refresh</button>
   </header>
+  <div class="demo-controls" aria-label="Demo controls">
+    <button id="demo-send" type="button" class="primary">Send lab result</button>
+    <button id="demo-claims" type="button">Healthcare lab demo ×3</button>
+    <button id="demo-burst" type="button">Simulate burst (8)</button>
+    <button id="demo-reset" type="button">Reset data</button>
+  </div>
+  <p id="demo-status" class="demo-status" role="status" aria-live="polite"></p>
   <p class="lede">An AI agent triages failed HL7 messages. A deterministic Triage step decides what is applied; a person approves the rest.</p>
   <p class="kill-banner hidden" id="kill-banner" role="alert">AI kill switch is ON: every failed message goes to a person, no LLM call. Turn it off on the Settings tab.</p>
   <nav class="tabs" role="tablist">
     <button type="button" role="tab" data-tab="overview" aria-selected="true">Overview</button>
     <button type="button" role="tab" data-tab="messages" aria-selected="false">Messages</button>
     <button type="button" role="tab" data-tab="evaluation" aria-selected="false">Evaluation</button>
+    <button type="button" role="tab" data-tab="cost" aria-selected="false">Cost</button>
     <button type="button" role="tab" data-tab="settings" aria-selected="false">Settings</button>
   </nav>
   <p class="err hidden" id="error"></p>
@@ -179,7 +218,6 @@ summary { cursor: pointer; color: var(--accent); }
       <h2>Recent decisions <span class="muted" id="dec-count"></span> <span class="muted">(select a row to see what happened)</span></h2>
       <p class="filter-row"><label>Production <select id="dec-ns"><option value="">All productions</option></select></label></p>
       <p class="muted hidden" id="dec-note">No live traffic yet. Tick "Include eval runs" to see eval messages.</p>
-    <button type="button" role="tab" data-tab="cost" aria-selected="false">Cost</button>
       <div class="scroll">
         <table>
           <thead><tr>
@@ -204,6 +242,7 @@ summary { cursor: pointer; color: var(--accent); }
       <h3>Timeline <span id="story-trace" class="muted"></span></h3>
       <div class="wf" id="story-spans"></div>
       <details id="story-msg-box"><summary>Message (patient name, birth date, address and phone masked)</summary><pre id="story-msg"></pre></details>
+      <div class="more-row"><button id="flow-replay-open" type="button" class="primary">Flow replay</button><span class="muted">Production path, task events and recorded agent activity</span></div>
     </section>
   </div>
 
@@ -234,6 +273,24 @@ summary { cursor: pointer; color: var(--accent); }
           </tr></thead>
           <tbody id="results"></tbody>
         </table>
+      </div>
+    </section>
+  </div>
+
+  <div class="tabpanel hidden" id="tab-cost" role="tabpanel">
+    <p class="muted">Last 30 days, UTC (<span id="cost-scope">live</span>). Costs come from the recorded agent runs and the price table; the forecast and ROI are estimates.</p>
+    <h2 class="row-label">Spend</h2>
+    <div class="tiles five" id="tiles-cost-spend"></div>
+    <h2 class="row-label">Savings</h2>
+    <div class="tiles three" id="tiles-cost-save"></div>
+    <h2 class="row-label">Return on investment</h2>
+    <div class="tiles three" id="tiles-cost-roi"></div>
+    <p class="note" id="cost-assume"></p>
+    <section class="panel">
+      <div class="charts">
+        <div class="chart-card"><h3>Cost per day by model (USD)</h3><div class="chart" id="ch-costday"></div></div>
+        <div class="chart-card"><h3>Cost by production (USD)</h3><div class="chart" id="ch-costns"></div></div>
+        <div class="chart-card"><h3>Cost by error class (USD)</h3><div class="chart" id="ch-costec"></div></div>
       </div>
     </section>
   </div>
@@ -277,24 +334,6 @@ summary { cursor: pointer; color: var(--accent); }
         <label>Max tool calls / message <input name="MaxToolCalls" type="number" min="0" required></label>
         <label>Max tokens / message <input name="MaxTokensPerMessage" type="number" min="0" required></label>
         <div class="actions edit-only"><button type="submit" class="primary">Apply</button></div>
-  <div class="tabpanel hidden" id="tab-cost" role="tabpanel">
-    <p class="muted">Last 30 days, UTC (<span id="cost-scope">live</span>). Costs come from the recorded agent runs and the price table; the forecast and ROI are estimates.</p>
-    <h2 class="row-label">Spend</h2>
-    <div class="tiles five" id="tiles-cost-spend"></div>
-    <h2 class="row-label">Savings</h2>
-    <div class="tiles three" id="tiles-cost-save"></div>
-    <h2 class="row-label">Return on investment</h2>
-    <div class="tiles three" id="tiles-cost-roi"></div>
-    <p class="note" id="cost-assume"></p>
-    <section class="panel">
-      <div class="charts">
-        <div class="chart-card"><h3>Cost per day by model (USD)</h3><div class="chart" id="ch-costday"></div></div>
-        <div class="chart-card"><h3>Cost by production (USD)</h3><div class="chart" id="ch-costns"></div></div>
-        <div class="chart-card"><h3>Cost by error class (USD)</h3><div class="chart" id="ch-costec"></div></div>
-      </div>
-    </section>
-  </div>
-
       </form>
       <h3 class="sub">Skills</h3>
       <div class="checks" id="set-skills"></div>
@@ -329,6 +368,8 @@ summary { cursor: pointer; color: var(--accent); }
       <h2>Budgets &amp; mode</h2>
       <form class="form" id="f-budgets">
         <label>Daily token budget (0 = none) <input name="DailyTokenBudget" type="number" min="0" required></label>
+        <label>Minutes of engineer time per failure <input name="MinutesPerFailure" type="number" min="0" step="any" required></label>
+        <label>Engineer hourly rate (<span id="set-currency">USD</span>) <input name="EngineerHourlyRate" type="number" min="0" step="any" required></label>
         <label>Mode <select name="Mode"><option value="live">live (calls the LLM)</option><option value="replay">replay (recorded runs, no LLM)</option></select></label>
         <div class="actions edit-only"><button type="submit" class="primary">Apply</button></div>
       </form>
@@ -368,8 +409,6 @@ summary { cursor: pointer; color: var(--accent); }
     <section class="panel">
       <h2>Memory <span class="muted">learned code mappings</span></h2>
       <p class="muted">Every code table entry a production uses without asking the agent, with where it came from. Revoke removes the entry and sends a review task for each message that went out with it; the same mapping is only learned again with a reviewer's note.</p>
-        <label>Minutes of engineer time per failure <input name="MinutesPerFailure" type="number" min="0" step="any" required></label>
-        <label>Engineer hourly rate (<span id="set-currency">USD</span>) <input name="EngineerHourlyRate" type="number" min="0" step="any" required></label>
       <div class="scroll">
         <table>
           <thead><tr><th>Local code</th><th>LOINC</th><th>Origin</th><th class="opt">Provenance</th><th class="num">Routed</th><th>Status</th><th class="edit-only"></th></tr></thead>
@@ -389,6 +428,24 @@ summary { cursor: pointer; color: var(--accent); }
       </div>
     </section>
   </div>
+</div>
+
+<div id="flow-replay" class="replay-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="replay-title">
+  <section class="replay-window">
+    <div class="replay-head">
+      <div><h2 id="replay-title">Flow replay</h2><p>Recorded message hops from <a id="replay-session-link" target="_blank" rel="noopener">Ens.MessageHeader</a> — what happened inside the IRIS production</p></div>
+      <button class="replay-close" id="flow-replay-close" type="button" aria-label="Close">×</button>
+    </div>
+    <div class="replay-body">
+      <div class="replay-flow" id="replay-flow-chart"></div>
+      <p class="replay-caption" id="replay-caption"></p>
+      <h3 class="replay-section-title">Task queue</h3>
+      <div class="replay-queue" id="replay-queue"></div>
+      <h3 class="replay-section-title" id="replay-reason-title">Agent activity · saved session</h3>
+      <div id="replay-reasoning"></div>
+      <p class="replay-note">This view shows the recorded decision summary and audited tool activity. It does not expose private model reasoning. Patient details remain masked.</p>
+    </div>
+  </section>
 </div>
 
 <script src="vendor/echarts/echarts.min.js"></script>
@@ -627,6 +684,7 @@ function showStory(id) {
 }
 
 function renderStory(st) {
+  currentStory = st;
   document.getElementById("story-title").textContent = "What happened: " + (st.case || "header " + st.headerId);
   document.getElementById("story-sub").textContent = st.createdAt + " UTC, final " + (st.outcome || "—") + (st.namespace ? ", namespace " + st.namespace : "");
   var links = document.getElementById("story-links");
@@ -677,6 +735,81 @@ function renderStory(st) {
   renderSpans(st);
   box.scrollIntoView({ behavior: "smooth", block: "start" });
 }
+
+// The replay panel presents the saved production path, audited tool activity and decision summary.
+// It deliberately does not claim to reproduce private model reasoning or an unavailable transcript.
+var currentStory = null;
+var demoTasks = [];
+function replayNode(svg, x, y, title, detail, agent) {
+  var ns = "http://www.w3.org/2000/svg", g = document.createElementNS(ns, "g");
+  var rect = document.createElementNS(ns, "rect");
+  rect.setAttribute("x", x); rect.setAttribute("y", y); rect.setAttribute("width", 150); rect.setAttribute("height", 68); rect.setAttribute("rx", 13);
+  rect.setAttribute("class", "replay-node" + (agent ? " agent" : "")); g.appendChild(rect);
+  var a = document.createElementNS(ns, "text"); a.setAttribute("x", x + 75); a.setAttribute("y", y + 29); a.setAttribute("class", "replay-label"); a.textContent = title; g.appendChild(a);
+  var b = document.createElementNS(ns, "text"); b.setAttribute("x", x + 75); b.setAttribute("y", y + 48); b.setAttribute("class", "replay-detail"); b.textContent = detail; g.appendChild(b);
+  svg.appendChild(g);
+}
+function replayEdge(svg, x1, y1, x2, y2) {
+  var p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  var bend = Math.max(24, Math.abs(x2 - x1) * .38);
+  p.setAttribute("d", "M" + x1 + " " + y1 + " C" + (x1 + bend) + " " + y1 + " " + (x2 - bend) + " " + y2 + " " + x2 + " " + y2);
+  p.setAttribute("class", "replay-edge"); svg.appendChild(p);
+}
+function openFlowReplay(pSilent) {
+  if (!currentStory) return;
+  var st = currentStory, modal = document.getElementById("flow-replay"), flow = document.getElementById("replay-flow-chart");
+  flow.replaceChildren();
+  var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"); svg.setAttribute("viewBox", "0 0 960 280"); svg.setAttribute("role", "img"); svg.setAttribute("aria-label", "Recorded IRIS message flow");
+  var agentStep = (st.steps || []).filter(function (s) { return s.step === "agent"; })[0] || {};
+  var route = (st.spans || []).map(function (s) { return s.Name; });
+  var hasAgent = route.indexOf("agent run") >= 0 || !!agentStep.replay || (agentStep.tools || []).length > 0;
+  var finalTitle = st.outcome === "MAP_CODE" || st.outcome === "ESCALATE" || st.outcome === "PENDING" || st.outcome === "WAITING" || st.outcome === "SENT_FOR_APPROVAL" || (st.outcome || "").indexOf("DOWNGRADED:") === 0 ? "Workflow inbox"
+    : st.outcome === "APPLIED" || st.outcome === "APPROVED" || st.outcome === "RESENT" ? "Nphies out"
+    : st.outcome === "REJECTED" || st.outcome === "REJECT" ? "Returned to sender"
+    : st.outcome === "AUTO_FIX" ? "Recheck & route" : st.outcome || "Final outcome";
+  var finalDetail = st.outcome === "APPROVED" ? "review approved" : st.outcome === "APPLIED" ? "validated result" : st.outcome === "RESENT" ? "sent again" : "recorded decision";
+  // Draw connectors first so they sit behind the nodes.
+  replayEdge(svg, 190, 140, 250, 140); replayEdge(svg, 400, 140, 460, 140);
+  if (hasAgent) replayEdge(svg, 610, 140, 680, 140);
+  replayNode(svg, 40, 106, "Lab result", st.case || ("header " + st.headerId), false);
+  replayNode(svg, 250, 106, "LabRouter", route.indexOf("router check") >= 0 ? "validation / lookup" : "production intake", false);
+  replayNode(svg, 460, 106, "Triage", "deterministic safety checks", false);
+  if (hasAgent) replayNode(svg, 680, 106, "TriageAgent", agentStep.replay ? "recorded run" : "AI agent", true);
+  replayNode(svg, 810, 208, finalTitle, finalDetail, false);
+  if (hasAgent) replayEdge(svg, 755, 174, 835, 208); else replayEdge(svg, 400, 174, 835, 208);
+  flow.appendChild(svg);
+  var spans = st.spans || [], duration = spans.reduce(function (sum, s) { return sum + (+s.DurationMs || 0); }, 0);
+  document.getElementById("replay-caption").textContent = "persist → route → " + (hasAgent ? "agent review → " : "safety checks → ") + finalTitle + (duration ? " · " + duration + " ms recorded span time" : " · saved production events");
+  var sess = document.getElementById("replay-session-link"), storyTrace = st.traceUrl || traceUrl;
+  sess.href = st.sessionId && storyTrace ? storyTrace + encodeURIComponent(st.sessionId) : "#";
+  sess.classList.toggle("hidden", !st.sessionId);
+  var queue = document.getElementById("replay-queue"); queue.replaceChildren();
+  var events = demoTasks.length ? demoTasks.map(function (t) { return { name: "case " + t.case + " · " + t.controlId, status: t.outcome || t.status, ms: 0 }; })
+    : spans.length ? spans.map(function (s) { return { name: s.Name, status: s.Status, ms: s.DurationMs }; })
+    : (st.steps || []).map(function (s) { return { name: s.title, status: s.status || "recorded", ms: 0 }; });
+  if (!events.length) events = [{ name: "No stored production events", status: "unavailable", ms: 0 }];
+  events.forEach(function (ev) {
+    var row = el("div", "", "replay-item"), mark = ev.status === "Error" ? "!" : "✓";
+    row.appendChild(el("span", mark, ev.status === "Error" ? "t-bad" : "t-good")); row.appendChild(el("span", ev.name));
+    row.appendChild(el("span", ev.status || "recorded", "muted")); row.appendChild(el("span", "", "spacer"));
+    row.appendChild(el("span", ev.ms ? num(ev.ms) + " ms" : "", "muted")); queue.appendChild(row);
+  });
+  var reason = document.getElementById("replay-reasoning"); reason.replaceChildren();
+  var agent = (st.steps || []).filter(function (s) { return s.step === "agent"; })[0];
+  if (!agent || !st.sessionId) {
+    reason.appendChild(el("div", agent ? agent.text : "No agent session was recorded for this message.", "replay-reasoning"));
+  } else {
+    var summary = el("div", "", "replay-reasoning"); summary.appendChild(el("div", "AGENT DECISION", "replay-role")); summary.appendChild(el("div", agent.text || "Decision summary unavailable.")); reason.appendChild(summary);
+    (agent.tools || []).forEach(function (t) {
+      var card = el("div", "", "replay-reasoning"); card.appendChild(el("div", "TOOL · " + t.status, "replay-role tool")); card.appendChild(el("div", t.text)); reason.appendChild(card);
+    });
+    if (!agent.tools || !agent.tools.length) reason.appendChild(el("div", agent.replay ? "This decision used a saved replay; no tools ran again." : "No audited tool calls were recorded for this agent run.", "replay-note"));
+  }
+  document.getElementById("replay-reason-title").textContent = "Agent activity" + (st.sessionId ? " · session " + st.sessionId : " · no saved session");
+  modal.classList.remove("hidden"); document.body.classList.add("replay-open");
+  if (!pSilent) document.getElementById("flow-replay-close").focus();
+}
+function closeFlowReplay() { document.getElementById("flow-replay").classList.add("hidden"); document.body.classList.remove("replay-open"); document.getElementById("flow-replay-open").focus(); }
 
 // Waterfall: an invisible bar up to the span's start, then its duration, on one time axis
 function renderSpans(st) {
@@ -861,6 +994,48 @@ function secs(v) {
 }
 function short(v) { return v >= 1e6 ? (v / 1e6).toFixed(1) + "M" : v >= 1e3 ? Math.round(v / 1e3) + "k" : v; }
 
+function renderCost(c) {
+  GRID.top = window.innerWidth < 600 ? 54 : 34;
+  document.getElementById("cost-scope").textContent = c.includeEval ? "live and eval" : "live";
+  var cur = c.currency === "USD" ? "$" : c.currency + " ";
+  function m(v, d) { return v == null ? "—" : cur + Number(v).toFixed(d == null ? 4 : d); }
+  var f = c.failures, b = c.budget, sv = c.savings, r = c.roi;
+  document.getElementById("tiles-cost-spend").replaceChildren(
+    tile("AI cost today", m(c.cost.today), "UTC day"),
+    tile("AI cost this month", m(c.cost.month), "day " + c.cost.dayOfMonth + " of " + c.cost.daysInMonth),
+    tile("Cost per failure handled", f.costPer == null ? "—" : m(f.costPer, 5), num(f.triaged) + " failures in " + c.days + " days"),
+    tile("Monthly forecast (estimate)", m(c.cost.forecast), "daily average x " + c.cost.daysInMonth + " days"),
+    tile("Budget used today", b.percent == null ? "no budget" : b.percent + "%", num(b.tokensToday) + " of " + (b.dailyTokenBudget ? num(b.dailyTokenBudget) : "—") + " tokens", b.percent == null ? undefined : b.percent / 100)
+  );
+  document.getElementById("tiles-cost-save").replaceChildren(
+    tile("Prompt-cache savings", m(sv.cacheUsd), "cached tokens x (input price - cache-read price)"),
+    tile("LLM calls saved by learned mappings", num(sv.savedCalls), sv.savedCallsUsd == null ? "no MAP_CODE run to price it" : "about " + m(sv.savedCallsUsd) + " (estimate, " + num(sv.basedOnRuns) + " runs)")
+  );
+  document.getElementById("tiles-cost-roi").replaceChildren(
+    tile("Handled without an engineer", num(r.handled), r.hoursSaved + " engineer hours"),
+    tile("Engineer time saved", m(r.engineerValue, 2), "vs AI cost " + m(r.aiCost, 2)),
+    tile("Net", m(r.net, 2), r.aiCost > 0 ? "about " + (r.engineerValue / r.aiCost).toFixed(0) + "x the AI cost" : "no AI cost in the period", undefined, r.net < 0 ? "over" : "")
+  );
+  document.getElementById("cost-assume").textContent = "Assumes " + r.minutesPerFailure + " min per failure at " + cur + r.hourlyRate + "/h; handled = applied, resent, rejected or approved mappings. Change both in Settings, Budgets.";
+
+  if (!c.byDay.models.length) empty("costday", "No agent runs in this period");
+  else chart("costday", document.getElementById("ch-costday"), {
+    grid: GRID, legend: LEGEND, tooltip: { trigger: "axis", axisPointer: { type: "shadow" }, confine: true },
+    xAxis: { type: "category", data: c.byDay.days.map(function (d) { return d.slice(5); }), axisLabel: { fontSize: 11, interval: 4 } },
+    yAxis: { type: "value", axisLabel: { fontSize: 11 } },
+    series: c.byDay.models.map(function (mod) { return { name: mod, type: "bar", stack: "c", barMaxWidth: 14, data: c.byDay.series[mod] }; })
+  });
+  [["costns", c.byNamespace], ["costec", c.byErrorClass]].forEach(function (p) {
+    if (!p[1].length) empty(p[0], "No agent runs in this period");
+    else chart(p[0], document.getElementById("ch-" + p[0]), {
+      grid: GRID, tooltip: { trigger: "axis", axisPointer: { type: "shadow" }, confine: true },
+      xAxis: { type: "value", axisLabel: { fontSize: 11 } },
+      yAxis: { type: "category", inverse: true, data: p[1].map(function (x) { return x.name; }), axisLabel: { fontSize: 11 } },
+      series: [{ type: "bar", barMaxWidth: 18, itemStyle: { color: COLORS.resent }, data: p[1].map(function (x) { return x.cost; }) }]
+    });
+  });
+}
+
 function showError(e) {
   var p = document.getElementById("error");
   p.textContent = "Could not load data: " + e.message;
@@ -877,6 +1052,7 @@ function load() {
     renderMetrics(res[1]);
     renderDecisions(res[2]);
     renderRuns(res[3]);
+    renderCost(res[4]);
     document.getElementById("updated").textContent = "Updated " + new Date().toLocaleTimeString();
   }).catch(showError);
 }
@@ -895,6 +1071,31 @@ function send(method, path, body) {
       return j;
     });
   });
+}
+function runDemo(action) {
+  var labels = { send: "Sending a lab result…", claims: "Sending the three-case healthcare demo…", burst: "Starting the eight-message burst…" };
+  var buttons = Array.prototype.slice.call(document.querySelectorAll(".demo-controls button"));
+  buttons.forEach(function (b) { b.disabled = true; });
+  document.getElementById("demo-status").textContent = labels[action] || "Working…";
+  send("POST", "api/demo/" + action, action === "send" ? { case: "05" } : {}).then(function (r) {
+    demoTasks = (r.tasks || []).map(function (t) { t.status = "queued"; return t; });
+    document.getElementById("demo-status").textContent = "Queued " + demoTasks.length + " lab result" + (demoTasks.length === 1 ? "" : "s") + ". Select a decision in Messages to open Flow replay.";
+    load();
+  }).catch(function (e) { document.getElementById("demo-status").textContent = e.message; })
+    .then(function () { buttons.forEach(function (b) { b.disabled = false; }); });
+}
+function pollDemoTasks() {
+  if (!demoTasks.some(function (t) { return t.status === "queued"; })) return;
+  get("api/decisions?limit=200&eval=0").then(function (rows) {
+    demoTasks.forEach(function (task) {
+      var found = rows.filter(function (d) { return d.ControlId === task.controlId; })[0];
+      if (found) { task.status = "decided"; task.outcome = found.Outcome || found.Decision || "decided"; }
+    });
+    if (currentStory && !document.getElementById("flow-replay").classList.contains("hidden")) openFlowReplay();
+    if (!demoTasks.some(function (t) { return t.status === "queued"; })) {
+      document.getElementById("demo-status").textContent = "Demo complete: " + demoTasks.length + " result" + (demoTasks.length === 1 ? "" : "s") + " decided.";
+    }
+  }).catch(function () {});
 }
 function say(id, text, ok) {
   var p = document.getElementById(id);
@@ -990,48 +1191,6 @@ function renderProductions(r) {
   });
   Array.prototype.forEach.call(document.querySelectorAll("#set-productions .edit-only"), function (e) { e.classList.toggle("hidden", !r.canEdit); });
 }
-function renderCost(c) {
-  GRID.top = window.innerWidth < 600 ? 54 : 34;
-  document.getElementById("cost-scope").textContent = c.includeEval ? "live and eval" : "live";
-  var cur = c.currency === "USD" ? "$" : c.currency + " ";
-  function m(v, d) { return v == null ? "—" : cur + Number(v).toFixed(d == null ? 4 : d); }
-  var f = c.failures, b = c.budget, sv = c.savings, r = c.roi;
-  document.getElementById("tiles-cost-spend").replaceChildren(
-    tile("AI cost today", m(c.cost.today), "UTC day"),
-    tile("AI cost this month", m(c.cost.month), "day " + c.cost.dayOfMonth + " of " + c.cost.daysInMonth),
-    tile("Cost per failure handled", f.costPer == null ? "—" : m(f.costPer, 5), num(f.triaged) + " failures in " + c.days + " days"),
-    tile("Monthly forecast (estimate)", m(c.cost.forecast), "daily average x " + c.cost.daysInMonth + " days"),
-    tile("Budget used today", b.percent == null ? "no budget" : b.percent + "%", num(b.tokensToday) + " of " + (b.dailyTokenBudget ? num(b.dailyTokenBudget) : "—") + " tokens", b.percent == null ? undefined : b.percent / 100)
-  );
-  document.getElementById("tiles-cost-save").replaceChildren(
-    tile("Prompt-cache savings", m(sv.cacheUsd), "cached tokens x (input price - cache-read price)"),
-    tile("LLM calls saved by learned mappings", num(sv.savedCalls), sv.savedCallsUsd == null ? "no MAP_CODE run to price it" : "about " + m(sv.savedCallsUsd) + " (estimate, " + num(sv.basedOnRuns) + " runs)")
-  );
-  document.getElementById("tiles-cost-roi").replaceChildren(
-    tile("Handled without an engineer", num(r.handled), r.hoursSaved + " engineer hours"),
-    tile("Engineer time saved", m(r.engineerValue, 2), "vs AI cost " + m(r.aiCost, 2)),
-    tile("Net", m(r.net, 2), r.aiCost > 0 ? "about " + (r.engineerValue / r.aiCost).toFixed(0) + "x the AI cost" : "no AI cost in the period", undefined, r.net < 0 ? "over" : "")
-  );
-  document.getElementById("cost-assume").textContent = "Assumes " + r.minutesPerFailure + " min per failure at " + cur + r.hourlyRate + "/h; handled = applied, resent, rejected or approved mappings. Change both in Settings, Budgets.";
-
-  if (!c.byDay.models.length) empty("costday", "No agent runs in this period");
-  else chart("costday", document.getElementById("ch-costday"), {
-    grid: GRID, legend: LEGEND, tooltip: { trigger: "axis", axisPointer: { type: "shadow" }, confine: true },
-    xAxis: { type: "category", data: c.byDay.days.map(function (d) { return d.slice(5); }), axisLabel: { fontSize: 11, interval: 4 } },
-    yAxis: { type: "value", axisLabel: { fontSize: 11 } },
-    series: c.byDay.models.map(function (mod) { return { name: mod, type: "bar", stack: "c", barMaxWidth: 14, data: c.byDay.series[mod] }; })
-  });
-  [["costns", c.byNamespace], ["costec", c.byErrorClass]].forEach(function (p) {
-    if (!p[1].length) empty(p[0], "No agent runs in this period");
-    else chart(p[0], document.getElementById("ch-" + p[0]), {
-      grid: GRID, tooltip: { trigger: "axis", axisPointer: { type: "shadow" }, confine: true },
-      xAxis: { type: "value", axisLabel: { fontSize: 11 } },
-      yAxis: { type: "category", inverse: true, data: p[1].map(function (x) { return x.name; }), axisLabel: { fontSize: 11 } },
-      series: [{ type: "bar", barMaxWidth: 18, itemStyle: { color: COLORS.resent }, data: p[1].map(function (x) { return x.cost; }) }]
-    });
-  });
-}
-
 
 // Messages tab filter: the productions that have decisions of their own
 var decNs = "";
@@ -1048,7 +1207,6 @@ function fillNsFilter(list) {
 function renderSettings(s) {
   settings = s;
   var edit = s.canEdit;
-    renderCost(res[4]);
   document.getElementById("set-readonly").classList.toggle("hidden", edit);
   setKillBanner(s.budgets.KillSwitch);
 
@@ -1142,6 +1300,9 @@ function renderSettings(s) {
   var fb = document.getElementById("f-budgets");
   fb.elements.DailyTokenBudget.value = s.budgets.DailyTokenBudget;
   fb.elements.Mode.value = s.budgets.Mode;
+  fb.elements.MinutesPerFailure.value = s.budgets.MinutesPerFailure;
+  fb.elements.EngineerHourlyRate.value = s.budgets.EngineerHourlyRate;
+  document.getElementById("set-currency").textContent = s.budgets.currency || "USD";
   var budget = Number(s.budgets.DailyTokenBudget);
   document.getElementById("set-used").textContent = "Used today (UTC): " + num(s.usedToday) + " tokens" + (budget ? " of " + num(budget) + " (" + Math.round(s.usedToday / budget * 100) + "%)" : "");
   var on = s.budgets.KillSwitch;
@@ -1296,9 +1457,6 @@ document.getElementById("f-agents").addEventListener("submit", function (ev) {
   ev.preventDefault();
   applyItem("agents", ev.target, "m-agents", { DisabledSkills: checkedValues("set-skills", false) });
 });
-  fb.elements.MinutesPerFailure.value = s.budgets.MinutesPerFailure;
-  fb.elements.EngineerHourlyRate.value = s.budgets.EngineerHourlyRate;
-  document.getElementById("set-currency").textContent = s.budgets.currency || "USD";
 document.getElementById("f-guard").addEventListener("submit", function (ev) {
   ev.preventDefault();
   var tiers = Array.prototype.filter.call(document.querySelectorAll("#set-tools select"), function (s) { return s.value !== "readonly"; })
@@ -1353,12 +1511,27 @@ document.getElementById("runs-test").addEventListener("click", function () {
   renderRuns(lastRuns);
 });
 document.getElementById("refresh").addEventListener("click", load);
+document.getElementById("demo-send").addEventListener("click", function () { runDemo("send"); });
+document.getElementById("demo-claims").addEventListener("click", function () { runDemo("claims"); });
+document.getElementById("demo-burst").addEventListener("click", function () { runDemo("burst"); });
+document.getElementById("demo-reset").addEventListener("click", function () {
+  if (!window.confirm("Reset live demo data, purge production messages, clear demo folders and restore the seeded code mappings?")) return;
+  var btn = this; btn.disabled = true; document.getElementById("demo-status").textContent = "Resetting demo data…";
+  send("POST", "api/demo/reset", { confirm: "RESET" }).then(function (r) {
+    demoTasks = []; document.getElementById("demo-status").textContent = r.note || "Demo data reset."; load();
+  }).catch(function (e) { document.getElementById("demo-status").textContent = e.message; })
+    .then(function () { btn.disabled = false; });
+});
 window.addEventListener("resize", function () { Object.keys(charts).forEach(function (k) { charts[k].resize(); }); });
 document.getElementById("story-close").addEventListener("click", function () {
   selectedDecision = null;
   document.getElementById("story").classList.add("hidden");
   Array.prototype.forEach.call(document.querySelectorAll("#decisions tr.sel"), function (tr) { tr.classList.remove("sel"); });
 });
+document.getElementById("flow-replay-open").addEventListener("click", function () { openFlowReplay(false); });
+document.getElementById("flow-replay-close").addEventListener("click", closeFlowReplay);
+document.getElementById("flow-replay").addEventListener("click", function (ev) { if (ev.target === this) closeFlowReplay(); });
+document.addEventListener("keydown", function (ev) { if (ev.key === "Escape" && !document.getElementById("flow-replay").classList.contains("hidden")) closeFlowReplay(); });
 var evalBox = document.getElementById("incl-eval");
 evalBox.checked = includeEval;
 evalBox.addEventListener("change", function () {
@@ -1367,8 +1540,15 @@ evalBox.addEventListener("change", function () {
   try { localStorage.setItem("agenticprod.includeEval", includeEval ? "1" : "0"); } catch (e) {}
   load();
 });
+get("api/demo/permissions").then(function (p) {
+  if (!p.canUse) { document.querySelector(".demo-controls").classList.add("hidden"); document.getElementById("demo-status").classList.add("hidden"); }
+}).catch(function () {
+  document.querySelector(".demo-controls").classList.add("hidden");
+  document.getElementById("demo-status").classList.add("hidden");
+});
 load();
 setInterval(load, 30000);
+setInterval(pollDemoTasks, 2500);
 </script>
 </body>
 </html>
