@@ -19,6 +19,10 @@ Parameter ITEMS = "Sentinel=AgenticProd.Plugin.Sentinel,Triage=AgenticProd.Proce
 /// plug-in agent starts with.
 Parameter AGENTSOURCE = "TriageAgent";
 
+/// Agent settings an install may set itself. Provider, model, limits and budget always come from
+/// AGENTSOURCE: an override of MaxIterations once left the LEGACY agent at 3 tool rounds.
+Parameter AGENTOVERRIDES = "KillSwitch,CodeTable";
+
 Parameter UPDATETIMEOUT = 60;
 
 /// observe: logs what it would do; propose: every decision to the review inbox; act: Triage's
@@ -28,8 +32,8 @@ Parameter MODES = "observe,propose,act";
 /// Add the plug-in items to pProduction in pNamespace (default: the production there now) and
 /// apply them if it is running. pAdded = item names added. Running it again adds only what is
 /// missing; an item of the same name that the plug-in did not add is an error, nothing is changed.
-/// pAgentSettings(name) = value overrides the copied agent settings (e.g. KillSwitch=1 installs
-/// it with the AI off). pCodeTable / pCodeFormat: the production's code table and its value
+/// pAgentSettings(name) = value overrides one of AGENTOVERRIDES (e.g. KillSwitch=1 installs it
+/// with the AI off); anything else is an error. pCodeTable / pCodeFormat: the production's code table and its value
 /// format (Triage.CodeTableFormat).
 ClassMethod Enable(pNamespace As %String, pProduction As %String = "", pMode As %String = "observe", Output pAdded As %String, ByRef pAgentSettings, pCodeTable As %String = "LabCodeMap", pCodeFormat As %String = "loinc^display") As %Status
 {
@@ -38,7 +42,7 @@ ClassMethod Enable(pNamespace As %String, pProduction As %String = "", pMode As 
 	Try {
 		$$$ThrowOnError(..CheckMode(pMode))
 		If pNamespace = $NAMESPACE $$$ThrowStatus($$$ERROR($$$GeneralError, "the plug-in goes into another namespace's production, not "_$NAMESPACE))
-		Do ..AgentSettings(.tAgentSettings)
+		$$$ThrowOnError(..AgentItemSettings(.pAgentSettings, pCodeTable, .tAgentSettings))
 		New $NAMESPACE
 		Set $NAMESPACE = pNamespace
 		$$$ThrowOnError(..OpenProduction(.pProduction, .tProd))
@@ -62,20 +66,7 @@ ClassMethod Enable(pNamespace As %String, pProduction As %String = "", pMode As 
 				} ElseIf tSuffix = "Review" {
 					Do ..AddSetting(tItem, "AutoCreateRole", 1)
 				} Else {
-					Set tKey = ""
-					For {
-						Set tKey = $ORDER(tAgentSettings(tKey), 1, tSetting)
-						Quit:tKey=""
-						Continue:$DATA(pAgentSettings($LIST(tSetting, 1)))||($LIST(tSetting, 1)="CodeTable")
-						Do ..AddSetting(tItem, $LIST(tSetting, 1), $LIST(tSetting, 3), $LIST(tSetting, 2))
-					}
-					Do:'$DATA(pAgentSettings("CodeTable")) ..AddSetting(tItem, "CodeTable", pCodeTable)
-					Set tKey = ""
-					For {
-						Set tKey = $ORDER(pAgentSettings(tKey), 1, tValue)
-						Quit:tKey=""
-						Do ..AddSetting(tItem, tKey, tValue)
-					}
+					Do ..SetAgentItem(tItem, .tAgentSettings)
 				}
 				Do tProd.Items.Insert(tItem)
 				// Marks left by an earlier install would make a new Sentinel rescan from there
@@ -337,6 +328,93 @@ ClassMethod CheckMode(pMode As %String) As %Status [ Internal ]
 {
 	Quit:$LISTFIND($LISTFROMSTRING(..#MODES), pMode) $$$OK
 	Quit $$$ERROR($$$GeneralError, "mode must be one of "_..#MODES_", not '"_pMode_"'")
+}
+
+/// Reset the plug-in agent item in pNamespace to AGENTSOURCE's settings, keeping its own
+/// KillSwitch and CodeTable, and apply that if the production runs. pChanged = names whose value
+/// changed or that were dropped; nothing is saved when it already matches.
+ClassMethod SyncAgent(pNamespace As %String, pProduction As %String = "", Output pChanged As %String) As %Status
+{
+	Set pChanged = ""
+	Set tSC = $$$OK
+	Try {
+		If pNamespace = $NAMESPACE $$$ThrowStatus($$$ERROR($$$GeneralError, "the plug-in agent is in another namespace, not "_$NAMESPACE))
+		Do ..AgentSettings(.tSource)
+		New $NAMESPACE
+		Set $NAMESPACE = pNamespace
+		$$$ThrowOnError(..OpenProduction(.pProduction, .tProd))
+		Set tItem = tProd.FindItemByConfigName(..#PREFIX_"Agent")
+		If '$IsObject(tItem) $$$ThrowStatus($$$ERROR($$$GeneralError, pProduction_" has no plug-in agent"))
+		Set tOverrides = $LISTFROMSTRING(..#AGENTOVERRIDES), tPtr = 0
+		While $LISTNEXT(tOverrides, tPtr, tName) {
+			Set:tItem.GetSetting(tName, .tValue) tKeep(tName) = tValue
+		}
+		$$$ThrowOnError(..MergeAgentSettings(.tSource, .tKeep, $GET(tKeep("CodeTable"), "LabCodeMap"), .tWanted))
+		For i = 1:1:tItem.Settings.Count() {
+			Set tSetting = tItem.Settings.GetAt(i), tName = tSetting.Name
+			Set tHave(tName) = tSetting.Value
+			If '$DATA(tWanted(tName)) || ($LIST(tWanted(tName), 2) '= tSetting.Value) Set pChanged = pChanged_$SELECT(pChanged '= "": ",", 1: "")_tName
+		}
+		Set tName = ""
+		For {
+			Set tName = $ORDER(tWanted(tName))
+			Quit:tName=""
+			Set:'$DATA(tHave(tName)) pChanged = pChanged_$SELECT(pChanged '= "": ",", 1: "")_tName
+		}
+		Quit:pChanged=""
+		Do ..SetAgentItem(tItem, .tWanted)
+		$$$ThrowOnError(..SaveAndApply(tProd))
+		$$$ThrowOnError(##class(AgenticProd.Data.SettingsAudit).Log("productions", pNamespace_" "_pProduction, "agent settings", "", "synced from "_..#AGENTSOURCE_" ("_pChanged_")"))
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// pList(name) = $LB(target, value) for a new plug-in agent item: AGENTSOURCE's settings here,
+/// CodeTable pCodeTable, then pAgentSettings, which may only name AGENTOVERRIDES.
+ClassMethod AgentItemSettings(ByRef pAgentSettings, pCodeTable As %String, Output pList) As %Status [ Internal ]
+{
+	Kill pList
+	Do ..AgentSettings(.tSource)
+	Quit ..MergeAgentSettings(.tSource, .pAgentSettings, pCodeTable, .pList)
+}
+
+ClassMethod MergeAgentSettings(ByRef pSource, ByRef pOverrides, pCodeTable As %String, Output pList) As %Status [ Internal ]
+{
+	Kill pList
+	Set tKey = ""
+	For {
+		Set tKey = $ORDER(pOverrides(tKey))
+		Quit:tKey=""
+		Quit:'$LISTFIND($LISTFROMSTRING(..#AGENTOVERRIDES), tKey)
+	}
+	Quit:tKey'="" $$$ERROR($$$GeneralError, "agent setting "_tKey_" comes from "_..#AGENTSOURCE_"; an install may only set "_..#AGENTOVERRIDES)
+	Set i = ""
+	For {
+		Set i = $ORDER(pSource(i), 1, tSetting)
+		Quit:i=""
+		Set pList($LIST(tSetting, 1)) = $LISTBUILD($LIST(tSetting, 2), $LIST(tSetting, 3))
+	}
+	Set pList("CodeTable") = $LISTBUILD("Host", pCodeTable)
+	For {
+		Set tKey = $ORDER(pOverrides(tKey), 1, tValue)
+		Quit:tKey=""
+		Set pList(tKey) = $LISTBUILD("Host", tValue)
+	}
+	Quit $$$OK
+}
+
+/// Replace pItem's settings with pList (AgentItemSettings).
+ClassMethod SetAgentItem(pItem As Ens.Config.Item, ByRef pList) [ Internal ]
+{
+	Do pItem.Settings.Clear()
+	Set tName = ""
+	For {
+		Set tName = $ORDER(pList(tName), 1, tSetting)
+		Quit:tName=""
+		Do ..AddSetting(pItem, tName, $LIST(tSetting, 2), $LIST(tSetting, 1))
+	}
 }
 
 /// pSettings(n) = $LB(name, target, value) of AGENTSOURCE's settings in this namespace's production.

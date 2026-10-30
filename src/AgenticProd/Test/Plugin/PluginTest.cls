@@ -71,6 +71,29 @@ Method TestEnableModesKillSwitchDisable()
 	Do $$$AssertEquals(..Tracked(tNS, tProd), 0)
 }
 
+/// The plug-in agent gets the home agent's provider, model and limits; an install may only set
+/// KillSwitch and CodeTable. No production change.
+Method TestAgentDefaults()
+{
+	Do ##class(AgenticProd.Plugin.Installer).AgentSettings(.tSource)
+	Set i = ""
+	For {
+		Set i = $ORDER(tSource(i), 1, tSetting)
+		Quit:i=""
+		Set tHome($LIST(tSetting, 1)) = $LIST(tSetting, 3)
+	}
+	Set tAgent("KillSwitch") = 1
+	Do $$$AssertStatusOK(##class(AgenticProd.Plugin.Installer).AgentItemSettings(.tAgent, "LegacyLabCodes", .tList))
+	For tName = "Model", "ProviderConfig", "MaxIterations", "MaxToolCalls", "MaxTokensPerMessage", "DailyTokenBudget", "RunAsUser", "Mode" {
+		Do $$$AssertEquals($LISTGET($GET(tList(tName)), 2), $GET(tHome(tName)), tName_" as in "_##class(AgenticProd.Plugin.Installer).#AGENTSOURCE)
+	}
+	Do $$$AssertEquals($LISTGET(tList("KillSwitch"), 2), 1, "override kept")
+	Do $$$AssertEquals($LISTGET(tList("CodeTable"), 2), "LegacyLabCodes")
+	Kill tAgent
+	Set tAgent("MaxIterations") = 3
+	Do $$$AssertStatusNotOK(##class(AgenticProd.Plugin.Installer).AgentItemSettings(.tAgent, "LabCodeMap", .tList), "limits are not an install override")
+}
+
 /// What each mode makes of Plan's outcome.
 Method TestModeOutcome()
 {
