@@ -179,6 +179,7 @@ summary { cursor: pointer; color: var(--accent); }
       <h2>Recent decisions <span class="muted" id="dec-count"></span> <span class="muted">(select a row to see what happened)</span></h2>
       <p class="filter-row"><label>Production <select id="dec-ns"><option value="">All productions</option></select></label></p>
       <p class="muted hidden" id="dec-note">No live traffic yet. Tick "Include eval runs" to see eval messages.</p>
+    <button type="button" role="tab" data-tab="cost" aria-selected="false">Cost</button>
       <div class="scroll">
         <table>
           <thead><tr>
@@ -276,6 +277,24 @@ summary { cursor: pointer; color: var(--accent); }
         <label>Max tool calls / message <input name="MaxToolCalls" type="number" min="0" required></label>
         <label>Max tokens / message <input name="MaxTokensPerMessage" type="number" min="0" required></label>
         <div class="actions edit-only"><button type="submit" class="primary">Apply</button></div>
+  <div class="tabpanel hidden" id="tab-cost" role="tabpanel">
+    <p class="muted">Last 30 days, UTC (<span id="cost-scope">live</span>). Costs come from the recorded agent runs and the price table; the forecast and ROI are estimates.</p>
+    <h2 class="row-label">Spend</h2>
+    <div class="tiles five" id="tiles-cost-spend"></div>
+    <h2 class="row-label">Savings</h2>
+    <div class="tiles three" id="tiles-cost-save"></div>
+    <h2 class="row-label">Return on investment</h2>
+    <div class="tiles three" id="tiles-cost-roi"></div>
+    <p class="note" id="cost-assume"></p>
+    <section class="panel">
+      <div class="charts">
+        <div class="chart-card"><h3>Cost per day by model (USD)</h3><div class="chart" id="ch-costday"></div></div>
+        <div class="chart-card"><h3>Cost by production (USD)</h3><div class="chart" id="ch-costns"></div></div>
+        <div class="chart-card"><h3>Cost by error class (USD)</h3><div class="chart" id="ch-costec"></div></div>
+      </div>
+    </section>
+  </div>
+
       </form>
       <h3 class="sub">Skills</h3>
       <div class="checks" id="set-skills"></div>
@@ -349,6 +368,8 @@ summary { cursor: pointer; color: var(--accent); }
     <section class="panel">
       <h2>Memory <span class="muted">learned code mappings</span></h2>
       <p class="muted">Every code table entry a production uses without asking the agent, with where it came from. Revoke removes the entry and sends a review task for each message that went out with it; the same mapping is only learned again with a reviewer's note.</p>
+        <label>Minutes of engineer time per failure <input name="MinutesPerFailure" type="number" min="0" step="any" required></label>
+        <label>Engineer hourly rate (<span id="set-currency">USD</span>) <input name="EngineerHourlyRate" type="number" min="0" step="any" required></label>
       <div class="scroll">
         <table>
           <thead><tr><th>Local code</th><th>LOINC</th><th>Origin</th><th class="opt">Provenance</th><th class="num">Routed</th><th>Status</th><th class="edit-only"></th></tr></thead>
@@ -850,7 +871,7 @@ function load() {
   document.getElementById("error").classList.add("hidden");
   var ev = includeEval ? "eval=1" : "eval=0";
   if (!homeNs) get("api/settings/productions").then(function (r) { fillNsFilter(r.productions); }).catch(function () {});
-  Promise.all([get("api/summary?" + ev), get("api/metrics/summary?" + ev), get("api/decisions?limit=" + (decLimit + 1) + "&" + ev + "&ns=" + encodeURIComponent(decNs)), get("api/evalruns")]).then(function (res) {
+  Promise.all([get("api/summary?" + ev), get("api/metrics/summary?" + ev), get("api/decisions?limit=" + (decLimit + 1) + "&" + ev + "&ns=" + encodeURIComponent(decNs)), get("api/evalruns"), get("api/cost/summary?days=30&" + ev)]).then(function (res) {
     setKillBanner(res[0].killSwitch);
     renderSummary(res[0], res[1]);
     renderMetrics(res[1]);
@@ -969,6 +990,48 @@ function renderProductions(r) {
   });
   Array.prototype.forEach.call(document.querySelectorAll("#set-productions .edit-only"), function (e) { e.classList.toggle("hidden", !r.canEdit); });
 }
+function renderCost(c) {
+  GRID.top = window.innerWidth < 600 ? 54 : 34;
+  document.getElementById("cost-scope").textContent = c.includeEval ? "live and eval" : "live";
+  var cur = c.currency === "USD" ? "$" : c.currency + " ";
+  function m(v, d) { return v == null ? "—" : cur + Number(v).toFixed(d == null ? 4 : d); }
+  var f = c.failures, b = c.budget, sv = c.savings, r = c.roi;
+  document.getElementById("tiles-cost-spend").replaceChildren(
+    tile("AI cost today", m(c.cost.today), "UTC day"),
+    tile("AI cost this month", m(c.cost.month), "day " + c.cost.dayOfMonth + " of " + c.cost.daysInMonth),
+    tile("Cost per failure handled", f.costPer == null ? "—" : m(f.costPer, 5), num(f.triaged) + " failures in " + c.days + " days"),
+    tile("Monthly forecast (estimate)", m(c.cost.forecast), "daily average x " + c.cost.daysInMonth + " days"),
+    tile("Budget used today", b.percent == null ? "no budget" : b.percent + "%", num(b.tokensToday) + " of " + (b.dailyTokenBudget ? num(b.dailyTokenBudget) : "—") + " tokens", b.percent == null ? undefined : b.percent / 100)
+  );
+  document.getElementById("tiles-cost-save").replaceChildren(
+    tile("Prompt-cache savings", m(sv.cacheUsd), "cached tokens x (input price - cache-read price)"),
+    tile("LLM calls saved by learned mappings", num(sv.savedCalls), sv.savedCallsUsd == null ? "no MAP_CODE run to price it" : "about " + m(sv.savedCallsUsd) + " (estimate, " + num(sv.basedOnRuns) + " runs)")
+  );
+  document.getElementById("tiles-cost-roi").replaceChildren(
+    tile("Handled without an engineer", num(r.handled), r.hoursSaved + " engineer hours"),
+    tile("Engineer time saved", m(r.engineerValue, 2), "vs AI cost " + m(r.aiCost, 2)),
+    tile("Net", m(r.net, 2), r.aiCost > 0 ? "about " + (r.engineerValue / r.aiCost).toFixed(0) + "x the AI cost" : "no AI cost in the period", undefined, r.net < 0 ? "over" : "")
+  );
+  document.getElementById("cost-assume").textContent = "Assumes " + r.minutesPerFailure + " min per failure at " + cur + r.hourlyRate + "/h; handled = applied, resent, rejected or approved mappings. Change both in Settings, Budgets.";
+
+  if (!c.byDay.models.length) empty("costday", "No agent runs in this period");
+  else chart("costday", document.getElementById("ch-costday"), {
+    grid: GRID, legend: LEGEND, tooltip: { trigger: "axis", axisPointer: { type: "shadow" }, confine: true },
+    xAxis: { type: "category", data: c.byDay.days.map(function (d) { return d.slice(5); }), axisLabel: { fontSize: 11, interval: 4 } },
+    yAxis: { type: "value", axisLabel: { fontSize: 11 } },
+    series: c.byDay.models.map(function (mod) { return { name: mod, type: "bar", stack: "c", barMaxWidth: 14, data: c.byDay.series[mod] }; })
+  });
+  [["costns", c.byNamespace], ["costec", c.byErrorClass]].forEach(function (p) {
+    if (!p[1].length) empty(p[0], "No agent runs in this period");
+    else chart(p[0], document.getElementById("ch-" + p[0]), {
+      grid: GRID, tooltip: { trigger: "axis", axisPointer: { type: "shadow" }, confine: true },
+      xAxis: { type: "value", axisLabel: { fontSize: 11 } },
+      yAxis: { type: "category", inverse: true, data: p[1].map(function (x) { return x.name; }), axisLabel: { fontSize: 11 } },
+      series: [{ type: "bar", barMaxWidth: 18, itemStyle: { color: COLORS.resent }, data: p[1].map(function (x) { return x.cost; }) }]
+    });
+  });
+}
+
 
 // Messages tab filter: the productions that have decisions of their own
 var decNs = "";
@@ -985,6 +1048,7 @@ function fillNsFilter(list) {
 function renderSettings(s) {
   settings = s;
   var edit = s.canEdit;
+    renderCost(res[4]);
   document.getElementById("set-readonly").classList.toggle("hidden", edit);
   setKillBanner(s.budgets.KillSwitch);
 
@@ -1232,6 +1296,9 @@ document.getElementById("f-agents").addEventListener("submit", function (ev) {
   ev.preventDefault();
   applyItem("agents", ev.target, "m-agents", { DisabledSkills: checkedValues("set-skills", false) });
 });
+  fb.elements.MinutesPerFailure.value = s.budgets.MinutesPerFailure;
+  fb.elements.EngineerHourlyRate.value = s.budgets.EngineerHourlyRate;
+  document.getElementById("set-currency").textContent = s.budgets.currency || "USD";
 document.getElementById("f-guard").addEventListener("submit", function (ev) {
   ev.preventDefault();
   var tiers = Array.prototype.filter.call(document.querySelectorAll("#set-tools select"), function (s) { return s.value !== "readonly"; })

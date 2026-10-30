@@ -256,6 +256,15 @@ ClassMethod SaveItemSettings(pSection As %String, pData As %DynamicObject, Outpu
 		For i = 1:1:$LENGTH(tAllowed, ",") Set tItemOf($PIECE($PIECE(tAllowed, ",", i), ":", 2)) = $PIECE($PIECE(tAllowed, ",", i), ":")
 		Set tIter = pData.%GetIterator()
 		While tIter.%GetNext(.tField, .tVal) {
+			// ROI assumptions for the Cost tab: stored in a global, not on a production item
+			If (pSection = "budgets") && ((","_##class(AgenticProd.UI.Cost).#ROIFIELDS_",") [ (","_tField_",")) {
+				If '##class(AgenticProd.UI.Cost).RoiValueOK(tVal) $$$ThrowStatus($$$ERROR($$$GeneralError, "Invalid value for "_tField_": "_tVal))
+				Set tOldRoi = ##class(AgenticProd.UI.Cost).RoiSetting(tField)
+				Continue:+tVal=tOldRoi
+				Set ^AgenticProd.Settings("roi", tField) = +tVal
+				$$$ThrowOnError(##class(AgenticProd.Data.SettingsAudit).Log(pSection, "Cost", tField, tOldRoi, +tVal))
+				Continue
+			}
 			If '$DATA(tItemOf(tField)) $$$ThrowStatus($$$ERROR($$$GeneralError, "Not a "_pSection_" setting: "_tField))
 			// JSON true/false arrive as 1/0 already; normalise numbers like "8" and 8
 			Set tVal = $SELECT($ISVALIDNUM(tVal): +tVal, 1: tVal)

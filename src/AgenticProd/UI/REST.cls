@@ -32,6 +32,7 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
 <Route Url="/metrics/summary" Method="GET" Call="Metrics"/>
 <Route Url="/evalruns" Method="GET" Call="EvalRuns"/>
 <Route Url="/evalruns/:id" Method="GET" Call="EvalResults"/>
+<Route Url="/cost/summary" Method="GET" Call="Cost"/>
 <Route Url="/settings" Method="GET" Call="Settings"/>
 <Route Url="/settings/productions" Method="GET" Call="SettingsProductions"/>
 <Route Url="/settings/productions/:action" Method="POST" Call="SettingsProduction"/>
@@ -83,6 +84,9 @@ ClassMethod SettingsData() As %DynamicObject
 	Do tData.budgets.%Set("KillSwitch", +tData.budgets.KillSwitch, "boolean")
 	Set tData.usedToday = ##class(AgenticProd.Operation.Agent).TokensUsedToday()
 	Set tData.prices = ##class(AgenticProd.Settings.Store).Prices()
+	Do tData.budgets.%Set("MinutesPerFailure", ##class(AgenticProd.UI.Cost).RoiSetting("MinutesPerFailure"), "number")
+	Do tData.budgets.%Set("EngineerHourlyRate", ##class(AgenticProd.UI.Cost).RoiSetting("EngineerHourlyRate"), "number")
+	Set tData.budgets.currency = ##class(AgenticProd.UI.Cost).#CURRENCY
 	Set tData.memory = ##class(AgenticProd.Settings.Store).Memory()
 	Set tData.changes = ##class(AgenticProd.Settings.Store).ChangeLog(50)
 	Quit tData
@@ -332,6 +336,18 @@ ClassMethod SummaryData(pIncludeEval As %Boolean = 0) As %DynamicObject
 		"sentForApproval": (+tLog.SentForApproval), "waiting": (+tLog.Waiting),
 		"rejected": (+tLog.Rejected), "mappingsLearned": (+tLog.MappingsLearned),
 		"groundingPassed": (+tLog.GroundingPassed), "groundingCaught": (+tLog.GroundingCaught),
+/// GET /cost/summary?eval=&days=
+ClassMethod Cost() As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		Write ##class(AgenticProd.UI.Cost).Data(''%request.Get("eval"), %request.Get("days", 30)).%ToJSON()
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
 		"changedByTriage": (+tChanged.N),
 		"fhirValid": (+tFHIR.Valid), "fhirInvalid": (+tFHIR.Invalid),
 		"costToday": (+tDay.Cost), "agentRunsToday": (+tDay.Runs),
