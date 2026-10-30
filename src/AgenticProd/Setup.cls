@@ -64,6 +64,11 @@ Parameter LOINCFILE = "/home/irisowner/dev/kb/loinc_subset.csv";
 /// AIRead and AIUse: the provider config chosen on the Settings tab and its Wallet key.
 Parameter AGENTRESOURCES = "%DB_IRISAPP_DATA:RW,%DB_IRISAPP_CODE:R,%DB_ENSLIB:R,%DB_HSLIB:R,%DB_HSSYS:R,%DB_IRISLIB:R,%DB_IRISSYS:R,%DB_IRISTEMP:RW,AgenticProd_AIRead:RU,AgenticProd_AIUse:RU";
 
+/// Legacy demo production (customer side, no AI). Its own namespace: one production per namespace.
+Parameter LEGACYNS = "LEGACY";
+
+Parameter LEGACYSRC = "/home/irisowner/dev/legacy/src/";
+
 ClassMethod Run() As %Status
 {
 	Set tSC = $$$OK
@@ -79,6 +84,7 @@ ClassMethod Run() As %Status
 		$$$ThrowOnError(..AdminSetup())
 		$$$ThrowOnError(..MonitorSetup())
 		$$$ThrowOnError(..PortalFavorites())
+		$$$ThrowOnError(..LegacyDemo())
 		// Setup runs at image build with IRIS about to stop, so starting it here would not last
 		$$$ThrowOnError(##class(Ens.Director).SetAutoStart("AgenticProd.Production"))
 	} Catch ex {
@@ -314,6 +320,62 @@ ClassMethod MonitorSetup() As %Status
 		Set tSql = "GRANT SELECT ON AgenticProd_Data.DecisionLog, AgenticProd_Data.Usage, AgenticProd_Data.ToolCall, AgenticProd_Data.SavedCall, AgenticProd_Msg.ApprovalTask, EnsLib_Workflow.TaskResponse TO "_..#MONITORROLE
 		Set tRS = ##class(%SQL.Statement).%ExecDirect(, tSql)
 		If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message_" ("_tSql_")"))
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// Create LEGACY (own code and data databases, interop on), load legacy/src into it and seed it.
+/// The Legacy classes live only there; IRISAPP never compiles them.
+ClassMethod LegacyDemo() As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		$$$ThrowOnError(..CreateLegacyNamespace())
+		New $NAMESPACE
+		Set $NAMESPACE = ..#LEGACYNS
+		$$$ThrowOnError($system.OBJ.LoadDir(..#LEGACYSRC, "ck-d", .tErrors, 1))
+		$$$ThrowOnError(##class(Legacy.Setup).Run())
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+ClassMethod CreateLegacyNamespace() As %Status [ Private ]
+{
+	New $NAMESPACE
+	Set $NAMESPACE = "%SYS"
+	Set tSC = $$$OK
+	Try {
+		Set tNS = ..#LEGACYNS
+		For tDB = tNS_"_CODE", tNS_"_DATA" {
+			// Under the manager directory, so durable %SYS carries it like the IRISAPP databases
+			Set tDir = ##class(%File).NormalizeDirectory($system.Util.ManagerDirectory()_tDB)
+			Set tRes = "%DB_"_tDB
+			If '##class(Security.Resources).Exists(tRes) {
+				$$$ThrowOnError(##class(Security.Resources).Create(tRes, tDB_" database resource", ""))
+			}
+			If '##class(%File).DirectoryExists(tDir), '##class(%File).CreateDirectoryChain(tDir) {
+				$$$ThrowStatus($$$ERROR($$$GeneralError, "cannot create "_tDir))
+			}
+			If '##class(%File).Exists(tDir_"IRIS.DAT") {
+				$$$ThrowOnError(##class(SYS.Database).CreateDatabase(tDir, , , , tRes))
+			}
+			If '##class(Config.Databases).Exists(tDB) {
+				Kill tProps
+				Set tProps("Directory") = tDir
+				$$$ThrowOnError(##class(Config.Databases).Create(tDB, .tProps))
+			}
+		}
+		If '##class(Config.Namespaces).Exists(tNS) {
+			Kill tProps
+			Set tProps("Globals") = tNS_"_DATA", tProps("Routines") = tNS_"_CODE"
+			$$$ThrowOnError(##class(Config.Namespaces).Create(tNS, .tProps))
+		}
+		// Adds the ENSLIB/HS mappings; a no-op for a namespace that already has them
+		$$$ThrowOnError(##class(%EnsembleMgr).EnableNamespace(tNS, 0))
 	} Catch ex {
 		Set tSC = ex.AsStatus()
 	}

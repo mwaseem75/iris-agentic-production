@@ -174,6 +174,25 @@ and the recorded runs that replay uses are kept.
 
 Then open Visual Trace for the session to see each step: router, Triage, every agent tool call, the decision and its cost.
 
+### Legacy demo production (no AI)
+
+Setup also creates a `LEGACY` namespace (its own code and data databases) with
+`Legacy.OrdersProduction`: a plain orders/results interface standing in for a customer's existing
+production, the target of the plug-in. Its source is in `legacy/src`; IRISAPP never loads it.
+Orders go to the lab (file), billing (HTTP) and a specimen label printer written in Embedded Python
+(stdlib only); results go through a DTL that maps local codes to LOINC (lookup `LegacyLabCodes`)
+and on to the EHR (file). Folders are under `data/legacy/`.
+
+Copy the samples in `legacy/samples` to `data/legacy/in` to see it work and fail:
+
+| Sample | Result |
+|---|---|
+| 01-order-ok | lab file and label; billing fails (the billing system is down: connection refused after 15 s) |
+| 02-order-no-specimen | lab file; label printer fails (no OBR-15) |
+| 03-result-ok | EHR file with LOINC 2345-7 |
+| 04-result-unmapped-code | router fails: `HBA1C-L` is not in `LegacyLabCodes` |
+| 05-result-no-obr | router fails validation: OBR missing |
+
 ## FHIR output
 
 Every lab result that passes LabRouter also goes out as FHIR R4, built with the converters that
