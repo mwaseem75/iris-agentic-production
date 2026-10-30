@@ -57,7 +57,10 @@ Property EnabledTiers As %String(MAXLEN = 100) [ InitialExpression = "readonly" 
 /// Skill classes from TriageAgent's SKILLS left out for this item, comma separated.
 Property DisabledSkills As %String(MAXLEN = 500);
 
-Parameter SETTINGS = "ProviderConfig:Agent,Model:Agent,Temperature:Agent,Mode:Agent,KillSwitch:Agent,MaxIterations:Agent,MaxToolCalls:Agent,MaxTokensPerMessage:Agent,DailyTokenBudget:Agent,DisabledSkills:Agent,ToolTiers:Guardrails,EnabledTiers:Guardrails,RunAsUser:Agent";
+/// The production's code table, read by the lookup_code tool.
+Property CodeTable As %String(MAXLEN = 128) [ InitialExpression = "LabCodeMap" ];
+
+Parameter SETTINGS = "ProviderConfig:Agent,Model:Agent,Temperature:Agent,Mode:Agent,KillSwitch:Agent,MaxIterations:Agent,MaxToolCalls:Agent,MaxTokensPerMessage:Agent,DailyTokenBudget:Agent,DisabledSkills:Agent,CodeTable:Agent,ToolTiers:Guardrails,EnabledTiers:Guardrails,RunAsUser:Agent";
 
 /// Seconds live calls stay blocked after a test class ends: messages it sent may still be on
 /// their way to an agent.
@@ -169,6 +172,8 @@ Method Triage(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As Age
 		$$$ThrowOnError(tAgent.ToolManager.SetAuthPolicy(tPolicy))
 		$$$ThrowOnError(tAgent.ToolManager.SetAuditPolicy(tAudit))
 
+		// Tools run in this process; lookup_code reads the table from here
+		Set ^||AgenticProd.CodeTable = ..CodeTable
 		$$$TRACE("Agent call: model="_..Model_" maxIterations="_..MaxIterations_" headerId="_pRequest.HeaderId)
 		Set pResponse = ..Converse(tAgent, tSession, pRequest)
 

@@ -48,8 +48,9 @@ Parameter DASHRESOURCES = "AgenticProd_Dashboard:U,AgenticProd_AIRead:RU,%DB_IRI
 Parameter ADMINROLE = "AgenticProd_Admin";
 
 /// AIUse resolves Wallet keys (test connection); ProductionConfig and the code database for
-/// applying item settings through Ens.Production.ApplySettings.
-Parameter ADMINRESOURCES = "AgenticProd_Settings:RWU,AgenticProd_AIRead:RU,AgenticProd_AIUse:RU,%Ens_ProductionConfig:RWU,%DB_IRISAPP_DATA:RW,%DB_IRISAPP_CODE:RW";
+/// applying item settings through Ens.Production.ApplySettings; LEGACY the same for the
+/// plug-in (Enable writes the production class there).
+Parameter ADMINRESOURCES = "AgenticProd_Settings:RWU,AgenticProd_AIRead:RU,AgenticProd_AIUse:RU,%Ens_ProductionConfig:RWU,%DB_IRISAPP_DATA:RW,%DB_IRISAPP_CODE:RW,%DB_LEGACY_DATA:RW,%DB_LEGACY_CODE:RW";
 
 /// Role added to /api/monitor so Monitor.Metrics can run in IRISAPP (Setup.MonitorSetup).
 Parameter MONITORROLE = "AgenticProd_Monitor";
@@ -109,6 +110,9 @@ ClassMethod BackfillNamespace() As %Status
 			Set tRS = ##class(%SQL.Statement).%ExecDirect(, "UPDATE AgenticProd_Data."_tTable_" SET Namespace = ? WHERE Namespace IS NULL", $NAMESPACE)
 			If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message))
 		}
+		// Learned mappings from before per-production code tables all went to LabCodeMap here
+		Set tRS = ##class(%SQL.Statement).%ExecDirect(, "UPDATE AgenticProd_Data.LearnedMapping SET Namespace = ?, CodeTable = ? WHERE Namespace IS NULL", $NAMESPACE, ##class(AgenticProd.Tools.Mapping).#CODEMAP)
+		If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message))
 	} Catch ex {
 		Set tSC = ex.AsStatus()
 	}
@@ -260,7 +264,7 @@ ClassMethod DashboardSetup() As %Status
 	Set tSC = $$$OK
 	Try {
 		$$$ThrowOnError(..CreateDashboardApp($NAMESPACE))
-		Set tSql = "GRANT SELECT ON AgenticProd_Data.DecisionLog, AgenticProd_Data.Usage, AgenticProd_Data.EvalRun, AgenticProd_Data.EvalResult, AgenticProd_Data.ToolCall, AgenticProd_Data.Span, AgenticProd_Data.SavedCall, AgenticProd_Data.PriceTable, AgenticProd_Data.SettingsAudit, AgenticProd_Data.LearnedMapping, AgenticProd_Msg.ApprovalTask, AgenticProd_Msg.FHIRResult, AgenticProd_Msg.TriageRequest, Ens.MessageHeader, EnsLib_Workflow.TaskResponse TO "_..#DASHROLE
+		Set tSql = "GRANT SELECT ON AgenticProd_Data.DecisionLog, AgenticProd_Data.Usage, AgenticProd_Data.EvalRun, AgenticProd_Data.EvalResult, AgenticProd_Data.ToolCall, AgenticProd_Data.Span, AgenticProd_Data.SavedCall, AgenticProd_Data.PriceTable, AgenticProd_Data.SettingsAudit, AgenticProd_Data.LearnedMapping, AgenticProd_Data.PluginItem, AgenticProd_Msg.ApprovalTask, AgenticProd_Msg.FHIRResult, AgenticProd_Msg.TriageRequest, Ens.MessageHeader, Ens_Util.Log, EnsLib_Workflow.TaskResponse TO "_..#DASHROLE
 		Set tRS = ##class(%SQL.Statement).%ExecDirect(, tSql)
 		If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message_" ("_tSql_")"))
 	} Catch ex {
@@ -421,12 +425,13 @@ ClassMethod RemoveLegacyMappings() As %Status
 	Quit tSC
 }
 
-/// What the story view reads in LEGACY for a plug-in row: the header and the FHIR result table.
+/// What the dashboard reads in LEGACY: headers and the FHIR result table (story view), the event
+/// log (production health).
 ClassMethod LegacyDashboardGrants() As %Status
 {
 	New $NAMESPACE
 	Set $NAMESPACE = ..#LEGACYNS
-	Set tSql = "GRANT SELECT ON Ens.MessageHeader, AgenticProd_Msg.FHIRResult TO "_..#DASHROLE
+	Set tSql = "GRANT SELECT ON Ens.MessageHeader, Ens_Util.Log, AgenticProd_Msg.FHIRResult TO "_..#DASHROLE
 	Set tRS = ##class(%SQL.Statement).%ExecDirect(, tSql)
 	Quit:tRS.%SQLCODE<0 $$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message_" ("_tSql_")")
 	Quit $$$OK

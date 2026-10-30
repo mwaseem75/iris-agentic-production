@@ -33,6 +33,8 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
 <Route Url="/evalruns" Method="GET" Call="EvalRuns"/>
 <Route Url="/evalruns/:id" Method="GET" Call="EvalResults"/>
 <Route Url="/settings" Method="GET" Call="Settings"/>
+<Route Url="/settings/productions" Method="GET" Call="SettingsProductions"/>
+<Route Url="/settings/productions/:action" Method="POST" Call="SettingsProduction"/>
 <Route Url="/settings/key" Method="POST" Call="SettingsKey"/>
 <Route Url="/settings/test-connection" Method="POST" Call="SettingsTest"/>
 <Route Url="/settings/kill-switch" Method="POST" Call="SettingsKillSwitch"/>
@@ -115,6 +117,29 @@ ClassMethod SettingsKillSwitch() As %Status
 	Quit ..SettingsWrite("kill-switch")
 }
 
+/// Productions with the plug-in, the home production and candidates (Plugin.Installer.Productions).
+ClassMethod SettingsProductions() As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		Set tOut = {"productions":(##class(AgenticProd.Plugin.Installer).Productions()), "modes":[]}
+		Do tOut.%Set("canEdit", ..CanEditSettings(), "boolean")
+		Set tModes = ##class(AgenticProd.Plugin.Installer).#MODES
+		For i = 1:1:$LENGTH(tModes, ",") Do tOut.modes.%Push($PIECE(tModes, ",", i))
+		Write tOut.%ToJSON()
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// POST /settings/productions/enable|disable|mode {"namespace", "production", "mode",
+/// "codeTable", "codeTableFormat"}
+ClassMethod SettingsProduction(pAction As %String) As %Status
+{
+	Quit ..SettingsWrite("production-"_pAction)
+}
+
 /// POST /settings/memory/revoke {"id":..., "reason":...}
 ClassMethod SettingsRevoke() As %Status
 {
@@ -172,6 +197,15 @@ ClassMethod SettingsApply(pAction As %String, pBody As %DynamicObject, Output pS
 		Set pSC = ##class(AgenticProd.Settings.Store).SetKillSwitch(''pBody.%Get("on"), .tNote)
 	} ElseIf pAction = "revoke" {
 		Set pSC = ##class(AgenticProd.Settings.Store).RevokeMapping(pBody.%Get("id"), pBody.%Get("reason"), .tNote)
+	} ElseIf pAction = "production-enable" {
+		Set tTable = pBody.%Get("codeTable"), tFormat = pBody.%Get("codeTableFormat")
+		Set pSC = ##class(AgenticProd.Plugin.Installer).Enable(pBody.%Get("namespace"), pBody.%Get("production"), $SELECT(pBody.%Get("mode") '= "": pBody.%Get("mode"), 1: "observe"), .tAdded, , $SELECT(tTable '= "": tTable, 1: "LabCodeMap"), $SELECT(tFormat '= "": tFormat, 1: "loinc^display"))
+		Set:$$$ISOK(pSC) tNote = $SELECT(tAdded '= "": "Added "_tAdded, 1: "Already enabled")
+	} ElseIf pAction = "production-disable" {
+		Set pSC = ##class(AgenticProd.Plugin.Installer).Disable(pBody.%Get("namespace"), pBody.%Get("production"), .tRemoved)
+		Set:$$$ISOK(pSC) tNote = $SELECT(tRemoved '= "": "Removed "_tRemoved, 1: "Nothing to remove")
+	} ElseIf pAction = "production-mode" {
+		Set pSC = ##class(AgenticProd.Plugin.Installer).SetMode(pBody.%Get("namespace"), pBody.%Get("production"), pBody.%Get("mode"), .tNote)
 	} ElseIf pAction = "test" {
 		Set pSC = ##class(AgenticProd.Settings.Store).TestConnection(pBody.%Get("name"), pBody.%Get("model"), .tResult)
 	} Else {
@@ -196,7 +230,7 @@ ClassMethod Decisions() As %Status
 {
 	Set tSC = $$$OK
 	Try {
-		Write ..DecisionsData(%request.Get("limit", ..#DEFAULTLIMIT), ''%request.Get("eval")).%ToJSON()
+		Write ..DecisionsData(%request.Get("limit", ..#DEFAULTLIMIT), ''%request.Get("eval"), %request.Get("ns")).%ToJSON()
 	} Catch ex {
 		Set tSC = ex.AsStatus()
 	}
@@ -269,8 +303,8 @@ ClassMethod SummaryData(pIncludeEval As %Boolean = 0) As %DynamicObject
 	Set tLogWhere = $SELECT(pIncludeEval: "", 1: " WHERE EvalRunId IS NULL")
 	Set tLog = ..Rows("SELECT COUNT(DISTINCT HeaderId) AS Triaged,"
 		_" SUM(CASE WHEN Outcome = 'APPLIED' THEN 1 ELSE 0 END) AS AutoFixed,"
-		_" SUM(CASE WHEN Outcome = 'SENT_FOR_APPROVAL' OR Outcome %STARTSWITH 'DOWNGRADED:' OR Outcome = 'APPROVED' OR Outcome %STARTSWITH 'REVIEW_' THEN 1 ELSE 0 END) AS SentForApproval,"
-		_" SUM(CASE WHEN (Outcome = 'SENT_FOR_APPROVAL' OR Outcome %STARTSWITH 'DOWNGRADED:') AND ReviewedAt IS NULL THEN 1 ELSE 0 END) AS Waiting,"
+		_" SUM(CASE WHEN Outcome = 'SENT_FOR_APPROVAL' OR Outcome %STARTSWITH 'DOWNGRADED:' OR Outcome %STARTSWITH 'PROPOSED:' OR Outcome = 'APPROVED' OR Outcome %STARTSWITH 'REVIEW_' THEN 1 ELSE 0 END) AS SentForApproval,"
+		_" SUM(CASE WHEN (Outcome = 'SENT_FOR_APPROVAL' OR Outcome %STARTSWITH 'DOWNGRADED:' OR Outcome %STARTSWITH 'PROPOSED:') AND ReviewedAt IS NULL THEN 1 ELSE 0 END) AS Waiting,"
 		_" SUM(CASE WHEN Outcome = 'REJECTED' THEN 1 ELSE 0 END) AS Rejected,"
 		_" SUM(CASE WHEN Outcome = 'APPROVED' THEN 1 ELSE 0 END) AS MappingsLearned,"
 		_" SUM(CASE WHEN Grounded = 1 THEN 1 ELSE 0 END) AS GroundingPassed,"
@@ -322,8 +356,8 @@ ClassMethod SummaryData(pIncludeEval As %Boolean = 0) As %DynamicObject
 /// pLimit is clamped to 1..MAXLIMIT. Besides the log columns each row has AgentDecision (what the
 /// agent sent Triage), triageChanged, flagged (InjectionGuard field refs, [] when none),
 /// agentCalled and, when no agent run is recorded, noAgentReason: loop guard, budget, replay,
-/// agent error, or "" when the reason is not known.
-ClassMethod DecisionsData(pLimit As %Integer = {..#DEFAULTLIMIT}, pIncludeEval As %Boolean = 0) As %DynamicArray
+/// agent error, or "" when the reason is not known. pNamespace: only that production's rows.
+ClassMethod DecisionsData(pLimit As %Integer = {..#DEFAULTLIMIT}, pIncludeEval As %Boolean = 0, pNamespace As %String = "") As %DynamicArray
 {
 	Set pLimit = pLimit \ 1
 	Set:pLimit<1 pLimit = ..#DEFAULTLIMIT
@@ -334,7 +368,7 @@ ClassMethod DecisionsData(pLimit As %Integer = {..#DEFAULTLIMIT}, pIncludeEval A
 		_" (SELECT MAX(u.Decision) FROM AgenticProd_Data.Usage u WHERE u.HeaderId = d.HeaderId AND u.Namespace = d.Namespace) AS AgentDecision,"
 		_" (SELECT COUNT(*) FROM AgenticProd_Data.Usage u WHERE u.HeaderId = d.HeaderId AND u.Namespace = d.Namespace AND (u.Replay = 0 OR u.Replay IS NULL)) AS AgentCalls,"
 		_" (SELECT COUNT(*) FROM AgenticProd_Data.Usage u WHERE u.HeaderId = d.HeaderId AND u.Namespace = d.Namespace AND u.Replay = 1) AS Replays"
-		_" FROM AgenticProd_Data.DecisionLog d"_$SELECT(pIncludeEval: "", 1: " WHERE d.EvalRunId IS NULL")_" ORDER BY d.ID DESC", pLimit, $NAMESPACE)
+		_" FROM AgenticProd_Data.DecisionLog d WHERE (? IS NULL OR d.Namespace = ?)"_$SELECT(pIncludeEval: "", 1: " AND d.EvalRunId IS NULL")_" ORDER BY d.ID DESC", pLimit, $NAMESPACE, pNamespace, pNamespace)
 	Set tIter = tRows.%GetIterator()
 	While tIter.%GetNext(, .tRow) {
 		Set tFlags = []
@@ -532,6 +566,9 @@ ClassMethod TriageText(pLog As AgenticProd.Data.DecisionLog, pOutcome As %String
 		Set tWould = $EXTRACT(pOutcome, 10, *)
 		Quit "Observe mode: Triage checked the proposal (result "_tWould_") and logged it, but sent, resent, rejected and asked nothing. The message is still where the production left it."
 	}
+	If $EXTRACT(pOutcome, 1, 9) = "PROPOSED:" {
+		Quit "Propose mode: Triage would have done "_$EXTRACT(pOutcome, 10, *)_" on its own; it sent the proposal to a reviewer instead."
+	}
 	Set tAction = $PIECE(pOutcome, ":", 2)
 	If $EXTRACT(pOutcome, 1, 11) = "DOWNGRADED:" {
 		Set tWhy = $PIECE($PIECE($EXTRACT(pLog.Reason, 17, *), ": ", 2, *), " (agent: ")
@@ -549,7 +586,7 @@ ClassMethod TriageText(pLog As AgenticProd.Data.DecisionLog, pOutcome As %String
 ClassMethod ReviewStep(pLog As AgenticProd.Data.DecisionLog, pTriageOutcome As %String, ByRef pSecrets) As %DynamicObject [ Internal ]
 {
 	Set tStep = {"step":"review", "title":"Reviewer"}
-	Set tAsked = (pTriageOutcome = "SENT_FOR_APPROVAL") || ($EXTRACT(pTriageOutcome, 1, 11) = "DOWNGRADED:")
+	Set tAsked = (pTriageOutcome = "SENT_FOR_APPROVAL") || ($EXTRACT(pTriageOutcome, 1, 11) = "DOWNGRADED:") || ($EXTRACT(pTriageOutcome, 1, 9) = "PROPOSED:")
 	If pLog.ReviewedAt = "" {
 		Do tStep.%Set("status", $SELECT(tAsked: "waiting", 1: "none"))
 		Do tStep.%Set("text", $SELECT(tAsked: "Waiting for a reviewer in the Workflow inbox.", 1: "No review needed."))
@@ -565,6 +602,8 @@ ClassMethod ReviewStep(pLog As AgenticProd.Data.DecisionLog, pTriageOutcome As %
 		"REVIEW_APPLIED": "approved the fix; Triage re-validated it and sent a fixed copy on",
 		"REVIEW_CLOSED": "approved and closed the task; nothing was changed",
 		"REVIEW_REJECTED": "rejected the proposal; nothing was changed",
+		"REVIEW_RESENT": "approved the resend; the message was sent again to its own target",
+		"REVIEW_RETURNED": "approved returning the message to the sender",
 		"REVIEW_BAD_LOINC": "approved a LOINC that was not accepted, so nothing was written",
 		"REVIEW_FIX_FAILED": "approved the fix, but it failed the re-check, so nothing was sent",
 		: "answered the task (outcome "_pLog.Outcome_")")
@@ -779,7 +818,7 @@ ClassMethod OutcomeGroup(pOutcome As %String) As %String
 	Quit:pOutcome="APPLIED" "applied"
 	Quit:pOutcome="REJECTED" "rejected"
 	Quit:pOutcome="RESENT" "resent"
-	Quit:(pOutcome="SENT_FOR_APPROVAL")||(pOutcome="APPROVED")||($EXTRACT(pOutcome, 1, 11)="DOWNGRADED:")||($EXTRACT(pOutcome, 1, 7)="REVIEW_") "approval"
+	Quit:(pOutcome="SENT_FOR_APPROVAL")||(pOutcome="APPROVED")||($EXTRACT(pOutcome, 1, 11)="DOWNGRADED:")||($EXTRACT(pOutcome, 1, 7)="REVIEW_")||($EXTRACT(pOutcome, 1, 9)="PROPOSED:") "approval"
 	Quit "other"
 }
 

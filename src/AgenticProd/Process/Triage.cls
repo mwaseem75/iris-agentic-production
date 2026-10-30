@@ -24,7 +24,8 @@ Property AgentTarget As Ens.DataType.ConfigName [ InitialExpression = "AgenticPr
 /// Seconds to wait for the agent; the provider has no timeout of its own.
 Property AgentTimeout As %Integer(MINVAL = 1) [ InitialExpression = 120 ];
 
-/// Where the new, fixed message goes after an AUTO_FIX.
+/// Where the new, fixed message goes after an AUTO_FIX, and where an approved mapping resends the
+/// failed message. Empty (plug-in installs): the failed message's own target.
 Property TargetConfigName As Ens.DataType.ConfigName;
 
 /// Workflow operation (role) that gets an ApprovalTask for every MAP_CODE and ESCALATE.
@@ -49,10 +50,18 @@ Property AutoFixDisabled As %String(MAXLEN = 500);
 Property GroundingStrictness As %String(VALUELIST = ",off,warn,enforce") [ InitialExpression = "enforce" ];
 
 /// observe: decide and log what would be done (Outcome OBSERVED:<outcome>) but send, resend,
-/// reject and ask nobody. The plug-in installs Triage in observe mode; act is the full pipeline.
-Property ActionMode As %String(VALUELIST = ",observe,act") [ InitialExpression = "act" ];
+/// reject and ask nobody. propose: every decision goes to a person (Outcome PROPOSED:<outcome>
+/// for what act would have done alone). act: the full action matrix.
+Property ActionMode As %String(VALUELIST = ",observe,propose,act") [ InitialExpression = "act" ];
 
-Parameter SETTINGS = "AgentTarget:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},TargetConfigName:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},ApprovalTarget:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},AutoFixThreshold:Triage,AutoFixDisabled:Triage,GroundingStrictness:Triage,ActionMode:Triage,AgentTimeout:Triage,RejectPath:Triage,TracingEnabled:Tracing";
+/// Lookup table an approved mapping is written to (the production's own code table).
+Property CodeTable As %String(MAXLEN = 128) [ InitialExpression = "LabCodeMap" ];
+
+/// Value an approved mapping writes: "loinc^display" (LabCodeMap) or "loinc" (a table whose
+/// readers expect the bare code, like LegacyLabCodes).
+Property CodeTableFormat As %String(VALUELIST = ",loinc^display,loinc") [ InitialExpression = "loinc^display" ];
+
+Parameter SETTINGS = "AgentTarget:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},TargetConfigName:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},ApprovalTarget:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},AutoFixThreshold:Triage,AutoFixDisabled:Triage,GroundingStrictness:Triage,ActionMode:Triage,CodeTable:Triage,CodeTableFormat:Triage,AgentTimeout:Triage,RejectPath:Triage,TracingEnabled:Tracing";
 
 /// Ask the agent, apply the action matrix, act, and log what was done in Data.DecisionLog.
 /// pResponse is the decision Triage acted on (the agent's, or its ESCALATE downgrade).
@@ -92,7 +101,7 @@ Method OnRequest(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As 
 		// Only an agent's own answer is checked; a system ESCALATE (budget, kill switch) has no claims
 		Set tCheck = (tNoAnswer = "") && $DATA(tAgentStart) && ((tDecision.AgentSessionId '= "") || (tDecision.Decision '= "ESCALATE"))
 		$$$ThrowOnError(..Decide(pRequest, tDecision, tCheck, .pResponse, .tOutcome, .tFixed, .tGrounding))
-		Set:..ActionMode="observe" tOutcome = "OBSERVED:"_tOutcome
+		Set tOutcome = ..ModeOutcome(tOutcome)
 		// Logged before the send: the row ID is the approval task's completion key
 		$$$ThrowOnError(##class(AgenticProd.Data.DecisionLog).Record(pRequest, pResponse, .tLogId, tOutcome, $SELECT(tOutcome = "APPLIED": tFixed, 1: ""), tGrounding))
 		Set tSendSC = ..Dispatch(pRequest, pResponse, tOutcome, tFixed, tLogId)
@@ -109,6 +118,15 @@ Method OnRequest(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As 
 		Do ##class(AgenticProd.Telemetry.Trace).End(tRoot, $SELECT($$$ISERR(tSC): "Error", 1: "Ok"), .tAttrs)
 	}
 	Quit tSC
+}
+
+/// What ActionMode makes of Plan's outcome: observe only logs it (OBSERVED:x); propose sends
+/// what act would do on its own to a person first (PROPOSED:x); act keeps it.
+Method ModeOutcome(pOutcome As %String) As %String
+{
+	Quit:..ActionMode="observe" "OBSERVED:"_pOutcome
+	Quit:(..ActionMode="propose")&&$LISTFIND($LISTBUILD("APPLIED", "RESENT", "REJECTED"), pOutcome) "PROPOSED:"_pOutcome
+	Quit pOutcome
 }
 
 /// Grounding gate (when pCheck) then the action matrix; Plan's outputs plus pGrounding (Ground's
@@ -197,7 +215,7 @@ Method Ground(pRequest As AgenticProd.Msg.TriageRequest, pDecision As AgenticPro
 			Do ..AddCheck(tChecks, "loinc_in_kb", $IsObject(tKB), "LOINC "_tLoinc_$SELECT($IsObject(tKB): " is in the KB ("_tKB.system_", "_tKB.units_")", 1: " is not in the LOINC KB"))
 			Do ..AddCheck(tChecks, "loinc_from_search", $LISTFIND($LISTFROMSTRING(tSearched), tLoinc) > 0,
 				$SELECT(tSearched = "": "no search_loinc result in this agent session", 1: "search_loinc in this session returned "_$TRANSLATE(tSearched, ",", " ")))
-			Set tRevoked = ##class(AgenticProd.Data.LearnedMapping).RevokedNote(tCode, tLoinc)
+			Set tRevoked = ##class(AgenticProd.Data.LearnedMapping).RevokedNote(tCode, tLoinc, ..CodeTable)
 			Do ..AddCheck(tChecks, "not_revoked", tRevoked = "", $SELECT(tRevoked = "": "mapping was never revoked", 1: tCode_" -> "_tLoinc_" was revoked by "_tRevoked))
 		}
 		Set tChecker = ..CheckerFor(pRequest.Format), tMsgText = ""
@@ -322,13 +340,14 @@ Method OnResponse(request As %Library.Persistent, ByRef response As %Library.Per
 	Try {
 		Quit:'$IsObject(callresponse)
 		Quit:'callrequest.%Extends("AgenticProd.Msg.ApprovalTask")
-		$$$ThrowOnError(..Review(request, callrequest, callresponse, pCompletionKey, .tFixed, .tResend))
+		$$$ThrowOnError(..Review(request, callrequest, callresponse, pCompletionKey, .tFixed, .tResend, .tResendAsIs))
 		If request.TraceParent '= "" {
 			Set tLog = ##class(AgenticProd.Data.DecisionLog).%OpenId(pCompletionKey)
 			If $IsObject(tLog) Do ##class(AgenticProd.Telemetry.Trace).ReviewSpan(request.TraceParent, tLog.CreatedAt, callresponse.%Action, tLog.Outcome, callrequest.Decision)
 		}
-		If $IsObject(tFixed) $$$ThrowOnError(..SendRequestAsync(..TargetConfigName, tFixed, 0))
+		If $IsObject(tFixed) $$$ThrowOnError(..SendRequestAsync(..FixTarget(request), tFixed, 0))
 		If tResend '= "" $$$ThrowOnError(..ResendOriginal(tResend))
+		If tResendAsIs '= "" $$$ThrowOnError(##class(Ens.MessageHeader).ResendDuplicatedMessage(tResendAsIs))
 	} Catch ex {
 		Set tSC = ex.AsStatus()
 	}
@@ -342,10 +361,12 @@ Method OnResponse(request As %Library.Persistent, ByRef response As %Library.Per
 /// is REVIEW_REVOKED, nothing written for either.
 /// ESCALATE approved: with a fix, CheckFix again; on PASS or PASS_NEEDS_REVIEW pFixed is the
 /// new, saved message to send (REVIEW_APPLIED), else REVIEW_FIX_FAILED. Without a fix,
-/// REVIEW_CLOSED. Sends nothing.
-Method Review(pRequest As AgenticProd.Msg.TriageRequest, pTask As AgenticProd.Msg.ApprovalTask, pAnswer As EnsLib.Workflow.TaskResponse, pLogId As %String, Output pFixed As %Persistent, Output pResend As %String) As %Status
+/// REVIEW_CLOSED. RESEND approved (propose mode): pResendAsIs = the header to resend to its own
+/// target, REVIEW_RESENT. REJECT approved: written back for the sender, REVIEW_RETURNED.
+/// Sends nothing.
+Method Review(pRequest As AgenticProd.Msg.TriageRequest, pTask As AgenticProd.Msg.ApprovalTask, pAnswer As EnsLib.Workflow.TaskResponse, pLogId As %String, Output pFixed As %Persistent, Output pResend As %String, Output pResendAsIs As %String) As %Status
 {
-	Set (pFixed, pResend) = ""
+	Set (pFixed, pResend, pResendAsIs) = ""
 	Set tSC = $$$OK
 	Try {
 		Set tLog = ##class(AgenticProd.Data.DecisionLog).%OpenId(pLogId, , .tSC)
@@ -361,13 +382,13 @@ Method Review(pRequest As AgenticProd.Msg.TriageRequest, pTask As AgenticProd.Ms
 			Set tLoinc = $ZSTRIP(pAnswer.%FormValues.GetAt("Loinc"), "<>W")
 			Set:tLoinc="" tLoinc = pTask.Loinc
 			Set tNote = $ZSTRIP(pAnswer.%FormValues.GetAt("Note"), "<>W")
-			Set tRevoked = ##class(AgenticProd.Data.LearnedMapping).RevokedNote(pTask.LocalCode, tLoinc)
+			Set tRevoked = ##class(AgenticProd.Data.LearnedMapping).RevokedNote(pTask.LocalCode, tLoinc, ..CodeTable)
 			If (tRevoked '= "") && (tNote = "") {
 				// A revoked memory comes back only with a person's stated reason, never by a click
 				Set tLog.Outcome = "REVIEW_REVOKED", tLog.ReviewNote = pTask.LocalCode_" -> "_tLoinc_" was revoked ("_tRevoked_"); approve again with a Note to learn it again"
 				$$$LOGWARNING("Reviewer "_pAnswer.%UserName_" approved revoked mapping "_pTask.LocalCode_" -> "_tLoinc_" without a note; not applied")
 			} Else {
-				$$$ThrowOnError(..ApplyMapping(pTask, tLoinc, .tWhy, pLogId, pAnswer.%UserName, tNote, .tWarning))
+				$$$ThrowOnError(..ApplyMapping(pTask, tLoinc, .tWhy, pLogId, pAnswer.%UserName, tNote, .tWarning, ..CodeTable, ..CodeTableFormat))
 				If tWhy = "" {
 					Set tLog.Loinc = tLoinc, tLog.Outcome = "APPROVED", pResend = pRequest.HeaderId
 					Set:tWarning'="" tLog.ReviewNote = tWarning
@@ -377,6 +398,14 @@ Method Review(pRequest As AgenticProd.Msg.TriageRequest, pTask As AgenticProd.Ms
 					$$$LOGWARNING("Reviewer "_pAnswer.%UserName_" approved '"_tLoinc_"' for "_pTask.LocalCode_" (header "_pTask.HeaderId_"), not applied: "_tWhy)
 				}
 			}
+		} ElseIf pTask.Decision = "RESEND" {
+			// Only a propose-mode task carries RESEND: the approval is the resend
+			Set tLog.Outcome = "REVIEW_RESENT", pResendAsIs = pRequest.HeaderId
+		} ElseIf pTask.Decision = "REJECT" {
+			Set tReturn = ##class(AgenticProd.Msg.Decision).%New()
+			Set tReturn.ErrorClass = pTask.ErrorClass, tReturn.Reason = pTask.Reason
+			$$$ThrowOnError(..WriteRejected(pRequest, tReturn))
+			Set tLog.Outcome = "REVIEW_RETURNED"
 		} ElseIf pTask.FixJSON = "" {
 			Set tLog.Outcome = "REVIEW_CLOSED"
 		} Else {
@@ -398,13 +427,13 @@ Method Review(pRequest As AgenticProd.Msg.TriageRequest, pTask As AgenticProd.Ms
 	Quit tSC
 }
 
-/// Write LabCodeMap pTask.LocalCode -> "pLoinc^display" for an approved MAP_CODE (pLoinc is the
+/// Write pTable pTask.LocalCode -> "pLoinc^display" (pFormat "loinc": the bare code) for an approved MAP_CODE (pLoinc is the
 /// reviewer's correction, if any) and its Data.LearnedMapping row (pLogId = the decision's
 /// DecisionLog row, pNote = the reviewer's note). pWhy is "" when written, else why not; then
 /// nothing is written. Display comes from the LOINC subset; a valid code outside it keeps the
 /// agent's display only if the reviewer left the code as proposed, and pWarning records that it
 /// was learned without being in the KB.
-ClassMethod ApplyMapping(pTask As AgenticProd.Msg.ApprovalTask, pLoinc As %String, Output pWhy As %String, pLogId As %String = "", pReviewer As %String = "", pNote As %String = "", Output pWarning As %String) As %Status
+ClassMethod ApplyMapping(pTask As AgenticProd.Msg.ApprovalTask, pLoinc As %String, Output pWhy As %String, pLogId As %String = "", pReviewer As %String = "", pNote As %String = "", Output pWarning As %String, pTable As %String = {##class(AgenticProd.Tools.Mapping).#CODEMAP}, pFormat As %String = "loinc^display") As %Status
 {
 	Set (pWhy, pWarning) = ""
 	Set tSC = $$$OK
@@ -414,15 +443,16 @@ ClassMethod ApplyMapping(pTask As AgenticProd.Msg.ApprovalTask, pLoinc As %Strin
 		Quit:pWhy'=""
 		Set tDisplay = ..LoincDisplay(pLoinc, .tFound)
 		Set:'tFound tDisplay = $SELECT(pLoinc = pTask.Loinc: pTask.Display, 1: "")
-		$$$ThrowOnError(##class(Ens.Util.LookupTable).%UpdateValue(##class(AgenticProd.Tools.Mapping).#CODEMAP, pTask.LocalCode, pLoinc_"^"_tDisplay))
-		$$$TRACE("LabCodeMap "_pTask.LocalCode_" -> "_pLoinc_"^"_tDisplay)
+		Set tValue = $SELECT(pFormat = "loinc": pLoinc, 1: pLoinc_"^"_tDisplay)
+		$$$ThrowOnError(##class(Ens.Util.LookupTable).%UpdateValue(pTable, pTask.LocalCode, tValue))
+		$$$TRACE(pTable_" "_pTask.LocalCode_" -> "_tValue)
 		// Grounding of the final code: a reviewer may correct to a code outside the KB, but it is recorded
 		Set:'tFound pWarning = "LOINC "_pLoinc_" is not in the LOINC KB; learned on the reviewer's word"
 		Set:pNote'="" pWarning = pWarning_$SELECT(pWarning '= "": "; ", 1: "")_"reviewer note: "_pNote
 		Set tLog = $SELECT(pLogId '= "": ##class(AgenticProd.Data.DecisionLog).%OpenId(pLogId), 1: "")
 		Set tEvidence = ""
 		For i = 1:1:pTask.Evidence.Count() Set tEvidence = tEvidence_$SELECT(i > 1: $CHAR(10), 1: "")_pTask.Evidence.GetAt(i)
-		$$$ThrowOnError(##class(AgenticProd.Data.LearnedMapping).Approved(pTask.LocalCode, $SELECT($IsObject(tLog): tLog.Source, 1: ""), pLoinc, tDisplay, pLogId, $SELECT($IsObject(tLog): tLog.AgentSessionId, 1: ""), tEvidence, pReviewer, pWarning))
+		$$$ThrowOnError(##class(AgenticProd.Data.LearnedMapping).Approved(pTask.LocalCode, $SELECT($IsObject(tLog): tLog.Source, 1: ""), pLoinc, tDisplay, pLogId, $SELECT($IsObject(tLog): tLog.AgentSessionId, 1: ""), tEvidence, pReviewer, pWarning, , pTable))
 	} Catch ex {
 		Set tSC = ex.AsStatus()
 	}
@@ -456,8 +486,8 @@ ClassMethod LoincDisplay(pLoinc As %String, Output pFound As %Boolean) As %Strin
 	Quit $SELECT(pFound: $PIECE(tRS.text, " | "), 1: "")
 }
 
-/// Resend the failed message under pHeaderId to TargetConfigName (LabRouter): with the new
-/// LabCodeMap entry it now passes the lookup, so no agent call.
+/// Resend the failed message under pHeaderId to TargetConfigName (LabRouter; empty: its own
+/// target): with the new code table entry it now passes the lookup, so no agent call.
 Method ResendOriginal(pHeaderId As %String, Output pNewHeaderId As %String) As %Status
 {
 	Quit ##class(Ens.MessageHeader).ResendDuplicatedMessage(pHeaderId, .pNewHeaderId, ..TargetConfigName)
@@ -518,13 +548,21 @@ Method Dispatch(pRequest As AgenticProd.Msg.TriageRequest, pDecision As AgenticP
 		$$$LOGINFO("Observe mode: header "_pRequest.HeaderId_" would be "_$EXTRACT(pOutcome, 10, *)_"; nothing sent")
 		Quit $$$OK
 	}
-	If pOutcome = "APPLIED" Quit ..SendRequestAsync(..TargetConfigName, pFixed, 0)
+	If pOutcome = "APPLIED" Quit ..SendRequestAsync(..FixTarget(pRequest), pFixed, 0)
 	If pOutcome = "RESENT" Quit ##class(Ens.MessageHeader).ResendDuplicatedMessage(pRequest.HeaderId)
 	If pOutcome = "REJECTED" {
 		$$$LOGWARNING("Triage rejected header "_pRequest.HeaderId_" ("_pDecision.ErrorClass_"): "_pDecision.Reason)
 		Quit ..WriteRejected(pRequest, pDecision)
 	}
 	Quit ..SendRequestAsync(..ApprovalTarget, ##class(AgenticProd.Msg.ApprovalTask).FromDecision(pRequest, pDecision), 1, pLogId)
+}
+
+/// TargetConfigName, or when it is empty the target of the failed message itself.
+Method FixTarget(pRequest As AgenticProd.Msg.TriageRequest) As %String
+{
+	Quit:..TargetConfigName'="" ..TargetConfigName
+	Set tHeader = ##class(Ens.MessageHeader).%OpenId(pRequest.HeaderId)
+	Quit $SELECT($IsObject(tHeader): tHeader.TargetConfigName, 1: "")
 }
 
 /// Write the rejected message and a reason file into RejectPath for the sender to pick up:
@@ -631,6 +669,12 @@ Storage Default
 </Value>
 <Value name="10">
 <Value>ActionMode</Value>
+</Value>
+<Value name="11">
+<Value>CodeTable</Value>
+</Value>
+<Value name="12">
+<Value>CodeTableFormat</Value>
 </Value>
 </Data>
 <DefaultData>TriageDefaultData</DefaultData>

@@ -406,10 +406,16 @@ ClassMethod XDataText(pClass As %String, pName As %String) As %String
 	Quit tXData.Data.Read(32000)
 }
 
-/// The AI kill switch: on, every failure goes to a person without an LLM call.
+/// The AI kill switch: on, every failure goes to a person without an LLM call. Reaches this
+/// production's agent and the AI.Agent item of every plug-in install in other namespaces.
 ClassMethod SetKillSwitch(pOn As %Boolean, Output pNote As %String) As %Status
 {
-	Quit ..SaveItemSettings("budgets", {"KillSwitch":($SELECT(pOn: 1, 1: 0))}, .pNote)
+	Set tValue = $SELECT(pOn: 1, 1: 0)
+	Set tSC = ..SaveItemSettings("budgets", {"KillSwitch":(tValue)}, .pNote)
+	Quit:$$$ISERR(tSC) tSC
+	Set tSC = ##class(AgenticProd.Plugin.Installer).ApplyAgentSetting("KillSwitch", tValue, .tNote)
+	Set:tNote'="" pNote = pNote_$SELECT(pNote '= "": " ", 1: "")_tNote
+	Quit tSC
 }
 
 ClassMethod Prices() As %DynamicArray
@@ -459,7 +465,7 @@ ClassMethod SavePrice(pData As %DynamicObject) As %Status
 /// that went out with it since it was learned (see RoutedWith).
 ClassMethod Memory() As %DynamicArray
 {
-	Set tRows = ##class(AgenticProd.UI.REST).Rows("SELECT ID, LocalCode, Source, Loinc, Display, Origin, DecisionLogId, AgentSessionId, Evidence, Reviewer, ApprovedAt, Warning, Status, RevokedBy, RevokedAt, RevokeReason FROM AgenticProd_Data.LearnedMapping ORDER BY CASE WHEN Status = 'Active' THEN 0 ELSE 1 END, ID DESC")
+	Set tRows = ##class(AgenticProd.UI.REST).Rows("SELECT ID, Namespace, CodeTable, LocalCode, Source, Loinc, Display, Origin, DecisionLogId, AgentSessionId, Evidence, Reviewer, ApprovedAt, Warning, Status, RevokedBy, RevokedAt, RevokeReason FROM AgenticProd_Data.LearnedMapping ORDER BY CASE WHEN Status = 'Active' THEN 0 ELSE 1 END, ID DESC")
 	Set tIter = tRows.%GetIterator()
 	While tIter.%GetNext(, .tRow) {
 		Do tRow.%Set("routed", ..RoutedWith(tRow.LocalCode, tRow.ApprovedAt, tRow.DecisionLogId).%Size())
@@ -488,9 +494,10 @@ ClassMethod RoutedWith(pCode As %String, pSince As %String, pLogId As %String = 
 	Quit tList
 }
 
-/// Revoke learned mapping pId with pReason: remove its LabCodeMap entry (when it still holds this
-/// LOINC), mark the row Revoked, and send a review task for every message routed with it
-/// (MemoryReview). Logged in SettingsAudit. pNote says how many tasks went out.
+/// Revoke learned mapping pId with pReason: remove its entry from the code table it was written
+/// to, in its own namespace (when it still holds this LOINC), mark the row Revoked, and send a
+/// review task for every message routed with it (MemoryReview, this production only). Logged in
+/// SettingsAudit. pNote says how many tasks went out.
 ClassMethod RevokeMapping(pId As %String, pReason As %String, Output pNote As %String) As %Status
 {
 	Set pNote = ""
@@ -501,14 +508,12 @@ ClassMethod RevokeMapping(pId As %String, pReason As %String, Output pNote As %S
 		Set tRow = ##class(AgenticProd.Data.LearnedMapping).%OpenId(pId)
 		If '$IsObject(tRow) $$$ThrowStatus($$$ERROR($$$GeneralError, "No learned mapping "_pId))
 		If tRow.Status '= "Active" $$$ThrowStatus($$$ERROR($$$GeneralError, "Mapping "_pId_" is already revoked"))
-		Set tTable = ##class(AgenticProd.Tools.Mapping).#CODEMAP
-		// A newer entry for the code is another mapping's; only this LOINC is taken out
-		Set tCurrent = ##class(Ens.Util.FunctionSet).Lookup(tTable, tRow.LocalCode)
-		If $PIECE(tCurrent, "^") = tRow.Loinc $$$ThrowOnError(##class(Ens.Util.LookupTable).%RemoveValue(tTable, tRow.LocalCode))
+		$$$ThrowOnError(..RemoveEntry(tRow))
 		Set tRow.Status = "Revoked", tRow.RevokedBy = $USERNAME, tRow.RevokedAt = $ZDATETIME($ZTIMESTAMP, 3), tRow.RevokeReason = $EXTRACT(pReason, 1, 1000)
 		$$$ThrowOnError(tRow.%Save())
 
-		Set tHeaders = ..RoutedWith(tRow.LocalCode, tRow.ApprovedAt, tRow.DecisionLogId)
+		// MemoryReview and SavedCall belong to this production; a plug-in install has neither
+		Set tHeaders = $SELECT(tRow.Namespace = $NAMESPACE: ..RoutedWith(tRow.LocalCode, tRow.ApprovedAt, tRow.DecisionLogId), 1: [])
 		Set tTasks = ##class(%ListOfObjects).%New()
 		Set tIter = tHeaders.%GetIterator()
 		While tIter.%GetNext(, .tHeaderId) {
@@ -520,11 +525,23 @@ ClassMethod RevokeMapping(pId As %String, pReason As %String, Output pNote As %S
 			If $$$ISERR(tSendSC) Set pNote = (tTasks.Count() - tSent)_" review task(s) not sent: "_$SYSTEM.Status.GetErrorText(tSendSC)_". "
 		}
 		Set pNote = pNote_tSent_" review task(s) sent for messages routed with "_tRow.LocalCode_" -> "_tRow.Loinc_"."
+		Set:tRow.Namespace'=$NAMESPACE pNote = pNote_" Removed from "_tRow.CodeTable_" in "_tRow.Namespace_"; check messages sent there with it at the receiver."
 		$$$ThrowOnError(##class(AgenticProd.Data.SettingsAudit).Log("memory", tRow.LocalCode, "mapping", tRow.Loinc_" "_tRow.Display, "revoked: "_pReason_" ("_tSent_" review tasks)"))
 	} Catch ex {
 		Set tSC = ex.AsStatus()
 	}
 	Quit tSC
+}
+
+/// Take pRow's code out of its code table in its namespace, unless a newer mapping replaced it.
+ClassMethod RemoveEntry(pRow As AgenticProd.Data.LearnedMapping) As %Status [ Internal ]
+{
+	New $NAMESPACE
+	Set $NAMESPACE = pRow.Namespace
+	Set tCurrent = ##class(Ens.Util.FunctionSet).Lookup(pRow.CodeTable, pRow.LocalCode)
+	// Values are "LOINC^display" or the bare LOINC, per table
+	Quit:$PIECE(tCurrent, "^")'=pRow.Loinc $$$OK
+	Quit ##class(Ens.Util.LookupTable).%RemoveValue(pRow.CodeTable, pRow.LocalCode)
 }
 
 /// Review task for header pHeaderId, routed with revoked mapping pRow.

@@ -1,36 +1,225 @@
-/// Plug-in on the LEGACY demo production: installer enable/disable, Sentinel scan and request,
-/// Triage observe mode. Stub headers only, no LLM. Enable/Disable change the running LEGACY
-/// production and put it back as it was.
+/// Plug-in on the LEGACY demo production: installer enable/disable, modes, kill switch, code
+/// table, Sentinel scan and request, Triage observe/propose/act outcomes. Stub headers only, no
+/// LLM (Test.Case blocks live calls too). Enable/Disable change the running LEGACY production and
+/// put it back as it was.
 Class AgenticProd.Test.Plugin.PluginTest Extends AgenticProd.Test.Case
 {
 
 Parameter NS = "LEGACY";
 
-Method TestEnableDisable()
+/// Enable with LegacyLabCodes, switch modes, push the kill switch, list it, disable. One install
+/// for all of it: every production update restarts items, which is slow.
+Method TestEnableModesKillSwitchDisable()
 {
 	Set tNS = ..#NS, tPrefix = ##class(AgenticProd.Plugin.Installer).#PREFIX
 	Set tBefore = ..ItemNames(tNS)
 	Do $$$AssertStatusNotOK(##class(AgenticProd.Plugin.Installer).Enable($NAMESPACE), "not into this namespace")
-	Do $$$AssertStatusNotOK(##class(AgenticProd.Plugin.Installer).Enable(tNS, , "act"), "act mode waits for 8.5")
+	Do $$$AssertStatusNotOK(##class(AgenticProd.Plugin.Installer).Enable(tNS, , "auto"), "unknown mode")
 	Set tLogMark = ..LastLogId(tNS)
 	// AI off: a real LEGACY failure during the test must not reach the LLM
 	Set tAgent("KillSwitch") = 1
-	Do $$$AssertStatusOK(##class(AgenticProd.Plugin.Installer).Enable(tNS, , "observe", .tAdded, .tAgent))
-	Do $$$AssertEquals(tAdded, tPrefix_"Sentinel,"_tPrefix_"Triage,"_tPrefix_"Agent")
+	Do $$$AssertStatusOK(##class(AgenticProd.Plugin.Installer).Enable(tNS, , "observe", .tAdded, .tAgent, "LegacyLabCodes", "loinc"))
+	Do $$$AssertEquals(tAdded, tPrefix_"Sentinel,"_tPrefix_"Triage,"_tPrefix_"Agent,"_tPrefix_"Review")
 	// A stop sent while an actor job is still starting is lost and the update then hangs
 	Do $$$AssertTrue(..WaitStarted(tNS, tLogMark, tAdded), "plug-in items started")
 	Set tProd = ..Production(tNS)
 	Do $$$AssertEquals(..Setting(tNS, tPrefix_"Triage", "ActionMode"), "observe")
 	Do $$$AssertEquals(..Setting(tNS, tPrefix_"Triage", "AgentTarget"), tPrefix_"Agent")
+	Do $$$AssertEquals(..Setting(tNS, tPrefix_"Triage", "ApprovalTarget"), tPrefix_"Review")
+	Do $$$AssertEquals(..Setting(tNS, tPrefix_"Triage", "CodeTable"), "LegacyLabCodes")
+	Do $$$AssertEquals(..Setting(tNS, tPrefix_"Triage", "CodeTableFormat"), "loinc")
+	Do $$$AssertEquals(..Setting(tNS, tPrefix_"Agent", "CodeTable"), "LegacyLabCodes", "lookup_code reads the same table")
 	Do $$$AssertEquals(..Setting(tNS, tPrefix_"Sentinel", "TargetConfigName"), tPrefix_"Triage")
 	Do $$$AssertEquals(..Setting(tNS, tPrefix_"Agent", "KillSwitch"), 1, "override applied")
-	Do $$$AssertEquals(..Tracked(tNS, tProd), 3)
+	Do $$$AssertEquals(..Tracked(tNS, tProd), 4)
+	Do $$$AssertTrue(..InReviewRole(tNS, tPrefix_"Review"), "reviewer in the review role")
 	Do $$$AssertStatusOK(##class(AgenticProd.Plugin.Installer).Enable(tNS, , "observe", .tAdded, .tAgent))
 	Do $$$AssertEquals(tAdded, "", "second Enable adds nothing")
+
+	// Modes: setting, tracking rows and the change log follow
+	Do $$$AssertStatusNotOK(##class(AgenticProd.Plugin.Installer).SetMode(tNS, , "auto"), "unknown mode")
+	For tMode = "propose", "act" {
+		Set tLogMark = ..LastLogId(tNS)
+		Do $$$AssertStatusOK(##class(AgenticProd.Plugin.Installer).SetMode(tNS, , tMode, .tNote))
+		Do $$$AssertEquals(..Setting(tNS, tPrefix_"Triage", "ActionMode"), tMode)
+		Do $$$AssertEquals(..TrackedMode(tNS, tProd), tMode)
+		Do $$$AssertEquals(..LastChange("productions", "mode"), tMode, "mode change logged")
+		Do $$$AssertTrue(..WaitStarted(tNS, tLogMark, tPrefix_"Triage"), "Triage restarted")
+	}
+	Set tList = ##class(AgenticProd.Plugin.Installer).Productions(), tRow = ""
+	For i = 0:1:tList.%Size() - 1 Set:tList.%Get(i).namespace=tNS tRow = tList.%Get(i)
+	Do $$$AssertTrue($IsObject(tRow), "LEGACY listed")
+	If $IsObject(tRow) {
+		Do $$$AssertEquals(tRow.mode, "act")
+		Do $$$AssertEquals(tRow.items.%Size(), 4)
+		Do $$$AssertEquals(tRow.health.state, "running")
+		Do $$$AssertTrue(tRow.%IsDefined("decisions24h") && tRow.health.%IsDefined("queued"), "health and decisions")
+	}
+
+	// The kill switch reaches the plug-in agent in LEGACY (0, then back to 1)
+	For tValue = 0, 1 {
+		Set tLogMark = ..LastLogId(tNS)
+		Do $$$AssertStatusOK(##class(AgenticProd.Plugin.Installer).ApplyAgentSetting("KillSwitch", tValue, .tNote))
+		Do $$$AssertEquals(..Setting(tNS, tPrefix_"Agent", "KillSwitch"), tValue, "LEGACY AI.Agent KillSwitch "_tValue)
+		Do $$$AssertEquals(..LastChange("budgets", "KillSwitch"), tValue, "logged")
+		Do $$$AssertTrue(..WaitStarted(tNS, tLogMark, tPrefix_"Agent"), "AI.Agent restarted")
+	}
+
 	Do $$$AssertStatusOK(##class(AgenticProd.Plugin.Installer).Disable(tNS, , .tRemoved))
-	Do $$$AssertEquals($LENGTH(tRemoved, ","), 3, tRemoved)
+	Do $$$AssertEquals($LENGTH(tRemoved, ","), 4, tRemoved)
 	Do $$$AssertEquals(..ItemNames(tNS), tBefore, "production back to its own items")
 	Do $$$AssertEquals(..Tracked(tNS, tProd), 0)
+}
+
+/// What each mode makes of Plan's outcome.
+Method TestModeOutcome()
+{
+	Set tTriage = ##class(AgenticProd.Process.Triage).%New("TestTriage")
+	For tCase = $LB("observe", "APPLIED", "OBSERVED:APPLIED"), $LB("observe", "SENT_FOR_APPROVAL", "OBSERVED:SENT_FOR_APPROVAL"),
+		$LB("propose", "APPLIED", "PROPOSED:APPLIED"), $LB("propose", "RESENT", "PROPOSED:RESENT"), $LB("propose", "REJECTED", "PROPOSED:REJECTED"),
+		$LB("propose", "SENT_FOR_APPROVAL", "SENT_FOR_APPROVAL"), $LB("propose", "DOWNGRADED:AUTO_FIX", "DOWNGRADED:AUTO_FIX"),
+		$LB("act", "RESENT", "RESENT"), $LB("act", "APPLIED", "APPLIED") {
+		Set tTriage.ActionMode = $LIST(tCase, 1)
+		Do $$$AssertEquals(tTriage.ModeOutcome($LIST(tCase, 2)), $LIST(tCase, 3), $LIST(tCase, 1)_" "_$LIST(tCase, 2))
+	}
+}
+
+/// Act in LEGACY: a transient error may be resent once, a structure error returned; propose turns
+/// both into a proposal. Plan reads the LEGACY header (resend count) in its own namespace.
+Method TestActOutcomesInLegacy()
+{
+	Do $$$AssertStatusOK(..InNS("ActCase", .tOut))
+	Do $$$AssertEquals(tOut("resend"), "RESENT")
+	Do $$$AssertEquals(tOut("reject"), "REJECTED")
+	Do $$$AssertEquals(tOut("proposeResend"), "PROPOSED:RESENT")
+	Do $$$AssertEquals(tOut("fixTarget"), "BillingOut", "no TargetConfigName: the failed message's own target")
+}
+
+/// A RESEND or REJECT a reviewer approves in propose mode is carried out.
+Method TestProposeApproval()
+{
+	Set tTriage = ##class(AgenticProd.Process.Triage).%New("TestTriage")
+	Set tRequest = ##class(AgenticProd.Msg.TriageRequest).%New()
+	Set tRequest.HeaderId = -9411
+	For tCase = "RESEND:TRANSIENT:REVIEW_RESENT", "REJECT:STRUCTURE_ERROR:REVIEW_RETURNED" {
+		Set tLog = ##class(AgenticProd.Data.DecisionLog).%New()
+		Set tLog.HeaderId = -9411, tLog.Decision = "ESCALATE", tLog.ErrorClass = $PIECE(tCase, ":", 2), tLog.Outcome = "PROPOSED:"_$PIECE(tCase, ":")
+		Do $$$AssertStatusOK(tLog.%Save())
+		Set tTask = ##class(AgenticProd.Msg.ApprovalTask).%New()
+		Set tTask.HeaderId = -9411, tTask.Decision = $PIECE(tCase, ":"), tTask.ErrorClass = $PIECE(tCase, ":", 2), tTask.Reason = "test"
+		Set tAnswer = ##class(EnsLib.Workflow.TaskResponse).%New()
+		Set tAnswer.%Action = "Approve", tAnswer.%UserName = "reviewer"
+		// REJECT writes the returned message; there is no header -9411, so that part fails cleanly
+		Set tSC = tTriage.Review(tRequest, tTask, tAnswer, tLog.%Id(), .tFixed, .tResend, .tResendAsIs)
+		If $PIECE(tCase, ":") = "RESEND" {
+			Do $$$AssertStatusOK(tSC)
+			Do $$$AssertEquals(##class(AgenticProd.Data.DecisionLog).%OpenId(tLog.%Id()).Outcome, "REVIEW_RESENT")
+			Do $$$AssertEquals(tResendAsIs, -9411, "resent to its own target")
+			Do $$$AssertEquals(tResend, "", "not through TargetConfigName")
+		} Else {
+			Do $$$AssertTrue($$$ISERR(tSC) && ($SYSTEM.Status.GetErrorText(tSC) [ "-9411"), "REJECT tries to write the message back: "_$SYSTEM.Status.GetErrorText(tSC))
+		}
+		Do ##class(AgenticProd.Data.DecisionLog).%DeleteId(tLog.%Id())
+	}
+}
+
+/// LEGACY's code table: an approved mapping goes to LegacyLabCodes as the bare LOINC, in LEGACY,
+/// lookup_code reads it there, and a revoke from IRISAPP takes it out of that table.
+Method TestCodeTablePerProduction()
+{
+	Set tCode = "ZZPLUG-1"
+	Do $$$AssertStatusOK(..InNS("MappingCase", .tOut))
+	Do $$$AssertEquals(tOut("why"), "", "mapping accepted")
+	Do $$$AssertEquals(tOut("value"), "2345-7", "bare LOINC in LegacyLabCodes")
+	Do $$$AssertEquals(tOut("lookup"), "2345-7", "lookup_code reads the agent's table")
+	Do $$$AssertEquals(##class(Ens.Util.FunctionSet).Lookup("LabCodeMap", tCode), "", "IRISAPP's table untouched")
+	Set tRow = ##class(AgenticProd.Data.LearnedMapping).%OpenId(tOut("id"))
+	Do $$$AssertTrue($IsObject(tRow), "learned mapping row")
+	Quit:'$IsObject(tRow)
+	Do $$$AssertEquals(tRow.Namespace, ..#NS)
+	Do $$$AssertEquals(tRow.CodeTable, "LegacyLabCodes")
+	Do $$$AssertEquals(##class(AgenticProd.Data.LearnedMapping).ActiveId(tCode), "", "not active for IRISAPP's LabCodeMap")
+	Do $$$AssertStatusOK(##class(AgenticProd.Settings.Store).RevokeMapping(tOut("id"), "test revoke", .tNote))
+	Do $$$AssertTrue(tNote [ "LegacyLabCodes in LEGACY", tNote)
+	Do $$$AssertStatusOK(..InNS("MappingGone", .tGone))
+	Do $$$AssertEquals(tGone("value"), "", "revoke took it out of LegacyLabCodes")
+	Do ##class(AgenticProd.Data.LearnedMapping).%DeleteId(tOut("id"))
+}
+
+ClassMethod ActCase(Output pOut) As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		Set tTriage = ##class(AgenticProd.Process.Triage).%New("TestTriage")
+		Set tTriage.ActionMode = "act"
+		Set tHdr = ..Hdr(1, "Error", "OrdersRouter", "BillingOut", $ZDATETIME($ZTIMESTAMP, 3), "")
+		Set tRequest = ##class(AgenticProd.Msg.TriageRequest).%New()
+		Set tRequest.HeaderId = tHdr, tRequest.Format = "HL7v2"
+		For tCase = "resend:RESEND:TRANSIENT", "reject:REJECT:STRUCTURE_ERROR" {
+			Set tDecision = ##class(AgenticProd.Msg.Decision).%New()
+			Set tDecision.Decision = $PIECE(tCase, ":", 2), tDecision.ErrorClass = $PIECE(tCase, ":", 3), tDecision.Confidence = .9
+			$$$ThrowOnError(tTriage.Plan(tRequest, tDecision, .tFinal, .tOutcome))
+			Set pOut($PIECE(tCase, ":")) = tOutcome
+		}
+		Set tTriage.ActionMode = "propose"
+		Set pOut("proposeResend") = tTriage.ModeOutcome(pOut("resend"))
+		Set pOut("fixTarget") = tTriage.FixTarget(tRequest)
+		Do ##class(Ens.MessageHeader).%DeleteId(tHdr)
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+ClassMethod MappingCase(Output pOut) As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		Set tTask = ##class(AgenticProd.Msg.ApprovalTask).%New()
+		Set tTask.LocalCode = "ZZPLUG-1", tTask.Loinc = "2345-7", tTask.Display = "Glucose"
+		$$$ThrowOnError(##class(AgenticProd.Process.Triage).ApplyMapping(tTask, "2345-7", .tWhy, "", "tester", "", .tWarning, "LegacyLabCodes", "loinc"))
+		Set pOut("why") = tWhy
+		Set pOut("value") = ##class(Ens.Util.FunctionSet).Lookup("LegacyLabCodes", "ZZPLUG-1")
+		Set pOut("id") = ##class(AgenticProd.Data.LearnedMapping).ActiveId("ZZPLUG-1", "LegacyLabCodes")
+		Set ^||AgenticProd.CodeTable = "LegacyLabCodes"
+		Set tLookup = ##class(AgenticProd.Tools.Mapping).%New().LookupCode("ZZPLUG-1", "LIS")
+		Kill ^||AgenticProd.CodeTable
+		Set pOut("lookup") = $SELECT(tLookup = "none": "", 1: ##class(%DynamicObject).%FromJSON(tLookup).loinc)
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+ClassMethod MappingGone(Output pOut) As %Status
+{
+	Set pOut("value") = ##class(Ens.Util.FunctionSet).Lookup("LegacyLabCodes", "ZZPLUG-1")
+	Do ##class(Ens.Util.LookupTable).%RemoveValue("LegacyLabCodes", "ZZPLUG-1")
+	Quit $$$OK
+}
+
+ClassMethod InReviewRole(pNS As %String, pRole As %String) As %Boolean
+{
+	New $NAMESPACE
+	Set $NAMESPACE = pNS
+	Quit ##class(EnsLib.Workflow.RoleMembership).%ExistsId(pRole_"||"_##class(AgenticProd.Setup).#REVIEWUSER)
+}
+
+ClassMethod TrackedMode(pNS As %String, pProduction As %String) As %String
+{
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT DISTINCT %EXACT(Mode) AS Mode FROM AgenticProd_Data.PluginItem WHERE Namespace = ? AND Production = ?", pNS, pProduction)
+	Set tModes = ""
+	While tRS.%Next() {
+		Set tModes = tModes_$SELECT(tModes '= "": ",", 1: "")_tRS.Mode
+	}
+	Quit tModes
+}
+
+/// NewValue of the latest change log row for pScope / pField.
+ClassMethod LastChange(pScope As %String, pField As %String) As %String
+{
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 1 NewValue FROM AgenticProd_Data.SettingsAudit WHERE Scope = ? AND Field = ? ORDER BY ID DESC", pScope, pField)
+	Quit $SELECT(tRS.%Next(): tRS.NewValue, 1: "")
 }
 
 /// Failed and suspended headers once per session; the plug-in's own traffic, settled-time and

@@ -1,17 +1,19 @@
 Include Ensemble
 
-/// Adds the AI plug-in (Sentinel, Triage, agent) to an existing production in another namespace
-/// and takes it out again. Only touches the production through Ens.Config.Production, and every
-/// item it adds is tracked in Data.PluginItem, so Disable removes exactly those. The namespace
-/// needs the AgenticProd mappings and grants first (Setup.LegacyMappings, AgentSecurity).
+/// Adds the AI plug-in (Sentinel, Triage, agent, review inbox) to an existing production in
+/// another namespace, switches its mode and takes it out again. Only touches the production
+/// through Ens.Config.Production, and every item it adds is tracked in Data.PluginItem, so Disable
+/// removes exactly those. The namespace needs the AgenticProd mappings and grants first
+/// (Setup.LegacyMappings, AgentSecurity). Changes are logged in Data.SettingsAudit.
 Class AgenticProd.Plugin.Installer
 {
 
 /// Config name prefix of every plug-in item; the Sentinel skips messages to and from them.
 Parameter PREFIX = "AI.";
 
-/// Config name suffix = class of each item Enable adds, in production order.
-Parameter ITEMS = "Sentinel=AgenticProd.Plugin.Sentinel,Triage=AgenticProd.Process.Triage,Agent=AgenticProd.Operation.Agent";
+/// Config name suffix = class of each item Enable adds, in production order. Review is the
+/// Workflow operation: its config name is also the role its tasks go to.
+Parameter ITEMS = "Sentinel=AgenticProd.Plugin.Sentinel,Triage=AgenticProd.Process.Triage,Agent=AgenticProd.Operation.Agent,Review=EnsLib.Workflow.Operation";
 
 /// Agent item in this namespace's production whose settings (provider, model, budgets) the
 /// plug-in agent starts with.
@@ -19,47 +21,55 @@ Parameter AGENTSOURCE = "TriageAgent";
 
 Parameter UPDATETIMEOUT = 60;
 
-/// Modes Enable accepts. propose and act come with 8.5.
-Parameter MODES = "observe";
+/// observe: logs what it would do; propose: every decision to the review inbox; act: Triage's
+/// action matrix (whitelisted fixes, transient RESEND, REJECT, the rest to a person).
+Parameter MODES = "observe,propose,act";
 
 /// Add the plug-in items to pProduction in pNamespace (default: the production there now) and
 /// apply them if it is running. pAdded = item names added. Running it again adds only what is
 /// missing; an item of the same name that the plug-in did not add is an error, nothing is changed.
 /// pAgentSettings(name) = value overrides the copied agent settings (e.g. KillSwitch=1 installs
-/// it with the AI off).
-ClassMethod Enable(pNamespace As %String, pProduction As %String = "", pMode As %String = "observe", Output pAdded As %String, ByRef pAgentSettings) As %Status
+/// it with the AI off). pCodeTable / pCodeFormat: the production's code table and its value
+/// format (Triage.CodeTableFormat).
+ClassMethod Enable(pNamespace As %String, pProduction As %String = "", pMode As %String = "observe", Output pAdded As %String, ByRef pAgentSettings, pCodeTable As %String = "LabCodeMap", pCodeFormat As %String = "loinc^display") As %Status
 {
 	Set pAdded = ""
 	Set tSC = $$$OK
 	Try {
-		If '$LISTFIND($LISTFROMSTRING(..#MODES), pMode) $$$ThrowStatus($$$ERROR($$$GeneralError, "mode must be one of "_..#MODES_", not '"_pMode_"'"))
+		$$$ThrowOnError(..CheckMode(pMode))
 		If pNamespace = $NAMESPACE $$$ThrowStatus($$$ERROR($$$GeneralError, "the plug-in goes into another namespace's production, not "_$NAMESPACE))
 		Do ..AgentSettings(.tAgentSettings)
 		New $NAMESPACE
 		Set $NAMESPACE = pNamespace
 		$$$ThrowOnError(..OpenProduction(.pProduction, .tProd))
 		For i = 1:1:$LENGTH(..#ITEMS, ",") {
-			Set tPair = $PIECE(..#ITEMS, ",", i), tName = ..#PREFIX_$PIECE(tPair, "="), tClass = $PIECE(tPair, "=", 2)
+			Set tPair = $PIECE(..#ITEMS, ",", i), tSuffix = $PIECE(tPair, "="), tName = ..#PREFIX_tSuffix, tClass = $PIECE(tPair, "=", 2)
 			If $IsObject(tProd.FindItemByConfigName(tName)) {
 				// Someone else's item with our name: tracking it would let Disable remove it
 				If '##class(AgenticProd.Data.PluginItem).ItemIdxExists(pNamespace, pProduction, tName) $$$ThrowStatus($$$ERROR($$$GeneralError, pProduction_" already has an item "_tName_" the plug-in did not add"))
 			} Else {
 				Set tItem = ##class(Ens.Config.Item).%New()
 				Set tItem.Name = tName, tItem.ClassName = tClass, tItem.PoolSize = 1, tItem.Enabled = 1
-				Set tItem.Category = "AgenticProd plug-in", tItem.Comment = "Added by AgenticProd.Plugin.Installer ("_pMode_"); Disable removes it"
-				If tName = (..#PREFIX_"Sentinel") {
+				Set tItem.Category = "AgenticProd plug-in", tItem.Comment = "Added by AgenticProd.Plugin.Installer; Disable removes it"
+				If tSuffix = "Sentinel" {
 					Do ..AddSetting(tItem, "TargetConfigName", ..#PREFIX_"Triage")
-				} ElseIf tName = (..#PREFIX_"Triage") {
+				} ElseIf tSuffix = "Triage" {
 					Do ..AddSetting(tItem, "AgentTarget", ..#PREFIX_"Agent")
+					Do ..AddSetting(tItem, "ApprovalTarget", ..#PREFIX_"Review")
 					Do ..AddSetting(tItem, "ActionMode", pMode)
+					Do ..AddSetting(tItem, "CodeTable", pCodeTable)
+					Do ..AddSetting(tItem, "CodeTableFormat", pCodeFormat)
+				} ElseIf tSuffix = "Review" {
+					Do ..AddSetting(tItem, "AutoCreateRole", 1)
 				} Else {
 					Set tKey = ""
 					For {
 						Set tKey = $ORDER(tAgentSettings(tKey), 1, tSetting)
 						Quit:tKey=""
-						Continue:$DATA(pAgentSettings($LIST(tSetting, 1)))
+						Continue:$DATA(pAgentSettings($LIST(tSetting, 1)))||($LIST(tSetting, 1)="CodeTable")
 						Do ..AddSetting(tItem, $LIST(tSetting, 1), $LIST(tSetting, 3), $LIST(tSetting, 2))
 					}
+					Do:'$DATA(pAgentSettings("CodeTable")) ..AddSetting(tItem, "CodeTable", pCodeTable)
 					Set tKey = ""
 					For {
 						Set tKey = $ORDER(pAgentSettings(tKey), 1, tValue)
@@ -75,7 +85,9 @@ ClassMethod Enable(pNamespace As %String, pProduction As %String = "", pMode As 
 			$$$ThrowOnError(..Track(pNamespace, pProduction, tName, tClass, pMode))
 		}
 		Quit:pAdded=""
+		$$$ThrowOnError(..ReviewRole(..#PREFIX_"Review"))
 		$$$ThrowOnError(..SaveAndApply(tProd))
+		$$$ThrowOnError(##class(AgenticProd.Data.SettingsAudit).Log("productions", pNamespace_" "_pProduction, "plug-in", "", "enabled ("_pMode_", "_pCodeTable_")"))
 	} Catch ex {
 		Set tSC = ex.AsStatus()
 	}
@@ -84,7 +96,8 @@ ClassMethod Enable(pNamespace As %String, pProduction As %String = "", pMode As 
 
 /// Remove every tracked plug-in item from pProduction in pNamespace, apply that if it is
 /// running, and drop the tracking rows. pRemoved = item names removed. Items the installer did
-/// not add are never touched, whatever their name.
+/// not add are never touched, whatever their name. The review role and its tasks stay: they are
+/// the record of what people decided.
 ClassMethod Disable(pNamespace As %String, pProduction As %String = "", Output pRemoved As %String) As %Status
 {
 	Set pRemoved = ""
@@ -115,10 +128,215 @@ ClassMethod Disable(pNamespace As %String, pProduction As %String = "", Output p
 		}
 		// Rows go after the production change, so a failed save leaves them for another try
 		For i = 1:1:$GET(tIds) $$$ThrowOnError(##class(AgenticProd.Data.PluginItem).%DeleteId(tIds(i)))
+		If pRemoved '= "" $$$ThrowOnError(##class(AgenticProd.Data.SettingsAudit).Log("productions", pNamespace_" "_pProduction, "plug-in", "enabled", "disabled"))
 	} Catch ex {
 		Set tSC = ex.AsStatus()
 	}
 	Quit tSC
+}
+
+/// Switch the plug-in of pProduction in pNamespace to pMode (MODES): AI.Triage's ActionMode,
+/// the tracking rows and the change log. pNote: set when the value was saved but the item did
+/// not restart in time.
+ClassMethod SetMode(pNamespace As %String, pProduction As %String = "", pMode As %String, Output pNote As %String) As %Status
+{
+	Set pNote = ""
+	Set tSC = $$$OK
+	Try {
+		$$$ThrowOnError(..CheckMode(pMode))
+		New $NAMESPACE
+		Set $NAMESPACE = pNamespace
+		$$$ThrowOnError(..OpenProduction(.pProduction, .tProd))
+		Set tTriage = ..#PREFIX_"Triage"
+		If '##class(AgenticProd.Data.PluginItem).ItemIdxExists(pNamespace, pProduction, tTriage) $$$ThrowStatus($$$ERROR($$$GeneralError, "the plug-in is not enabled on "_pNamespace_" "_pProduction))
+		Set tOld = ..ItemSetting(tProd, tTriage, "ActionMode")
+		Quit:tOld=pMode
+		Set tSettings(tTriage, "Host", "ActionMode") = pMode
+		$$$ThrowOnError(..Apply(pProduction, .tSettings, tTriage, "ActionMode", .pNote))
+		Set tRS = ##class(%SQL.Statement).%ExecDirect(, "UPDATE AgenticProd_Data.PluginItem SET Mode = ? WHERE Namespace = ? AND Production = ?", pMode, pNamespace, pProduction)
+		If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message))
+		$$$ThrowOnError(##class(AgenticProd.Data.SettingsAudit).Log("productions", pNamespace_" "_pProduction, "mode", tOld, pMode))
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// Set agent setting pName to pValue on the AI.Agent item of every plug-in install (the kill
+/// switch reaches them all this way). Each change is logged. pNote lists items that saved the
+/// value but did not restart in time; a value that was not saved is an error.
+ClassMethod ApplyAgentSetting(pName As %String, pValue As %String, Output pNote As %String) As %Status
+{
+	Set pNote = ""
+	Set tSC = $$$OK
+	Try {
+		Set tAgent = ..#PREFIX_"Agent"
+		Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT Namespace, Production FROM AgenticProd_Data.PluginItem WHERE ItemName = ?", tAgent)
+		If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message))
+		While tRS.%Next() {
+			Set tTargets(tRS.Namespace, tRS.Production) = ""
+		}
+		Set tNS = ""
+		For {
+			Set tNS = $ORDER(tTargets(tNS))
+			Quit:tNS=""
+			Set tProdName = ""
+			For {
+				Set tProdName = $ORDER(tTargets(tNS, tProdName))
+				Quit:tProdName=""
+				$$$ThrowOnError(..ApplyIn(tNS, tProdName, tAgent, pName, pValue, .tItemNote))
+				Set:tItemNote'="" pNote = pNote_$SELECT(pNote '= "": "; ", 1: "")_tNS_": "_tItemNote
+			}
+		}
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+ClassMethod ApplyIn(pNamespace As %String, pProduction As %String, pItem As %String, pName As %String, pValue As %String, Output pNote As %String) As %Status [ Internal ]
+{
+	Set pNote = ""
+	New $NAMESPACE
+	Set $NAMESPACE = pNamespace
+	Set tSC = ..OpenProduction(pProduction, .tProd)
+	Quit:$$$ISERR(tSC) tSC
+	Set tOld = ..ItemSetting(tProd, pItem, pName)
+	Quit:tOld=pValue $$$OK
+	Set tSettings(pItem, "Host", pName) = pValue
+	Set tSC = ..Apply(pProduction, .tSettings, pItem, pName, .pNote)
+	Quit:$$$ISERR(tSC) tSC
+	Quit ##class(AgenticProd.Data.SettingsAudit).Log("budgets", pNamespace_" "_pItem, pName, tOld, pValue)
+}
+
+/// Every production with the plug-in, the home production, and productions in namespaces that
+/// have the AgenticProd mappings but no plug-in yet (enabled false), each with health
+/// (Health) and the last 24 h of decisions and agent cost from the shared tables.
+ClassMethod Productions() As %DynamicArray
+{
+	Set tOut = []
+	Set tHome = $NAMESPACE, tHomeProd = ##class(AgenticProd.Production).%ClassName(1)
+	Set tSince = ..Since(), tSeen(tHome) = ""
+	Set tRow = {"namespace":(tHome), "production":(tHomeProd), "mode":(..HomeMode()), "items":[], "native":true, "enabled":true}
+	Do tOut.%Push(tRow)
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT Namespace, Production, Mode, ItemName, AddedAt, AddedBy FROM AgenticProd_Data.PluginItem ORDER BY Namespace, Production, ID")
+	While tRS.%Next() {
+		Set tKey = tRS.Namespace_"|"_tRS.Production
+		If '$DATA(tByKey(tKey)) {
+			Set tByKey(tKey) = {"namespace":(tRS.Namespace), "production":(tRS.Production), "mode":(tRS.Mode), "items":[], "native":false, "enabled":true, "addedAt":(tRS.AddedAt), "addedBy":(tRS.AddedBy)}
+			Do tOut.%Push(tByKey(tKey))
+			Set tSeen(tRS.Namespace) = ""
+		}
+		Do tByKey(tKey).items.%Push(tRS.ItemName)
+	}
+	// Not yet enabled: namespaces where the plug-in classes resolve (mapped) but nothing is installed
+	Do ##class(%SYS.Namespace).ListAll(.tList)
+	Set tNS = ""
+	For {
+		Set tNS = $ORDER(tList(tNS))
+		Quit:tNS=""
+		Continue:$DATA(tSeen(tNS))||($EXTRACT(tNS)="%")||(tNS["^")
+		Set tProdName = ..CandidateProduction(tNS)
+		Continue:tProdName=""
+		Do tOut.%Push({"namespace":(tNS), "production":(tProdName), "mode":"", "items":[], "native":false, "enabled":false})
+	}
+	Set tIter = tOut.%GetIterator()
+	While tIter.%GetNext(, .tRow) {
+		Set tRow.health = ..Health(tRow.namespace, tRow.production, tSince)
+		Set tStats = ##class(AgenticProd.UI.REST).Rows("SELECT COUNT(*) AS Decisions FROM AgenticProd_Data.DecisionLog WHERE Namespace = ? AND CreatedAt >= ? AND EvalRunId IS NULL", tRow.namespace, tSince).%Get(0)
+		Set tCost = ##class(AgenticProd.UI.REST).Rows("SELECT COUNT(*) AS Runs, SUM(CostUsd) AS Cost FROM AgenticProd_Data.Usage WHERE Namespace = ? AND CreatedAt >= ? AND (Replay = 0 OR Replay IS NULL) AND EvalRunId IS NULL", tRow.namespace, tSince).%Get(0)
+		Set tRow.decisions24h = +tStats.Decisions, tRow.agentRuns24h = +tCost.Runs, tRow.cost24h = +tCost.Cost
+		Do tRow.%Set("native", ''tRow.native, "boolean"), tRow.%Set("enabled", ''tRow.enabled, "boolean")
+	}
+	Quit tOut
+}
+
+/// Running state, failed and suspended headers, event-log errors (last 24 h from pSince) and
+/// messages waiting in queues, read in pNamespace.
+ClassMethod Health(pNamespace As %String, pProduction As %String, pSince As %String) As %DynamicObject
+{
+	Set tOut = {"state":"unknown"}
+	Try {
+		New $NAMESPACE
+		Set $NAMESPACE = pNamespace
+		Do ##class(Ens.Director).GetProductionStatus(.tName, .tState)
+		Set tOut.state = $SELECT(tName '= pProduction: "not current", tState = $$$eProductionStateRunning: "running", tState = $$$eProductionStateStopped: "stopped", 1: "troubled")
+		Set tOut.failed24h = +##class(AgenticProd.UI.REST).Rows("SELECT COUNT(*) AS N FROM Ens.MessageHeader WHERE IsError = 1 AND TimeCreated >= ?", pSince).%Get(0).N
+		Set tOut.suspended = +##class(AgenticProd.UI.REST).Rows("SELECT COUNT(*) AS N FROM Ens.MessageHeader WHERE %EXTERNAL(Status) = 'Suspended'").%Get(0).N
+		Set tOut.errors24h = +##class(AgenticProd.UI.REST).Rows("SELECT COUNT(*) AS N FROM Ens_Util.Log WHERE %EXTERNAL(Type) = 'Error' AND TimeLogged >= ?", pSince).%Get(0).N
+		Set tQueued = 0, tQueue = ""
+		For {
+			Set tQueue = $ORDER(^Ens.Queue(tQueue))
+			Quit:tQueue=""
+			Set tQueued = tQueued + $GET(^Ens.Queue(tQueue, 0, "count"))
+		}
+		Set tOut.queued = tQueued
+	} Catch ex {
+		Set tOut.error = $SYSTEM.Status.GetErrorText(ex.AsStatus())
+	}
+	Quit tOut
+}
+
+/// UTC timestamp 24 hours ago.
+ClassMethod Since() As %String [ Internal ]
+{
+	Set tNow = $ZTIMESTAMP
+	Quit $ZDATETIME((tNow - 1)_","_$PIECE(tNow, ",", 2), 3)
+}
+
+/// Current production of pNamespace when the plug-in classes resolve there, else "".
+ClassMethod CandidateProduction(pNamespace As %String) As %String [ Internal ]
+{
+	Set tName = ""
+	Try {
+		New $NAMESPACE
+		Set $NAMESPACE = pNamespace
+		Quit:'##class(%Dictionary.CompiledClass).%ExistsId($CLASSNAME())
+		Quit:'##class(%Dictionary.CompiledClass).%ExistsId("Ens.Director")
+		Do ##class(Ens.Director).GetProductionStatus(.tName)
+	} Catch ex {
+		Set tName = ""
+	}
+	Quit tName
+}
+
+/// ActionMode of the home production's Triage item.
+ClassMethod HomeMode() As %String [ Internal ]
+{
+	Set tMode = ##class(Ens.Director).GetHostSettingValue("Triage", "ActionMode", .tSC)
+	Quit $SELECT($$$ISOK(tSC) && (tMode '= ""): tMode, 1: "act")
+}
+
+/// Setting pName of item pItem in pProd, else the item class's default.
+ClassMethod ItemSetting(pProd As Ens.Config.Production, pItem As %String, pName As %String) As %String [ Internal ]
+{
+	Set tItem = pProd.FindItemByConfigName(pItem)
+	Quit:'$IsObject(tItem) ""
+	Quit:tItem.GetSetting(pName, .tValue) tValue
+	Set tProp = ##class(%Dictionary.CompiledProperty).%OpenId(tItem.ClassName_"||"_pName)
+	Quit $SELECT($IsObject(tProp): $ZSTRIP(tProp.InitialExpression, "<>", """"), 1: "")
+}
+
+/// Workflow role pRole (the AI.Review item's tasks) with the demo reviewer in it, in this
+/// namespace. Workflow roles and users are per namespace.
+ClassMethod ReviewRole(pRole As %String) As %Status [ Internal ]
+{
+	Set tSC = $$$OK
+	Try {
+		Set tUser = ##class(AgenticProd.Setup).#REVIEWUSER
+		If '##class(EnsLib.Workflow.RoleDefinition).%ExistsId(pRole) $$$ThrowOnError(##class(EnsLib.Workflow.RoleDefinition).CreateRole(pRole))
+		If '##class(EnsLib.Workflow.UserDefinition).%ExistsId(tUser) $$$ThrowOnError(##class(EnsLib.Workflow.UserDefinition).CreateUser(tUser, "Demo reviewer"))
+		If '##class(EnsLib.Workflow.RoleMembership).%ExistsId(pRole_"||"_tUser) $$$ThrowOnError(##class(EnsLib.Workflow.RoleDefinition).AddUserToRole(pRole, tUser))
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+ClassMethod CheckMode(pMode As %String) As %Status [ Internal ]
+{
+	Quit:$LISTFIND($LISTFROMSTRING(..#MODES), pMode) $$$OK
+	Quit $$$ERROR($$$GeneralError, "mode must be one of "_..#MODES_", not '"_pMode_"'")
 }
 
 /// pSettings(n) = $LB(name, target, value) of AGENTSOURCE's settings in this namespace's production.
@@ -167,7 +385,56 @@ ClassMethod SaveAndApply(pProd As Ens.Config.Production) As %Status [ Internal ]
 	Quit:$$$ISERR(tSC) tSC
 	Quit:'##class(Ens.Director).IsProductionRunning(.tRunning) $$$OK
 	Quit:tRunning'=pProd.Name $$$OK
-	Quit ##class(Ens.Director).UpdateProduction(..#UPDATETIMEOUT)
+	Do ..Mute(.tIO)
+	Try {
+		Set tSC = ##class(Ens.Director).UpdateProduction(..#UPDATETIMEOUT)
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Do ..Unmute(tIO)
+	Quit tSC
+}
+
+/// Ens.Production.ApplySettings for one setting pName of pItem. An item that saved the value but
+/// did not restart in time (the agent item's OnInit is slow) is not an error: pNote says so.
+ClassMethod Apply(pProduction As %String, ByRef pSettings, pItem As %String, pName As %String, Output pNote As %String) As %Status [ Internal ]
+{
+	Set pNote = ""
+	Do ..Mute(.tIO)
+	Try {
+		Set tSC = ##class(Ens.Production).ApplySettings(pProduction, .pSettings)
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Do ..Unmute(tIO)
+	Quit:$$$ISOK(tSC) $$$OK
+	Set tProd = ##class(Ens.Config.Production).%OpenId(pProduction, 0)
+	Quit:'$IsObject(tProd) tSC
+	Do tProd.%Reload()
+	Set tWanted = $GET(pSettings(pItem, "Host", pName))
+	If ..ItemSetting(tProd, pItem, pName) '= tWanted Quit tSC
+	Set pNote = pItem_" saved, not restarted yet: "_$SYSTEM.Status.GetErrorText(tSC)
+	Quit $$$OK
+}
+
+/// Output to the null device: Ens.Director writes progress lines to the current device, which in
+/// a REST request is the HTTP response. pIO = the device to go back to (Unmute).
+ClassMethod Mute(Output pIO As %String) [ Internal ]
+{
+	Set pIO = $IO
+	Set tNull = $SELECT($SYSTEM.Version.GetOS() = "Windows": "//./nul", 1: "/dev/null")
+	// A background job's principal device is already the null device; closing it ends the job
+	Quit:pIO=tNull
+	Open tNull
+	Use tNull
+}
+
+ClassMethod Unmute(pIO As %String) [ Internal ]
+{
+	Quit:$IO=pIO
+	Set tNull = $IO
+	Use pIO
+	Close tNull
 }
 
 ClassMethod Track(pNamespace As %String, pProduction As %String, pItem As %String, pClass As %String, pMode As %String) As %Status [ Internal ]

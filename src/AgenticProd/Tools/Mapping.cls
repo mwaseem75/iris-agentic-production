@@ -19,7 +19,7 @@ XData Definition [ MimeType = application/xml ]
 <ToolSet Name="TriageMapping">
   <Description>Tools to map a local lab test code to LOINC: check the current mapping, search LOINC candidates, and see mappings people approved before.</Description>
   <Tool Name="lookup_code" Method="LookupCode">
-    <Description>Check whether a local test code (OBX-3.1) already has a LOINC mapping in LabCodeMap. localCode is the code exactly as sent, e.g. "GLU-01"; source is the sending application from MSH-3, e.g. "LAB_SIM". Returns the mapping as JSON, or "none" when the code is unmapped.</Description>
+    <Description>Check whether a local test code (OBX-3.1) already has a LOINC mapping in this production's code table. localCode is the code exactly as sent, e.g. "GLU-01"; source is the sending application from MSH-3, e.g. "LAB_SIM". Returns the mapping as JSON, or "none" when the code is unmapped.</Description>
   </Tool>
   <Tool Name="search_loinc" Method="SearchLoinc">
     <Description>Search the LOINC subset for candidate codes. text is the test name from OBX-3.2 (e.g. "Glucose", "Troponin"); specimen is the specimen if known (e.g. "serum", "blood", "urine"); units is OBX-6 (e.g. "mg/dL"). Returns JSON {"candidates":[...]} with up to 5 candidates, each with loinc, display, system (specimen), method, units and score (higher is closer). If the result has a "warning", do not pick a candidate: ESCALATE and quote the warning in evidence. method "none" is the general code for the test, with no specific lab method; any other method (e.g. "HPLC") is a method-specific code. The score only ranks text similarity: check that system, method and units agree with the message before you choose.</Description>
@@ -30,12 +30,14 @@ XData Definition [ MimeType = application/xml ]
 </ToolSet>
 }
 
-/// LabCodeMap entry through SQL. LabCodeMap is not per source yet; source is echoed so the model
-/// sees which sender it checked.
+/// Code table entry through SQL: the agent item's CodeTable (Operation.Agent sets
+/// ^||AgenticProd.CodeTable for the run), else CODEMAP. Not per source yet; source is echoed so
+/// the model sees which sender it checked. A value is "LOINC^display" or the bare LOINC.
 Method LookupCode(localCode As %String, source As %String) As %String
 {
-	$$$TRACE("lookup_code localCode="_localCode_" source="_source)
-	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT DataValue FROM Ens_Util.LookupTable WHERE TableName = ? AND KeyName = ?", ..#CODEMAP, localCode)
+	Set tTable = $GET(^||AgenticProd.CodeTable, ..#CODEMAP)
+	$$$TRACE("lookup_code localCode="_localCode_" source="_source_" table="_tTable)
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT DataValue FROM Ens_Util.LookupTable WHERE TableName = ? AND KeyName = ?", tTable, localCode)
 	If tRS.%SQLCODE < 0 Quit "ERROR: SQLCODE "_tRS.%SQLCODE_" "_tRS.%Message
 	Quit:'tRS.%Next() "none"
 	Quit {"local_code":(localCode), "source":(source), "loinc":($PIECE(tRS.DataValue, "^")), "display":($PIECE(tRS.DataValue, "^", 2))}.%ToJSON()

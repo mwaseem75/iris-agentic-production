@@ -6,6 +6,12 @@ Class AgenticProd.Data.LearnedMapping Extends %Persistent
 
 Property LocalCode As %String(MAXLEN = 100) [ Required ];
 
+/// Production namespace and lookup table the mapping was written to: each production keeps its
+/// own code table, and a revoke takes the entry out of that one.
+Property Namespace As %String(MAXLEN = 64) [ InitialExpression = {$NAMESPACE} ];
+
+Property CodeTable As %String(MAXLEN = 128) [ InitialExpression = {##class(AgenticProd.Tools.Mapping).#CODEMAP} ];
+
 /// Sending application. LabCodeMap is not per source yet, so it is informational.
 Property Source As %String(MAXLEN = 128);
 
@@ -42,11 +48,12 @@ Property RevokeReason As %String(MAXLEN = 1000);
 
 Index CodeIdx On (LocalCode, Status);
 
-/// A new approval replaces the LabCodeMap entry, so older Active rows of pCode are closed as
-/// Revoked by "system". RevokedNote skips those: only a person's revoke blocks re-learning.
-ClassMethod Supersede(pCode As %String, pExceptId As %String = "") As %Status [ Internal ]
+/// A new approval replaces the code table entry, so older Active rows of pCode in the same
+/// namespace and table are closed as Revoked by "system". RevokedNote skips those: only a
+/// person's revoke blocks re-learning.
+ClassMethod Supersede(pCode As %String, pExceptId As %String = "", pTable As %String = {##class(AgenticProd.Tools.Mapping).#CODEMAP}) As %Status [ Internal ]
 {
-	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "UPDATE AgenticProd_Data.LearnedMapping SET Status = 'Revoked', RevokedBy = 'system', RevokedAt = ?, RevokeReason = 'replaced by a newer mapping' WHERE LocalCode = ? AND Status = 'Active' AND ID <> ?", $ZDATETIME($ZTIMESTAMP, 3), pCode, +pExceptId)
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "UPDATE AgenticProd_Data.LearnedMapping SET Status = 'Revoked', RevokedBy = 'system', RevokedAt = ?, RevokeReason = 'replaced by a newer mapping' WHERE LocalCode = ? AND Status = 'Active' AND ID <> ? AND Namespace = ? AND CodeTable = ?", $ZDATETIME($ZTIMESTAMP, 3), pCode, +pExceptId, $NAMESPACE, pTable)
 	Quit:tRS.%SQLCODE<0 $$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message)
 	Quit $$$OK
 }
@@ -61,7 +68,7 @@ ClassMethod Seed(pCode As %String, pLoinc As %String, pDisplay As %String) As %S
 }
 
 /// Record an approved mapping and supersede the older Active row of the same code.
-ClassMethod Approved(pCode As %String, pSource As %String, pLoinc As %String, pDisplay As %String, pLogId As %String, pAgentSessionId As %String, pEvidence As %String, pReviewer As %String, pWarning As %String = "", Output pId As %String) As %Status
+ClassMethod Approved(pCode As %String, pSource As %String, pLoinc As %String, pDisplay As %String, pLogId As %String, pAgentSessionId As %String, pEvidence As %String, pReviewer As %String, pWarning As %String = "", Output pId As %String, pTable As %String = {##class(AgenticProd.Tools.Mapping).#CODEMAP}) As %Status
 {
 	Set pId = ""
 	Set tSC = $$$OK
@@ -70,29 +77,30 @@ ClassMethod Approved(pCode As %String, pSource As %String, pLoinc As %String, pD
 		Set tRow.LocalCode = pCode, tRow.Source = pSource, tRow.Loinc = pLoinc, tRow.Display = pDisplay
 		Set tRow.Origin = "Approved", tRow.DecisionLogId = pLogId, tRow.AgentSessionId = pAgentSessionId
 		Set tRow.Evidence = pEvidence, tRow.Reviewer = pReviewer, tRow.Warning = $EXTRACT(pWarning, 1, 1000)
+		Set tRow.CodeTable = pTable
 		$$$ThrowOnError(tRow.%Save())
 		Set pId = tRow.%Id()
-		$$$ThrowOnError(..Supersede(pCode, pId))
+		$$$ThrowOnError(..Supersede(pCode, pId, pTable))
 	} Catch ex {
 		Set tSC = ex.AsStatus()
 	}
 	Quit tSC
 }
 
-/// ID of the Active row for pCode, "" if none.
-ClassMethod ActiveId(pCode As %String) As %String
+/// ID of the Active row for pCode in this namespace's pTable, "" if none.
+ClassMethod ActiveId(pCode As %String, pTable As %String = {##class(AgenticProd.Tools.Mapping).#CODEMAP}) As %String
 {
-	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 1 ID FROM AgenticProd_Data.LearnedMapping WHERE LocalCode = ? AND Status = 'Active' ORDER BY ID DESC", pCode)
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 1 ID FROM AgenticProd_Data.LearnedMapping WHERE LocalCode = ? AND Status = 'Active' AND Namespace = ? AND CodeTable = ? ORDER BY ID DESC", pCode, $NAMESPACE, pTable)
 	Quit $SELECT(tRS.%Next(): tRS.ID, 1: "")
 }
 
 /// The latest revoke of pCode -> pLoinc by a person (not a supersede), as "by on: reason";
 /// "" when that pair was never revoked, or was learned again since (with a reviewer's note).
-ClassMethod RevokedNote(pCode As %String, pLoinc As %String) As %String
+ClassMethod RevokedNote(pCode As %String, pLoinc As %String, pTable As %String = {##class(AgenticProd.Tools.Mapping).#CODEMAP}) As %String
 {
-	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 1 ID FROM AgenticProd_Data.LearnedMapping WHERE LocalCode = ? AND Loinc = ? AND Status = 'Active'", pCode, pLoinc)
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 1 ID FROM AgenticProd_Data.LearnedMapping WHERE LocalCode = ? AND Loinc = ? AND Status = 'Active' AND Namespace = ? AND CodeTable = ?", pCode, pLoinc, $NAMESPACE, pTable)
 	Quit:tRS.%Next() ""
-	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 1 RevokedBy, RevokedAt, RevokeReason FROM AgenticProd_Data.LearnedMapping WHERE LocalCode = ? AND Loinc = ? AND Status = 'Revoked' AND RevokedBy <> 'system' ORDER BY ID DESC", pCode, pLoinc)
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 1 RevokedBy, RevokedAt, RevokeReason FROM AgenticProd_Data.LearnedMapping WHERE LocalCode = ? AND Loinc = ? AND Status = 'Revoked' AND RevokedBy <> 'system' AND Namespace = ? AND CodeTable = ? ORDER BY ID DESC", pCode, pLoinc, $NAMESPACE, pTable)
 	Quit:'tRS.%Next() ""
 	Quit tRS.RevokedBy_" on "_tRS.RevokedAt_": "_tRS.RevokeReason
 }
@@ -147,6 +155,12 @@ Storage Default
 </Value>
 <Value name="16">
 <Value>RevokeReason</Value>
+</Value>
+<Value name="17">
+<Value>Namespace</Value>
+</Value>
+<Value name="18">
+<Value>CodeTable</Value>
 </Value>
 </Data>
 <DataLocation>^AgenticProd8110.LearnedMappingD</DataLocation>

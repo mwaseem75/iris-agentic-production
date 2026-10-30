@@ -78,6 +78,7 @@ button:disabled { opacity: .5; cursor: default; }
 button.danger { color: var(--bad); border-color: var(--bad); }
 .kill.on button.danger { background: var(--bad); color: #fff; }
 .msg { font-size: 13px; margin: 6px 0 0; min-height: 1.2em; }
+.filter-row { margin: 0 0 8px; font-size: 13px; }
 .msg.ok { color: var(--good); }
 .msg.bad { color: var(--bad); }
 .readonly-note { background: var(--warn-bg); color: var(--warn); border-radius: 6px; padding: 8px 12px; margin: 0 0 14px; }
@@ -176,6 +177,7 @@ summary { cursor: pointer; color: var(--accent); }
   <div class="tabpanel hidden" id="tab-messages" role="tabpanel">
     <section class="panel">
       <h2>Recent decisions <span class="muted" id="dec-count"></span> <span class="muted">(select a row to see what happened)</span></h2>
+      <p class="filter-row"><label>Production <select id="dec-ns"><option value="">All productions</option></select></label></p>
       <p class="muted hidden" id="dec-note">No live traffic yet. Tick "Include eval runs" to see eval messages.</p>
       <div class="scroll">
         <table>
@@ -333,8 +335,20 @@ summary { cursor: pointer; color: var(--accent); }
     </section>
 
     <section class="panel">
+      <h2>Productions <span class="muted">AI plug-in per production</span></h2>
+      <p class="muted">The home production and every production the plug-in was added to, with its mode: observe logs what it would do, propose sends every decision to that namespace's review inbox, act fixes whitelisted errors, resends transient ones and returns structure errors. Health and cost are for the last 24 hours.</p>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Production</th><th>Mode</th><th>Health (24 h)</th><th class="num">Decisions</th><th class="num">Agent cost</th><th class="edit-only"></th></tr></thead>
+          <tbody id="set-productions"></tbody>
+        </table>
+      </div>
+      <p class="msg" id="m-productions"></p>
+    </section>
+
+    <section class="panel">
       <h2>Memory <span class="muted">learned code mappings</span></h2>
-      <p class="muted">Every LabCodeMap entry the router uses without asking the agent, with where it came from. Revoke removes the entry and sends a review task for each message that went out with it; the same mapping is only learned again with a reviewer's note.</p>
+      <p class="muted">Every code table entry a production uses without asking the agent, with where it came from. Revoke removes the entry and sends a review task for each message that went out with it; the same mapping is only learned again with a reviewer's note.</p>
       <div class="scroll">
         <table>
           <thead><tr><th>Local code</th><th>LOINC</th><th>Origin</th><th class="opt">Provenance</th><th class="num">Routed</th><th>Status</th><th class="edit-only"></th></tr></thead>
@@ -395,7 +409,7 @@ function outcomeGroup(o) {
   if (o === "APPLIED") return "applied";
   if (o === "REJECTED") return "rejected";
   if (o === "RESENT") return "resent";
-  if (o === "SENT_FOR_APPROVAL" || o === "APPROVED" || o.indexOf("DOWNGRADED:") === 0 || o.indexOf("REVIEW_") === 0) return "approval";
+  if (o === "SENT_FOR_APPROVAL" || o === "APPROVED" || o.indexOf("DOWNGRADED:") === 0 || o.indexOf("REVIEW_") === 0 || o.indexOf("PROPOSED:") === 0) return "approval";
   return "other";
 }
 function outcomeKind(o) {
@@ -479,7 +493,10 @@ function renderDecisions(rows) {
     tr.addEventListener("click", function () { showStory(d.ID); });
     tr.addEventListener("keydown", function (e) { if (e.key === "Enter") showStory(d.ID); });
     cell(tr, d.CreatedAt ? d.CreatedAt.substring(5, 16) : "");
-    cell(tr, d.ControlId || (d.EvalRunId ? "EV" + d.EvalRunId + "-" + d.CaseId : "hdr " + d.HeaderId));
+    var cid = el("span", d.ControlId || (d.EvalRunId ? "EV" + d.EvalRunId + "-" + d.CaseId : "hdr " + d.HeaderId));
+    // Header and session IDs repeat across productions: name the other one
+    if (d.Namespace && homeNs && d.Namespace !== homeNs) { cid.appendChild(el("br")); cid.appendChild(el("span", d.Namespace, "muted")); }
+    cell(tr, cid);
     cell(tr, d.ErrorClass);
     // No agent run: the logged ESCALATE is Triage's, not the agent's
     var agent = d.AgentDecision || (d.agentCalled ? d.Decision : "");
@@ -832,7 +849,8 @@ function showError(e) {
 function load() {
   document.getElementById("error").classList.add("hidden");
   var ev = includeEval ? "eval=1" : "eval=0";
-  Promise.all([get("api/summary?" + ev), get("api/metrics/summary?" + ev), get("api/decisions?limit=" + (decLimit + 1) + "&" + ev), get("api/evalruns")]).then(function (res) {
+  if (!homeNs) get("api/settings/productions").then(function (r) { fillNsFilter(r.productions); }).catch(function () {});
+  Promise.all([get("api/summary?" + ev), get("api/metrics/summary?" + ev), get("api/decisions?limit=" + (decLimit + 1) + "&" + ev + "&ns=" + encodeURIComponent(decNs)), get("api/evalruns")]).then(function (res) {
     setKillBanner(res[0].killSwitch);
     renderSummary(res[0], res[1]);
     renderMetrics(res[1]);
@@ -880,6 +898,89 @@ function fillSelect(sel, items, value) {
 var settings = null;
 function loadSettings() {
   get("api/settings").then(renderSettings).catch(showError);
+  get("api/settings/productions").then(renderProductions).catch(showError);
+}
+
+// Productions: plug-in installs, the home production and namespaces it can be added to
+function prodLabel(p) { return p.production + " (" + p.namespace + ")"; }
+function healthText(h) {
+  if (!h || h.error) return h && h.error ? "unreadable: " + h.error : "";
+  return h.state + ", " + h.failed24h + " failed, " + h.suspended + " suspended, " + h.errors24h + " errors, " + h.queued + " queued";
+}
+function renderProductions(r) {
+  var body = document.getElementById("set-productions");
+  body.textContent = "";
+  fillNsFilter(r.productions);
+  r.productions.forEach(function (p) {
+    var tr = el("tr");
+    var name = el("span", p.production);
+    name.appendChild(el("br"));
+    name.appendChild(el("span", p.namespace + (p.native ? ", home" : p.enabled ? ", plug-in: " + p.items.join(", ") : ", plug-in not added"), "muted"));
+    cell(tr, name, "wrap-cell");
+    var mode = el("span");
+    if (p.enabled && !p.native && r.canEdit) {
+      var sel = el("select");
+      fillSelect(sel, r.modes.map(function (m) { return [m, m]; }), p.mode);
+      sel.addEventListener("change", function () {
+        sel.disabled = true;
+        send("POST", "api/settings/productions/mode", { namespace: p.namespace, production: p.production, mode: sel.value }).then(function (x) {
+          say("m-productions", prodLabel(p) + " is now in " + sel.value + " mode. " + (x.note || ""), true);
+          loadSettings();
+        }).catch(function (e) { say("m-productions", e.message); sel.value = p.mode; sel.disabled = false; });
+      });
+      mode.appendChild(sel);
+    } else {
+      mode.appendChild(p.enabled ? tag(p.mode, p.mode === "act" ? "good" : p.mode === "propose" ? "warn" : "info") : el("span", "-", "muted"));
+    }
+    cell(tr, mode);
+    cell(tr, healthText(p.health), "wrap-cell");
+    cell(tr, String(p.decisions24h), "num");
+    cell(tr, "$" + Number(p.cost24h || 0).toFixed(4) + " (" + p.agentRuns24h + " runs)", "num");
+    var act = el("span");
+    if (r.canEdit && !p.native) {
+      var b = el("button", p.enabled ? "Disable" : "Enable");
+      b.type = "button";
+      var table = null;
+      if (!p.enabled) {
+        table = el("input");
+        table.placeholder = "code table (LabCodeMap)";
+        table.size = 18;
+        act.appendChild(table);
+      }
+      b.addEventListener("click", function () {
+        var body = { namespace: p.namespace, production: p.production };
+        if (!p.enabled) {
+          body.mode = "observe";
+          body.codeTable = table.value.trim();
+          // A table other than LabCodeMap holds the bare LOINC, as its own DTLs read it
+          if (body.codeTable && body.codeTable !== "LabCodeMap") body.codeTableFormat = "loinc";
+        }
+        b.disabled = true;
+        say("m-productions", (p.enabled ? "Disabling" : "Enabling") + " the plug-in on " + prodLabel(p) + "; the production restarts the changed items, this can take a minute.", true);
+        send("POST", "api/settings/productions/" + (p.enabled ? "disable" : "enable"), body).then(function (x) {
+          say("m-productions", prodLabel(p) + ": " + (x.note || "done"), true);
+          loadSettings();
+        }).catch(function (e) { say("m-productions", e.message); b.disabled = false; });
+      });
+      act.appendChild(b);
+    }
+    cell(tr, act, "edit-only");
+    body.appendChild(tr);
+  });
+  Array.prototype.forEach.call(document.querySelectorAll("#set-productions .edit-only"), function (e) { e.classList.toggle("hidden", !r.canEdit); });
+}
+
+// Messages tab filter: the productions that have decisions of their own
+var decNs = "";
+var homeNs = "";
+function fillNsFilter(list) {
+  var sel = document.getElementById("dec-ns");
+  var items = [["", "All productions"]];
+  list.forEach(function (p) {
+    if (p.native) homeNs = p.namespace;
+    if (p.enabled) items.push([p.namespace, prodLabel(p)]);
+  });
+  fillSelect(sel, items, decNs);
 }
 function renderSettings(s) {
   settings = s;
@@ -1019,7 +1120,10 @@ function renderSettings(s) {
   mb.textContent = "";
   s.memory.forEach(function (m) {
     var tr = el("tr");
-    cell(tr, m.LocalCode);
+    var code = el("span", m.LocalCode);
+    code.appendChild(el("br"));
+    code.appendChild(el("span", (m.CodeTable || "LabCodeMap") + " in " + (m.Namespace || ""), "muted"));
+    cell(tr, code, "wrap-cell");
     var lc = el("span", m.Loinc);
     if (m.Display) { lc.appendChild(el("br")); lc.appendChild(el("span", m.Display, "muted")); }
     cell(tr, lc, "wrap-cell");
@@ -1169,7 +1273,13 @@ document.getElementById("more").addEventListener("toggle", drawPending);
 document.getElementById("dec-more").addEventListener("click", function () {
   decLimit += DEC_PAGE;
   var ev = includeEval ? "eval=1" : "eval=0";
-  get("api/decisions?limit=" + (decLimit + 1) + "&" + ev).then(renderDecisions).catch(showError);
+  get("api/decisions?limit=" + (decLimit + 1) + "&" + ev + "&ns=" + encodeURIComponent(decNs)).then(renderDecisions).catch(showError);
+});
+document.getElementById("dec-ns").addEventListener("change", function (ev) {
+  decNs = ev.target.value;
+  decLimit = DEC_PAGE;
+  var e = includeEval ? "eval=1" : "eval=0";
+  get("api/decisions?limit=" + (decLimit + 1) + "&" + e + "&ns=" + encodeURIComponent(decNs)).then(renderDecisions).catch(showError);
 });
 document.getElementById("runs-test").addEventListener("click", function () {
   showTestRuns = !showTestRuns;
