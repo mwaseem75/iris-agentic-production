@@ -254,6 +254,38 @@ Method TestSentinelScan()
 	Do $$$AssertEquals(tOut("last") >= tOut("maxId"), 1, "mark moves past every header looked at")
 }
 
+/// A header still in flight holds the mark until it ends or is older than the pending wait: the
+/// billing failure of sample 01 came after its header had settled by age and was passed by.
+Method TestSentinelPending()
+{
+	Do $$$AssertStatusOK(..InNS("PendingCase", .tOut))
+	Do $$$AssertEquals(tOut("held"), "", "nothing past a queued header")
+	Do $$$AssertEquals(tOut("heldMark"), tOut("start"), "mark stays before it")
+	Do $$$AssertEquals(tOut("passed"), tOut("expect"), "an old queued header is passed")
+}
+
+ClassMethod PendingCase(Output pOut) As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT MAX(ID) AS M FROM Ens.MessageHeader")
+		Do tRS.%Next()
+		Set pOut("start") = +tRS.M, tNow = $ZDATETIME($ZTIMESTAMP, -2)
+		Set tSettled = $ZDATETIME($ZDATETIMEH(tNow - 60, -2), 3)
+		Set tA = ..Hdr(0, "Queued", "OrdersRouter", "BillingOut", tSettled, "")
+		Set tB = ..Hdr(1, "Error", "OrdersRouter", "LabOrdersOut", tSettled, "")
+		$$$ThrowOnError(##class(AgenticProd.Plugin.SentinelAdapter).Scan(pOut("start"), 999999999, 10, 10, "AI.", .tFound, .tLast, .tLastLog, 300))
+		Set pOut("held") = $GET(tFound(1)), pOut("heldMark") = tLast
+		// Same headers with a 30 s pending wait: the queued one (60 s old) no longer holds the scan
+		$$$ThrowOnError(##class(AgenticProd.Plugin.SentinelAdapter).Scan(pOut("start"), 999999999, 10, 10, "AI.", .tFound, .tLast, .tLastLog, 30))
+		Set pOut("passed") = $GET(tFound(1)), pOut("expect") = tB
+		For tId = tA, tB Do ##class(Ens.MessageHeader).%DeleteId(tId)
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
 /// TriageRequest from a failed HL7 header: format, source, control ID, error text, flags.
 Method TestSentinelRequest()
 {

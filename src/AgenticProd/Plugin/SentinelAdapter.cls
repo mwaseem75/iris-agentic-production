@@ -17,7 +17,12 @@ Property MaxPerPoll As %Integer(MINVAL = 1) [ InitialExpression = 5 ];
 /// so a failing Triage or agent call cannot feed itself.
 Property OwnPrefix As %String(MAXLEN = 20) [ InitialExpression = "AI." ];
 
-Parameter SETTINGS = "SettleSeconds:Sentinel,MaxPerPoll:Sentinel,OwnPrefix:Sentinel";
+/// Seconds a header still in flight (created, queued, being delivered) holds the scan back, so a
+/// failure that comes later (an operation retrying until FailureTimeout) is not passed by. Older
+/// in-flight headers are passed, so one stuck message cannot stop the Sentinel.
+Property PendingWaitSeconds As %Integer(MINVAL = 0) [ InitialExpression = 300 ];
+
+Parameter SETTINGS = "SettleSeconds:Sentinel,MaxPerPoll:Sentinel,OwnPrefix:Sentinel,PendingWaitSeconds:Sentinel";
 
 /// First start: marks at the newest header and log entry, so the plug-in watches failures from
 /// now on and an old backlog never turns into a burst of agent calls.
@@ -48,7 +53,7 @@ Method OnTask() As %Status
 			Quit
 		}
 		Set tAfterHdr = +$GET($$$EnsStaticAppData(tKey, "header")), tAfterLog = +$GET($$$EnsStaticAppData(tKey, "log"))
-		$$$ThrowOnError(..Scan(tAfterHdr, tAfterLog, ..SettleSeconds, ..MaxPerPoll, ..OwnPrefix, .tFound, .tLastHdr, .tLastLog))
+		$$$ThrowOnError(..Scan(tAfterHdr, tAfterLog, ..SettleSeconds, ..MaxPerPoll, ..OwnPrefix, .tFound, .tLastHdr, .tLastLog, ..PendingWaitSeconds))
 		For i = 1:1:tFound {
 			$$$ThrowOnError(..BusinessHost.ProcessInput(##class(Ens.StringContainer).%New(tFound(i))))
 		}
@@ -64,18 +69,22 @@ Method OnTask() As %Status
 /// Failed headers after pAfterHdr and alert log entries after pAfterLog, settled for pSettle
 /// seconds, at most pMax sessions: pFound(n) = header ID, one per session, skipping sessions this
 /// namespace already has a DecisionLog row for. pLastHdr and pLastLog are the new marks: the last
-/// header and log entry looked at, so a later poll starts after them.
-ClassMethod Scan(pAfterHdr As %Integer, pAfterLog As %Integer, pSettle As %Integer, pMax As %Integer, pOwnPrefix As %String, Output pFound, Output pLastHdr As %Integer, Output pLastLog As %Integer) As %Status
+/// header and log entry looked at, so a later poll starts after them. The header scan stops at
+/// the first header still in flight that is younger than pPendingWait seconds.
+ClassMethod Scan(pAfterHdr As %Integer, pAfterLog As %Integer, pSettle As %Integer, pMax As %Integer, pOwnPrefix As %String, Output pFound, Output pLastHdr As %Integer, Output pLastLog As %Integer, pPendingWait As %Integer = 300) As %Status
 {
 	Kill pFound
 	Set pFound = 0, pLastHdr = pAfterHdr, pLastLog = pAfterLog
 	Set tSC = $$$OK
 	Try {
-		Set tBefore = $ZDATETIME($ZDATETIMEH($ZDATETIME($ZTIMESTAMP, -2) - pSettle, -2), 3)
-		Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID, SessionId, IsError, %EXTERNAL(Status) AS Status, SourceConfigName, TargetConfigName FROM Ens.MessageHeader"
+		Set tNow = $ZDATETIME($ZTIMESTAMP, -2)
+		Set tBefore = $ZDATETIME($ZDATETIMEH(tNow - pSettle, -2), 3), tPendingSince = $ZDATETIME($ZDATETIMEH(tNow - pPendingWait, -2), 3)
+		Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID, SessionId, IsError, %EXTERNAL(Status) AS Status, SourceConfigName, TargetConfigName, TimeCreated FROM Ens.MessageHeader"
 			_" WHERE ID > ? AND TimeCreated <= ? ORDER BY ID", pAfterHdr, tBefore)
 		If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message))
 		While (pFound < pMax) && tRS.%Next() {
+			// Settled by age is not settled by status: an operation may still be retrying it
+			Quit:$LISTFIND($LISTBUILD("Created", "Queued", "Delivered"), tRS.Status)&&(tRS.TimeCreated]tPendingSince)
 			Set pLastHdr = tRS.ID
 			Continue:'tRS.IsError&&(tRS.Status'="Suspended")&&(tRS.Status'="Error")
 			Continue:..IsOwn(tRS.SourceConfigName, pOwnPrefix)||..IsOwn(tRS.TargetConfigName, pOwnPrefix)
