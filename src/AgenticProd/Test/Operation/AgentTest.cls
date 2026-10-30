@@ -81,7 +81,7 @@ Method TestTestRunMarks()
 		Kill ^IRIS.Temp.AgenticProdNoLLM
 		Do $$$AssertNotTrue(##class(AgenticProd.Operation.Agent).TestRunActive(), "no marks")
 		// No such job: a crashed run
-		Set ^IRIS.Temp.AgenticProdNoLLM(999999999) = ""
+		Set ^IRIS.Temp.AgenticProdNoLLM(999999999) = "run:"_tNow
 		Do $$$AssertNotTrue(##class(AgenticProd.Operation.Agent).TestRunActive(), "dead job ignored")
 		Do $$$AssertEquals($DATA(^IRIS.Temp.AgenticProdNoLLM(999999999)), 0, "and cleared")
 		Set ^IRIS.Temp.AgenticProdNoLLM(999999999) = tNow + 60
@@ -90,6 +90,8 @@ Method TestTestRunMarks()
 		Do $$$AssertNotTrue(##class(AgenticProd.Operation.Agent).TestRunActive(), "grace over")
 		Do ##class(AgenticProd.Operation.Agent).MarkTestRun(1)
 		Do $$$AssertTrue(##class(AgenticProd.Operation.Agent).TestRunActive(), "this job running")
+		Set ^IRIS.Temp.AgenticProdNoLLM($JOB) = "run:"_(tNow - ##class(AgenticProd.Operation.Agent).#TESTMAXRUN - 1)
+		Do $$$AssertNotTrue(##class(AgenticProd.Operation.Agent).TestRunActive(), "leaked mark expires")
 	} Catch ex {
 		Do $$$AssertStatusOK(ex.AsStatus())
 	}

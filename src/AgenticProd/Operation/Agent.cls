@@ -66,6 +66,10 @@ Parameter SETTINGS = "ProviderConfig:Agent,Model:Agent,Temperature:Agent,Mode:Ag
 /// their way to an agent.
 Parameter TESTGRACE = 120;
 
+/// A running mark older than this (seconds) is treated as leaked: a test object in a web server
+/// job that was cut off never runs %OnClose, and that job stays alive.
+Parameter TESTMAXRUN = 3600;
+
 /// Why a live LLM call must not happen now, "" when it may. Test stubs override this; their
 /// AgentChat never reaches a model.
 Method LLMBlocked() As %String
@@ -73,27 +77,43 @@ Method LLMBlocked() As %String
 	Quit $SELECT(..TestRunActive(): "test run", 1: "")
 }
 
-/// Unit test classes (Test.Case) mark their job in ^IRIS.Temp.AgenticProdNoLLM: "" while the
-/// class runs, then the time (Seconds) the block ends. IRISTEMP is shared by every namespace, so a
+/// Unit test classes (Test.Case) mark their job in ^IRIS.Temp.AgenticProdNoLLM: "run:"_start while
+/// the class runs, then the time (Seconds) the block ends. IRISTEMP is shared by every namespace, so a
 /// plug-in agent in LEGACY sees an IRISAPP test run, and a restart empties it.
 ClassMethod MarkTestRun(pActive As %Boolean)
 {
-	Set ^IRIS.Temp.AgenticProdNoLLM($JOB) = $SELECT(pActive: "", 1: ..Seconds() + ..#TESTGRACE)
+	Set ^IRIS.Temp.AgenticProdNoLLM($JOB) = $SELECT(pActive: "run:"_..Seconds(), 1: ..Seconds() + ..#TESTGRACE)
 }
 
-/// 1 while any test job is running, or ended less than TESTGRACE seconds ago. A job that died
-/// mid-run (no end time) stops counting once it is gone; finished marks are cleared.
+/// 1 while any test job is running, or ended less than TESTGRACE seconds ago. A running mark stops
+/// counting once its job is gone or it is older than TESTMAXRUN; expired marks are cleared.
 ClassMethod TestRunActive() As %Boolean
 {
 	Set tNow = ..Seconds(), tJob = "", tActive = 0
 	For {
 		Set tJob = $ORDER(^IRIS.Temp.AgenticProdNoLLM(tJob), 1, tUntil)
 		Quit:tJob=""
-		If (tUntil = "") && $DATA(^$JOB(tJob)) Set tActive = 1 Quit
-		If (tUntil '= "") && (tUntil > tNow) Set tActive = 1 Quit
+		If $EXTRACT(tUntil, 1, 4) = "run:" {
+			If $DATA(^$JOB(tJob)) && ($PIECE(tUntil, ":", 2) > (tNow - ..#TESTMAXRUN)) Set tActive = 1 Quit
+		}
+		ElseIf (tUntil '= "") && (tUntil > tNow) {
+			Set tActive = 1 Quit
+		}
 		Kill ^IRIS.Temp.AgenticProdNoLLM(tJob)
 	}
 	Quit tActive
+}
+
+/// Current marks as "job=value" pairs, for diagnosis (IRISTEMP is not readable from every tool).
+ClassMethod TestMarks() As %String [ Internal ]
+{
+	Set tOut = "", tJob = ""
+	For {
+		Set tJob = $ORDER(^IRIS.Temp.AgenticProdNoLLM(tJob), 1, tValue)
+		Quit:tJob=""
+		Set tOut = tOut_$SELECT(tOut '= "": ",", 1: "")_tJob_"="_tValue_$SELECT($DATA(^$JOB(tJob)): "", 1: "(gone)")
+	}
+	Quit tOut
 }
 
 /// UTC seconds, comparable between processes ($ZHOROLOG is not).

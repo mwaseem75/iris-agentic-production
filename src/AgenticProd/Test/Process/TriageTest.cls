@@ -182,6 +182,9 @@ Method TestFixedByTriage()
 	Set tHeader.MessageBodyClassName = $CLASSNAME(tFixed), tHeader.MessageBodyId = tFixed.%Id()
 	Do $$$AssertStatusOK(tHeader.%Save())
 	Do $$$AssertTrue(##class(AgenticProd.Process.Triage).FixedByTriage(tHeader.%Id()), "fixed body recognised")
+	// Body IDs repeat across namespaces: another namespace's fix row must not match
+	Do ##class(%SQL.Statement).%ExecDirect(, "UPDATE AgenticProd_Data.DecisionLog SET Namespace = 'OTHERNS' WHERE FixedBodyId = ? AND FixedBodyClass = ?", tFixed.%Id(), $CLASSNAME(tFixed))
+	Do $$$AssertNotTrue(##class(AgenticProd.Process.Triage).FixedByTriage(tHeader.%Id()), "fix row from another namespace ignored")
 }
 
 /// A fix that would pass on its own is still refused when the message text was flagged.

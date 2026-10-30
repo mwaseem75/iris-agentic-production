@@ -600,7 +600,8 @@ ClassMethod WriteFile(pPath As %String, pText As %String) As %Status [ Internal 
 /// True if the failed message's body is one Triage built for an APPLIED fix (DecisionLog).
 ClassMethod FixedByTriage(pHeaderId As %Integer) As %Boolean
 {
-	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT COUNT(*) AS N FROM AgenticProd_Data.DecisionLog d, Ens.MessageHeader h WHERE h.ID = ? AND d.FixedBodyId = h.MessageBodyId AND d.FixedBodyClass = h.MessageBodyClassName", pHeaderId)
+	// DecisionLog is shared: body IDs repeat across namespaces
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT COUNT(*) AS N FROM AgenticProd_Data.DecisionLog d, Ens.MessageHeader h WHERE h.ID = ? AND d.Namespace = ? AND d.FixedBodyId = h.MessageBodyId AND d.FixedBodyClass = h.MessageBodyClassName", pHeaderId, $NAMESPACE)
 	If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message))
 	Do tRS.%Next()
 	Quit tRS.N > 0
