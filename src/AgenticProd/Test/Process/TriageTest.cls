@@ -290,7 +290,7 @@ Method TestGroundingCorrect01()
 	If '$$$AssertTrue($IsObject(tGround), "grounding ran") Quit
 	Do $$$AssertTrue(tGround.grounded, tGround.summary)
 	Do $$$AssertEquals(tGround.failed, "")
-	Do $$$AssertEquals(tGround.checks.%Size(), 7, "kb, search, revoked, local code, specimen, units, quotes")
+	Do $$$AssertEquals(tGround.checks.%Size(), 8, "kb, search, revoked, local code, specimen, units, ambiguity, quotes")
 	Do $$$AssertEquals(tOutcome, "SENT_FOR_APPROVAL")
 	Do $$$AssertEquals(tFinal, tDecision, "decision unchanged")
 }
@@ -330,6 +330,34 @@ Method TestGroundingSpecimenUnits()
 	Set tGround = ..Grounded(..Triage(), tRequest, tDecision, .tFinal, .tOutcome)
 	Do $$$AssertEquals(tGround.failed, "units", tGround.summary)
 	Do ..AssertDowngraded(tFinal, tOutcome, "MAP_CODE", "mmol/L")
+}
+
+/// Troponin with no I/T in OBX-3.2: two high-sensitivity candidates fit ng/L and differ in component.
+Method TestGroundingAmbiguousComponent17()
+{
+	Set tDecision = ..MapStub("17", "TROP", "67151-1", "10839-9,89579-7,6598-7,67151-1", .tRequest)
+	Set tGround = ..Grounded(..Triage(), tRequest, tDecision, .tFinal, .tOutcome)
+	Do $$$AssertEquals(tGround.failed, "ambiguity", tGround.summary)
+	Do $$$AssertTrue(tGround.summary [ "message does not state component; candidates 89579-7 67151-1", tGround.summary)
+	Do ..AssertDowngraded(tFinal, tOutcome, "MAP_CODE", "ambiguous: message does not state component")
+}
+
+/// Glucose with no SPM or OBR-15: serum, blood and urine codes all fit mg/dL.
+Method TestGroundingAmbiguousSpecimen39()
+{
+	Set tDecision = ..MapStub("39", "GLU-X", "2345-7", "2345-7,2339-0,1558-6,2350-7", .tRequest)
+	Set tGround = ..Grounded(..Triage(), tRequest, tDecision, .tFinal, .tOutcome)
+	Do $$$AssertEquals(tGround.failed, "ambiguity", tGround.summary)
+	Do $$$AssertTrue(tGround.summary [ "message does not state specimen/system; candidates 2345-7 2339-0 1558-6 2350-7", tGround.summary)
+	Do ..AssertDowngraded(tFinal, tOutcome, "MAP_CODE", "ambiguous: message does not state specimen/system")
+}
+
+/// Case 01 states serum and its search had fasting/blood/urine glucose too: not ambiguous.
+Method TestGroundingNotAmbiguous01()
+{
+	Set tDecision = ..MapStub("01", "GLU-01", "2345-7", "2345-7,2339-0,1558-6,2350-7", .tRequest)
+	Set tGround = ..Grounded(..Triage(), tRequest, tDecision, .tFinal, .tOutcome)
+	Do $$$AssertEquals(tGround.failed, "", tGround.summary)
 }
 
 Method TestGroundingFakeQuote01()

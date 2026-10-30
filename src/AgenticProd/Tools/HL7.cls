@@ -217,8 +217,9 @@ ClassMethod StepValue(pMsg As EnsLib.HL7.Message, pPath As %String, Output pName
 /// {check, pass, detail} to pChecks for each claim in pDecision (the decision contract as a
 /// %DynamicObject) that can be compared with the message. pKB is the KB row of the proposed LOINC
 /// ({loinc, system, units}) or "" when it is not in the KB. A check that has nothing to compare
-/// (no specimen, no units) passes with a detail saying so.
-ClassMethod GroundingProblems(pMsg As EnsLib.HL7.Message, pDecision As %DynamicObject, pKB As %DynamicObject, pChecks As %DynamicArray) As %Status
+/// (no specimen, no units) passes with a detail saying so. pCandidates are the KB rows search_loinc
+/// returned for this decision (see Ambiguity).
+ClassMethod GroundingProblems(pMsg As EnsLib.HL7.Message, pDecision As %DynamicObject, pKB As %DynamicObject, pChecks As %DynamicArray, pCandidates As %DynamicArray = "") As %Status
 {
 	Set tSC = $$$OK
 	Try {
@@ -245,6 +246,10 @@ ClassMethod GroundingProblems(pMsg As EnsLib.HL7.Message, pDecision As %DynamicO
 					Set tOK = ($ZCONVERT(tUnits, "L") = $ZCONVERT(pKB.units, "L"))
 					Do ..Check(pChecks, "units", tOK, "OBX-6 '"_tUnits_"', LOINC "_pKB.loinc_" expects '"_pKB.units_"'")
 				}
+				If $IsObject(pCandidates) {
+					Set tWhy = ..Ambiguity(tOBX, pCandidates, tSpecimen)
+					Do ..Check(pChecks, "ambiguity", tWhy = "", $SELECT(tWhy = "": "message singles out the code among the search results", 1: tWhy))
+				}
 			}
 		}
 		If $IsObject(pDecision.fix) && pDecision.fix.%Size() {
@@ -264,6 +269,43 @@ ClassMethod GroundingProblems(pMsg As EnsLib.HL7.Message, pDecision As %DynamicO
 		Set tSC = ex.AsStatus()
 	}
 	Quit tSC
+}
+
+/// "" when the message singles out one of the search_loinc candidates, else "ambiguous: message does
+/// not state <what>; candidates <codes>". Candidates whose units fit OBX-6 are ambiguous when they
+/// differ in specimen/system, component (Troponin I vs T) or method and the message does not say
+/// which (no SPM-4/OBR-15; OBX-3.2 and OBX-17 do not name the component or method).
+ClassMethod Ambiguity(pOBX As EnsLib.HL7.Segment, pCandidates As %DynamicArray, pSpecimen As %String) As %String [ Internal ]
+{
+	Set tUnits = $SELECT($IsObject(pOBX): $ZCONVERT(pOBX.GetValueAt("6.1"), "L"), 1: "")
+	Set tNamed = $SELECT($IsObject(pOBX): $ZCONVERT(pOBX.GetValueAt("3.2")_" "_pOBX.GetValueAt("17"), "L"), 1: "")
+	Set (tFit, tSys, tComp, tMeth) = 0, tCodes = "", tIter = pCandidates.%GetIterator()
+	While tIter.%GetNext(, .tRow) {
+		Continue:((tUnits '= "") && (tRow.units '= "") && ($ZCONVERT(tRow.units, "L") '= tUnits))
+		Set tFit = tFit + 1, tCodes = tCodes_$LISTBUILD(tRow.loinc)
+		Set:'$DATA(tSeenSys(tRow.system)) tSeenSys(tRow.system) = "", tSys = tSys + 1
+		// Display is "<component> [<property>] in <system>"; "Fasting" is a timing qualifier, not another analyte
+		Set tHead = $ZCONVERT($PIECE($REPLACE($PIECE(tRow.display, " [", 1), "Fasting ", ""), ".", 1), "L")
+		Set:'$DATA(tSeenComp(tHead)) tSeenComp(tHead) = "", tComp = tComp + 1
+		// "-" stands for no method: an empty string cannot be a subscript
+		Set tMethod = $ZCONVERT(tRow.method, "L"), tMethod = $SELECT(tMethod = "": "-", 1: tMethod)
+		Set:'$DATA(tSeenMeth(tMethod)) tSeenMeth(tMethod) = "", tMeth = tMeth + 1
+	}
+	Quit:(tFit < 2) ""
+	Set tWhat = ""
+	Set:((tSys > 1) && (pSpecimen = "")) tWhat = "specimen/system"
+	If tComp > 1 {
+		Set tNamedHeads = 0, tK = ""
+		For { Set tK = $ORDER(tSeenComp(tK))  Quit:tK=""  Set:(tNamed [ tK) tNamedHeads = tNamedHeads + 1 }
+		Set:(tNamedHeads '= 1) tWhat = tWhat_$SELECT(tWhat '= "": ", ", 1: "")_"component"
+	}
+	If tMeth > 1 {
+		Set tStated = 0, tK = ""
+		For { Set tK = $ORDER(tSeenMeth(tK))  Quit:tK=""  Set:((tK '= "-") && (tNamed [ tK)) tStated = 1 }
+		Set:'tStated tWhat = tWhat_$SELECT(tWhat '= "": ", ", 1: "")_"method"
+	}
+	Quit:(tWhat = "") ""
+	Quit "ambiguous: message does not state "_tWhat_"; candidates "_$LISTTOSTRING(tCodes, " ")
 }
 
 /// Specimen as sent: SPM-4 text (or code), else OBR-15; "" when neither has one.

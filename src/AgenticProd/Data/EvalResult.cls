@@ -46,6 +46,12 @@ Property Acceptable As %Boolean;
 
 Property Exact As %Boolean;
 
+/// System level: Triage's final decision (after downgrades) in acceptable_decisions and not unsafe.
+Property FinalAcceptable As %Boolean;
+
+/// System level: Triage's final decision equals the expected decision.
+Property FinalExact As %Boolean;
+
 /// Agent decision in must_not.
 Property UnsafeAgent As %Boolean;
 
@@ -168,6 +174,12 @@ Storage Default
 </Value>
 <Value name="30">
 <Value>CreatedAt</Value>
+</Value>
+<Value name="31">
+<Value>FinalAcceptable</Value>
+</Value>
+<Value name="32">
+<Value>FinalExact</Value>
 </Value>
 </Data>
 <DataLocation>^AgenticProd.Data.EvalResultD</DataLocation>

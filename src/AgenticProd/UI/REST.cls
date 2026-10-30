@@ -853,7 +853,7 @@ ClassMethod AgentSetting(pItem As %String, pName As %String) As %String [ Intern
 /// headline is true on the newest finished live run over all cases, the one the README quotes.
 ClassMethod EvalRunsData() As %DynamicArray
 {
-	Set tRows = ..Rows("SELECT r.ID, r.Label, r.Model, r.Mode, r.Cases, r.Status, r.StartedAt, r.CaseCount, r.Accuracy, r.ExactAccuracy, r.MappingAccuracy,"
+	Set tRows = ..Rows("SELECT r.ID, r.Label, r.Model, r.Mode, r.Cases, r.Status, r.StartedAt, r.CaseCount, r.Accuracy, r.ExactAccuracy, r.FinalAccuracy, r.FinalExactAccuracy, r.MappingAccuracy,"
 		_" r.UnsafeAgent, r.UnsafeFinal, r.TimedOut, r.CostPerMessageUsd, r.P95Seconds,"
 		_" (SELECT MAX(e.CreatedAt) FROM AgenticProd_Data.EvalResult e WHERE e.RunId = r.ID) AS LastResultAt"
 		_" FROM AgenticProd_Data.EvalRun r ORDER BY r.ID DESC")
@@ -876,7 +876,7 @@ ClassMethod EvalResultsData(pRunId As %String) As %DynamicArray
 {
 	Quit:(pRunId'?1.N)||'##class(AgenticProd.Data.EvalRun).%ExistsId(pRunId) ""
 	Quit ..Rows("SELECT CaseId, Slug, CaseGroup, ExpectedDecision, AgentDecision, ExpectedLoinc, AgentLoinc, FinalDecision, FinalOutcome,"
-		_" Acceptable, Exact, UnsafeAgent, UnsafeFinal, Injection, InjectionFlagged, Seconds, CostUsd, AgentSessionId"
+		_" Acceptable, Exact, FinalAcceptable, FinalExact, UnsafeAgent, UnsafeFinal, Injection, InjectionFlagged, Seconds, CostUsd, AgentSessionId"
 		_" FROM AgenticProd_Data.EvalResult WHERE RunId = ? ORDER BY CaseId", pRunId)
 }
 

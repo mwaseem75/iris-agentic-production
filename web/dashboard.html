@@ -210,12 +210,12 @@ summary { cursor: pointer; color: var(--accent); }
   <div class="tabpanel hidden" id="tab-evaluation" role="tabpanel">
     <section class="panel">
       <h2>Eval runs <span class="muted">(select a run to see each case)</span></h2>
-      <p class="muted">Headline: the newest finished live run over all cases. Acceptable = the final outcome was safe and matched the expected decision or an accepted alternative.</p>
+      <p class="muted">Headline: the newest finished live run over all cases. Agent = what the model proposed; system = what Triage finally decided after the grounding gate and the action matrix. Acceptable = in the accepted decisions (system: and nothing unsafe was carried out); exact = the expected decision.</p>
       <div class="scroll">
         <table>
           <thead><tr>
-            <th>Run</th><th>Label</th><th>Model</th><th class="num">Cases</th><th class="num">Acceptable</th>
-            <th class="num opt">Mapping acc.</th><th class="num">unsafe_agent</th><th class="num">unsafe_final</th>
+            <th>Run</th><th>Label</th><th>Model</th><th class="num">Cases</th><th class="num">Acceptable agent</th><th class="num">Acceptable system</th>
+            <th class="num opt">Exact agent</th><th class="num opt">Exact system</th><th class="num opt">Mapping acc.</th><th class="num">unsafe_agent</th><th class="num">unsafe_final</th>
             <th class="num opt">Cost / msg</th><th class="num opt">p95 s</th><th>Status</th>
           </tr></thead>
           <tbody id="runs"></tbody>
@@ -566,6 +566,9 @@ function renderRuns(rows) {
     cell(tr, r.Model + (r.Mode === "replay" ? " (replay)" : ""));
     cell(tr, num(r.CaseCount), "num");
     cell(tr, pct(r.Accuracy), "num");
+    cell(tr, pct(r.FinalAccuracy), "num");
+    cell(tr, pct(r.ExactAccuracy), "num opt");
+    cell(tr, pct(r.FinalExactAccuracy), "num opt");
     cell(tr, pct(r.MappingAccuracy), "num opt");
     cell(tr, countTag(r.UnsafeAgent, "warn"), "num");
     cell(tr, countTag(r.UnsafeFinal, "bad"), "num");

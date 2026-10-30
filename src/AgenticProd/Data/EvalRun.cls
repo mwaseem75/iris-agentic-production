@@ -30,6 +30,12 @@ Property Accuracy As %Numeric(SCALE = 4);
 /// Share of cases whose agent decision equals the expected decision.
 Property ExactAccuracy As %Numeric(SCALE = 4);
 
+/// System level: share of cases whose final decision after Triage is acceptable and not unsafe.
+Property FinalAccuracy As %Numeric(SCALE = 4);
+
+/// System level: share of cases whose final decision after Triage equals the expected decision.
+Property FinalExactAccuracy As %Numeric(SCALE = 4);
+
 /// Over cases with an expected error_class.
 Property ClassAccuracy As %Numeric(SCALE = 4);
 
@@ -123,6 +129,12 @@ Storage Default
 </Value>
 <Value name="22">
 <Value>P95Seconds</Value>
+</Value>
+<Value name="23">
+<Value>FinalAccuracy</Value>
+</Value>
+<Value name="24">
+<Value>FinalExactAccuracy</Value>
 </Value>
 </Data>
 <DataLocation>^AgenticProd.Data.EvalRunD</DataLocation>

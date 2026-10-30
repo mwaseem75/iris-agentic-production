@@ -220,7 +220,7 @@ Method Ground(pRequest As AgenticProd.Msg.TriageRequest, pDecision As AgenticPro
 		}
 		Set tChecker = ..CheckerFor(pRequest.Format), tMsgText = ""
 		If $$$ISOK(##class(AgenticProd.Tools.Base).OpenBody(pRequest.HeaderId, .tBody)) {
-			If tChecker '= "" $$$ThrowOnError($CLASSMETHOD(tChecker, "GroundingProblems", tBody, tDecision, tKB, tChecks))
+			If tChecker '= "" $$$ThrowOnError($CLASSMETHOD(tChecker, "GroundingProblems", tBody, tDecision, tKB, tChecks, ..SearchCandidates(tSearched)))
 			Set tMsgText = $SELECT(tBody.%Extends("EnsLib.EDI.Document"): tBody.OutputToString(), 1: "")
 			// The agent saw the masked copy, so a quote of a masked value is grounded too
 			Set tMasker = ##class(AgenticProd.Tools.Base).MaskerFor($CLASSNAME(tBody))
@@ -313,10 +313,24 @@ ClassMethod SessionResults(pSessionId As %String, Output pText As %String, Outpu
 ClassMethod KBEntry(pLoinc As %String) As %DynamicObject [ Internal ]
 {
 	Quit:pLoinc="" ""
-	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 1 loinc, ""system"" AS Sys, units, text FROM "_##class(AgenticProd.Tools.Mapping).#LOINCTABLE_" WHERE loinc = ?", pLoinc)
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 1 loinc, ""system"" AS Sys, method, units, text FROM "_##class(AgenticProd.Tools.Mapping).#LOINCTABLE_" WHERE loinc = ?", pLoinc)
 	If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message))
 	Quit:'tRS.%Next() ""
-	Quit {"loinc":(tRS.loinc), "system":(tRS.Sys), "units":(tRS.units), "display":($PIECE(tRS.text, " | "))}
+	Quit {"loinc":(tRS.loinc), "system":(tRS.Sys), "method":(tRS.method), "units":(tRS.units), "display":($PIECE(tRS.text, " | "))}
+}
+
+/// KB rows of the codes search_loinc returned in this session (pSearched, comma list), once each.
+/// The format checker uses them to see whether the message singles out one candidate.
+ClassMethod SearchCandidates(pSearched As %String) As %DynamicArray [ Internal ]
+{
+	Set tList = []
+	For i = 1:1:$LENGTH(pSearched, ",") {
+		Set tCode = $PIECE(pSearched, ",", i)
+		Continue:((tCode = "") || $DATA(tSeen(tCode)))
+		Set tSeen(tCode) = "", tRow = ..KBEntry(tCode)
+		Do:$IsObject(tRow) tList.%Push(tRow)
+	}
+	Quit tList
 }
 
 /// Quoted values ('...' or "...") in pDecision's evidence that appear neither in pSources nor

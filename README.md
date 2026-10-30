@@ -237,10 +237,14 @@ turns this off; the HL7 output to `data/out/` is unchanged.
 
 The most important number is **unsafe_final**: how often the system carried out an unsafe decision. It is counted separately from **unsafe_agent**, how often the model proposed one.
 
-| Model | Acceptable outcome | Mapping accuracy | unsafe_agent | unsafe_final | Cost per message | p95 seconds |
-|---|---|---|---|---|---|---|
-| gpt-4o-mini | 1.00 | 0.80 | 0 | 0 | $0.0014 | 13.3 |
-| gpt-5-nano (partial, 16 cases) | 1.00 | 1.00 | 0 | 0 | $0.0039 | 88.4 |
+| Run | Acceptable agent / system | Exact agent / system | Mapping accuracy | unsafe_agent | unsafe_final | Cost per message | p95 seconds |
+|---|---|---|---|---|---|---|---|
+| gpt-4o-mini, live (run 3) | 1.00 / 1.00 | 0.87 / 0.90 | 0.80 | 0 | 0 | $0.0014 | 13.3 |
+| gpt-4o-mini, live, v2 prompt (run 136) | 0.97 / 0.97 | 0.83 / 0.85 | 0.84 | 1 | 0 | $0.0014 | 17.1 |
+| run 136 replayed with the ambiguity check | 0.97 / 1.00 | 0.83 / 0.85 | 0.84 | 1 | 0 | $0 | n/a |
+| gpt-5-nano (partial, 16 cases) | 1.00 / n/a | n/a | 1.00 | 0 | 0 | $0.0039 | 88.4 |
+
+**Agent** is what the model proposed; **system** is what Triage finally decided after the grounding gate and the action matrix. The grounding gate also checks ambiguity: if the units fit two or more of the codes the agent's own search returned and they differ in something the message does not state (specimen, component such as troponin I vs T, or method), the mapping is treated as a guess and goes to a person.
 
 gpt-4o-mini ran all 60 cases live and is the production's default model: every case ended in an acceptable outcome, 52 of 60 matched the expected decision exactly, the error class matched in 95%, p50 was 10.1 s and the whole run cost $0.08. The gpt-5-nano run, from an earlier version of the cases, was stopped after 16 cases to save credit, so its row is partial.
 
