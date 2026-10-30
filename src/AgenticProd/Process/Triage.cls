@@ -246,6 +246,33 @@ Method Ground(pRequest As AgenticProd.Msg.TriageRequest, pDecision As AgenticPro
 	Quit tSC
 }
 
+/// Session ContextData as JSON, "" when it cannot be read. Build 154 sometimes saves a session
+/// with its empty first snapshot still in front of the real one ({..}{..}): the last one counts.
+ClassMethod SessionContext(pStream As %Stream.Object) As %DynamicObject [ Internal ]
+{
+	Try {
+		Do pStream.Rewind()
+		Set tContext = ##class(%DynamicObject).%FromJSON(pStream)
+	} Catch {
+		Set tContext = ""
+	}
+	Quit:$IsObject(tContext) tContext
+	Try {
+		Do pStream.Rewind()
+		Set tText = pStream.Read(pStream.Size)
+		Set tStart = 0, tAt = 0
+		For {
+			Set tAt = $FIND(tText, "{""version"":", tAt)
+			Quit:'tAt
+			Set tStart = tAt - $LENGTH("{""version"":")
+		}
+		Set:tStart>1 tContext = ##class(%DynamicObject).%FromJSON($EXTRACT(tText, tStart, *))
+	} Catch {
+		Set tContext = ""
+	}
+	Quit tContext
+}
+
 /// Text of every tool result in AI Hub session pSessionId (masked as the tools return it) and
 /// the LOINC codes search_loinc returned, comma separated: from ToolCall.ResultSummary, or from
 /// the saved session for calls logged before the summary was kept.
@@ -261,9 +288,8 @@ ClassMethod SessionResults(pSessionId As %String, Output pText As %String, Outpu
 	Quit:'$IsObject(tSession)
 	Set tStream = tSession.ContextData
 	Quit:'$IsObject(tStream)
-	Do tStream.Rewind()
-	Set tContext = ##class(%DynamicObject).%FromJSON(tStream)
-	Quit:'$IsObject(tContext.messages)
+	Set tContext = ..SessionContext(tStream)
+	Quit:'$IsObject(tContext)||'$IsObject(tContext.messages)
 	Set tIter = tContext.messages.%GetIterator()
 	While tIter.%GetNext(, .tMsg) {
 		If $IsObject(tMsg."tool_calls") {

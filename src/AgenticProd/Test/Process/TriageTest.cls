@@ -616,6 +616,19 @@ Method TestReviewEvalCloseKeepsOutcome()
 	Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM AgenticProd_Data.DecisionLog WHERE EvalRunId = 999905")
 }
 
+/// A saved session whose ContextData holds the empty first snapshot in front of the real one
+/// (seen on build 154) still gives its messages; unreadable data gives "", never an error.
+Method TestSessionContextConcatenated()
+{
+	Set tStream = ##class(%Stream.TmpCharacter).%New()
+	Do tStream.Write("{""version"":1,""messages"":[],""stats"":{}}{""version"":1,""messages"":[{""role"":""tool"",""content"":""x""}],""stats"":{}}")
+	Set tContext = ##class(AgenticProd.Process.Triage).SessionContext(tStream)
+	Do $$$AssertTrue($IsObject(tContext), "parsed")
+	Do $$$AssertEquals($SELECT($IsObject(tContext): tContext.messages.%Size(), 1: -1), 1, "last snapshot")
+	Do tStream.Clear(), tStream.Write("not json")
+	Do $$$AssertEquals(##class(AgenticProd.Process.Triage).SessionContext(tStream), "")
+}
+
 /// The eval action on a live row is not a pass to skip review: it counts as a reject.
 Method TestReviewEvalActionOnLiveRowRejects()
 {
