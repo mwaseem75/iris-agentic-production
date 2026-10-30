@@ -29,8 +29,6 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
 <Route Url="/summary" Method="GET" Call="Summary"/>
 <Route Url="/decisions" Method="GET" Call="Decisions"/>
 <Route Url="/decisions/:id/story" Method="GET" Call="Story"/>
-<Route Url="/demo/permissions" Method="GET" Call="DemoPermissions"/>
-<Route Url="/demo/:action" Method="POST" Call="DemoAction"/>
 <Route Url="/metrics/summary" Method="GET" Call="Metrics"/>
 <Route Url="/cost/summary" Method="GET" Call="Cost"/>
 <Route Url="/evalruns" Method="GET" Call="EvalRuns"/>
@@ -97,71 +95,6 @@ ClassMethod SettingsData() As %DynamicObject
 ClassMethod CanEditSettings() As %Boolean
 {
 	Quit $SYSTEM.Security.Check(##class(AgenticProd.Settings.Store).#EDITRESOURCE, "WRITE")
-}
-
-ClassMethod DemoPermissions() As %Status
-{
-	Write {"canUse":(..CanEditSettings())}.%ToJSON()
-	Quit $$$OK
-}
-
-/// POST /demo/send|claims|burst|reset. Demo actions are restricted to dashboard admins;
-/// reset also requires an explicit confirmation token in the request body.
-ClassMethod DemoAction(pAction As %String) As %Status
-{
-	Set tSC = $$$OK
-	Try {
-		If '..CanEditSettings() {
-			Set %response.Status = ..#HTTP403FORBIDDEN
-			Write {"error":"Demo controls need the AgenticProd_Admin role"}.%ToJSON()
-			Quit
-		}
-		Try { Set tBody = {}.%FromJSON(%request.Content) } Catch { Set tBody = "" }
-		If '$IsObject(tBody) {
-			Set %response.Status = ..#HTTP400BADREQUEST
-			Write {"error":"Body must be a JSON object"}.%ToJSON()
-			Quit
-		}
-		If pAction = "reset" {
-			If tBody.confirm'="RESET" {
-				Set %response.Status = ..#HTTP400BADREQUEST
-				Write {"error":"Reset requires confirm=RESET"}.%ToJSON()
-				Quit
-			}
-			$$$ThrowOnError(##class(AgenticProd.Demo).Reset(1))
-			Write {"ok":true,"note":"Demo data reset."}.%ToJSON()
-			Quit
-		}
-		Set tCases = []
-		If pAction = "send" {
-			Set tCase = tBody.case
-			If (tCase'?1.2N) || (tCase<1) || (tCase>60) {
-				Set %response.Status = ..#HTTP400BADREQUEST
-				Write {"error":"Choose a demo case from 01 to 60"}.%ToJSON()
-				Quit
-			}
-			Do tCases.%Push(tCase)
-		} ElseIf pAction = "claims" {
-			Do tCases.%Push("01"), tCases.%Push("05"), tCases.%Push("18")
-		} ElseIf pAction = "burst" {
-			Do tCases.%Push("01"), tCases.%Push("02"), tCases.%Push("03"), tCases.%Push("05")
-			Do tCases.%Push("07"), tCases.%Push("13"), tCases.%Push("15"), tCases.%Push("18")
-		} Else {
-			Set %response.Status = ..#HTTP400BADREQUEST
-			Write {"error":"Unknown demo action"}.%ToJSON()
-			Quit
-		}
-		Set tTasks = [], tStamp = $TRANSLATE($ZDATETIME($ZTIMESTAMP, 3), " :.-", "")
-		For i = 0:1:tCases.%Size()-1 {
-			Set tCase = tCases.%Get(i), tControl = "DEMO"_tStamp_"-"_(i+1)
-			$$$ThrowOnError(##class(AgenticProd.Demo).SendCase(tCase, tControl, , .tFile))
-			Do tTasks.%Push({"case":(tCase),"controlId":(tControl),"status":"queued"})
-		}
-		Write {"ok":true,"tasks":(tTasks)}.%ToJSON()
-	} Catch ex {
-		Set tSC = ex.AsStatus()
-	}
-	Quit tSC
 }
 
 /// PUT /settings/providers|agents|guardrails|budgets|prices with the section's fields as JSON.

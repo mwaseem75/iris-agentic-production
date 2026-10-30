@@ -61,7 +61,7 @@ Parameter RESETDIRS = "/home/irisowner/dev/data/in/,/home/irisowner/dev/data/out
 /// production message, resets LabCodeMap and LearnedMapping to the Setup seed and empties RESETDIRS. EvalRun,
 /// EvalResult, eval Usage rows and the live runs replay reads (Usage rows with a CaseId) stay.
 /// Writes and logs what it removed.
-ClassMethod Reset(pQuiet As %Boolean = 0) As %Status
+ClassMethod Reset() As %Status
 {
 	Set tSC = $$$OK
 	Try {
@@ -81,7 +81,7 @@ ClassMethod Reset(pQuiet As %Boolean = 0) As %Status
 			Set tText = tText_$SELECT(tText '= "": ", ", 1: "")_tKey_" "_tCount(tKey)
 		}
 		Set tText = "Demo.Reset removed "_tText_"; LabCodeMap back to the Setup seed"
-		If 'pQuiet Write tText, !
+		Write tText, !
 		$$$LOGINFO(tText)
 	} Catch ex {
 		Set tSC = ex.AsStatus()
