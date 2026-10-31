@@ -6,8 +6,10 @@
 <title>Agentic Production</title>
 <style>
 :root {
-  --bg: #f6f7f9; --panel: #ffffff; --text: #1c2430; --muted: #5f6b7a; --line: #e2e6eb;
-  --accent: #2563a8; --good: #1f7a4d; --warn: #9a6400; --bad: #b42318;
+  --bg: #f4f5f7; --panel: #ffffff; --text: #1c2430; --muted: #5f6b7a; --line: #e3e6ea;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; --radius: 16px; --shadow: 0 1px 2px rgba(16,24,40,.05);
+  --s1: 8px; --s2: 16px; --s3: 24px;
+  --accent: #1d6fd1; --good: #1f7a4d; --warn: #9a6400; --bad: #b42318;
   --good-bg: #e7f4ec; --warn-bg: #fdf3e1; --bad-bg: #fdeceb; --info-bg: #e8f0fa;
   --bar: #2563a8; --bar-bg: #e2e6eb;
   /* Outcome groups: same colours in tags, the decision mix and the timeline */
@@ -251,42 +253,121 @@ td.go { white-space: nowrap; }
   .mini { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .chart { height: 220px; }
 }
+
+/* ---- console style: cards, grid, header bar, help panel (tokens are in :root) ---- */
+body { font: 14px/1.5 var(--font); }
+.wrap { max-width: 1280px; padding: 0 24px 48px; }
+.appbar { background: var(--panel); border-bottom: 1px solid var(--line); margin: 0 -24px 24px; padding: 14px 24px 0; }
+.appbar-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.appbar h1 { font-size: 20px; font-weight: 600; }
+.appbar .lede { margin: 2px 0 0; flex-basis: 100%; font-size: 13px; }
+.appbar .tabs { border-bottom: 0; margin: 12px 0 0; }
+.chip { display: inline-block; border: 1px solid var(--line); border-radius: 12px; padding: 0 10px; line-height: 22px; font-size: 12px; color: var(--muted); background: var(--bg); }
+.tabs button { padding: 10px 16px; font-size: 14px; }
+.tabs button[aria-selected="true"] { border-bottom-width: 3px; }
+h2 { font-size: 18px; font-weight: 600; margin: 0 0 12px; }
+section.panel, .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px; margin-bottom: 24px; min-width: 0; }
+.card-h { display: flex; align-items: center; gap: 8px 12px; margin: 0 0 12px; }
+.card-h h2 { margin: 0; flex: 1; min-width: 0; }
+.card-h h2 .muted { font-size: 13px; font-weight: 400; }
+.card-h .info { border: 0; background: transparent; padding: 0; font-size: 13px; color: var(--accent); }
+.card-h .info:hover { text-decoration: underline; }
+.card-f { border-top: 1px solid var(--line); margin: 16px -20px -4px; padding: 12px 20px 0; font-size: 13px; }
+.card-desc { margin: -6px 0 12px; color: var(--muted); font-size: 13px; }
+.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; margin-bottom: 24px; align-items: start; }
+.grid > .card { margin-bottom: 0; }
+.grid > .span2 { grid-column: span 2; }
+.tiles { gap: 12px; margin-bottom: 0; }
+.tiles.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.tile { background: #f8f9fb; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.tile .value { font-size: 30px; font-weight: 600; line-height: 1.2; }
+.tile .label { font-size: 12px; }
+button { border-radius: 8px; padding: 6px 14px; }
+a.btn { border-radius: 8px; padding: 6px 14px; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.primary:hover { filter: brightness(1.08); }
+input, select { border-radius: 8px; padding: 6px 10px; }
+.chart-card { border-radius: 12px; }
+.rlist { list-style: none; margin: 0; padding: 0; }
+.rlist li { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.rlist li:last-child { border-bottom: 0; }
+.rlist .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; background: var(--c-other); }
+.rlist .txt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rlist .txt small { display: block; color: var(--muted); font-size: 12px; }
+.gs { list-style: none; margin: 0; padding: 0; counter-reset: gs; }
+.gs li { counter-increment: gs; display: flex; align-items: center; gap: 12px; padding: 8px 0; }
+.gs li::before { content: counter(gs); width: 26px; height: 26px; border-radius: 50%; background: var(--info-bg); color: var(--accent); font-weight: 600; display: flex; align-items: center; justify-content: center; flex: none; }
+.gs li > * { flex: 1; text-align: left; }
+.kill { border: 2px solid var(--bad); border-radius: 12px; }
+#help-back { position: fixed; inset: 0; background: rgba(0,0,0,.25); z-index: 60; }
+#help-panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(380px, 100vw); background: var(--panel); border-left: 1px solid var(--line); box-shadow: -4px 0 18px rgba(0,0,0,.15); z-index: 61; padding: 24px; overflow-y: auto; }
+#help-panel h2 { font-size: 18px; }
+#help-panel p { margin: 0 0 12px; }
+@media (max-width: 1100px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .grid > .span2 { grid-column: span 2; } }
+@media (max-width: 700px) {
+  .wrap { padding: 0 16px 32px; }
+  .appbar { margin: 0 -16px 16px; padding: 12px 16px 0; }
+  .grid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .grid > .span2 { grid-column: auto; }
+  section.panel, .card { padding: 16px; margin-bottom: 16px; }
+  .card-f { margin: 16px -16px -4px; padding: 12px 16px 0; }
+  .tabs { overflow-x: auto; }
+}
 </style>
 </head>
 <body>
+<div id="help-back" class="hidden"></div>
+<aside id="help-panel" class="hidden" role="dialog" aria-label="About this card"><button type="button" id="help-close" style="float:right">Close</button><h2 id="help-title"></h2><div id="help-body"></div></aside>
 <div class="wrap">
-  <header>
-    <h1>Agentic Production</h1>
-    <span class="spacer"></span>
-    <label class="toggle"><input type="checkbox" id="incl-eval"> Include eval runs</label>
-    <span class="muted" id="updated"></span>
-    <a class="btn hidden" id="prod-link" target="_blank" rel="noopener">Production</a>
-    <a class="btn hidden" id="inbox-link" target="_blank" rel="noopener">Workflow inbox</a>
-    <button id="refresh" type="button">Refresh</button>
-  </header>
-  <p class="lede">An AI agent triages failed HL7 messages. A deterministic Triage step decides what is applied; a person approves the rest.</p>
+  <div class="appbar">
+    <div class="appbar-top">
+      <h1>Agentic Production</h1>
+      <span class="chip hidden" id="hdr-ns"></span>
+      <span class="chip hidden" id="hdr-user"></span>
+      <span class="spacer"></span>
+      <label class="toggle"><input type="checkbox" id="incl-eval"> Include eval runs</label>
+      <span class="muted" id="updated"></span>
+      <a class="btn hidden" id="prod-link" target="_blank" rel="noopener">Production</a>
+      <a class="btn hidden" id="inbox-link" target="_blank" rel="noopener">Workflow inbox</a>
+      <button id="refresh" type="button">Refresh</button>
+      <p class="lede">An AI agent triages failed HL7 messages. A deterministic Triage step decides what is applied; a person approves the rest.</p>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button type="button" role="tab" data-tab="overview" aria-selected="true">Overview</button>
+      <button type="button" role="tab" data-tab="messages" aria-selected="false">Messages</button>
+      <button type="button" role="tab" data-tab="evaluation" aria-selected="false">Evaluation</button>
+      <button type="button" role="tab" data-tab="cost" aria-selected="false">Cost</button>
+      <button type="button" role="tab" data-tab="settings" aria-selected="false">Settings</button>
+    </nav>
+  </div>
   <p class="kill-banner hidden" id="kill-banner" role="alert">AI kill switch is ON: every failed message goes to a person, no LLM call. Turn it off on the Settings tab.</p>
-  <nav class="tabs" role="tablist">
-    <button type="button" role="tab" data-tab="overview" aria-selected="true">Overview</button>
-    <button type="button" role="tab" data-tab="messages" aria-selected="false">Messages</button>
-    <button type="button" role="tab" data-tab="evaluation" aria-selected="false">Evaluation</button>
-    <button type="button" role="tab" data-tab="cost" aria-selected="false">Cost</button>
-    <button type="button" role="tab" data-tab="settings" aria-selected="false">Settings</button>
-  </nav>
   <p class="err hidden" id="error"></p>
 
   <div class="tabpanel" id="tab-overview" role="tabpanel">
-    <h2 class="row-label">What happened</h2>
-    <div class="tiles" id="tiles-what"></div>
-    <h2 class="row-label">Trust and learning</h2>
-    <div class="tiles five" id="tiles-trust"></div>
-    <h2 class="row-label">Cost</h2>
-    <div class="tiles three" id="tiles-cost"></div>
+    <div class="grid">
+      <section class="card" data-info="health"><h2>Production health</h2>
+        <div class="tiles two" id="tiles-what"></div></section>
+      <section class="card" data-info="trust"><h2>Trust &amp; safety</h2>
+        <div class="tiles two" id="tiles-trust"></div></section>
+      <section class="card" data-info="aicost" data-foot="Go to Cost" data-foot-tab="cost"><h2>AI cost</h2>
+        <div class="tiles two" id="tiles-cost"></div></section>
+      <section class="card span2" data-info="recent" data-foot="All messages" data-foot-tab="messages"><h2>Recent decisions</h2>
+        <ul class="rlist" id="ov-recent"></ul></section>
+      <section class="card" data-info="mix"><h2>Outcome mix</h2>
+        <div class="chart" id="ch-outcomes"></div></section>
+      <section class="card" data-info="start"><h2>Getting started</h2>
+        <ol class="gs">
+          <li><button type="button" id="gs-1">Send one replay message</button></li>
+          <li><button type="button" id="gs-2">View flow of the latest message</button></li>
+          <li><a class="btn" id="gs-3" target="_blank" rel="noopener">Open the Workflow inbox</a></li>
+          <li><button type="button" id="gs-4">Send a burst</button></li>
+        </ol>
+        <p class="msg" id="gs-msg"></p></section>
+    </div>
 
     <section class="panel">
       <h2>Agent metrics <span class="muted" id="met-scope"></span></h2>
       <div class="charts">
-        <div class="chart-card"><h3>Final outcomes</h3><div class="chart" id="ch-outcomes"></div></div>
         <div class="chart-card"><h3>Agent proposed vs Triage did</h3><p class="note">Bar: the agent's decision. Colour: what finally happened.</p><div class="chart" id="ch-agentfinal"></div></div>
         <div class="chart-card"><h3>Tokens by type per model</h3><p class="note">Live runs, replays left out. Parts add up to the total.</p><div class="chart" id="ch-tokens"></div></div>
         <div class="chart-card"><h3>Agent latency per model (s)</h3><div class="chart" id="ch-latency"></div></div>
@@ -365,14 +446,14 @@ td.go { white-space: nowrap; }
 
   <div class="tabpanel hidden" id="tab-cost" role="tabpanel">
     <p class="muted">Last 30 days, UTC (<span id="cost-scope">live</span>). Costs come from the recorded agent runs and the price table; the forecast and ROI are estimates.</p>
-    <h2 class="row-label">Spend</h2>
-    <div class="tiles five" id="tiles-cost-spend"></div>
-    <h2 class="row-label">Savings</h2>
-    <div class="tiles three" id="tiles-cost-save"></div>
-    <h2 class="row-label">Return on investment</h2>
-    <div class="tiles three" id="tiles-cost-roi"></div>
+    <section class="card"><h2>Spend</h2>
+      <div class="tiles five" id="tiles-cost-spend"></div></section>
+    <section class="card"><h2>Savings</h2>
+      <div class="tiles three" id="tiles-cost-save"></div></section>
+    <section class="card"><h2>Return on investment</h2>
+      <div class="tiles three" id="tiles-cost-roi"></div></section>
     <p class="note" id="cost-assume"></p>
-    <section class="panel">
+    <section class="panel"><h2>Where the money goes</h2>
       <div class="charts">
         <div class="chart-card"><h3>Cost per day by model (USD)</h3><div class="chart" id="ch-costday"></div></div>
         <div class="chart-card"><h3>Cost by production (USD)</h3><div class="chart" id="ch-costns"></div></div>
@@ -618,6 +699,135 @@ function renderSummary(s, m) {
   );
 }
 
+// ---- cards: Info link and footer link, built from data-info / data-foot ----
+var CARD_INFO = {
+  health: ["Production health", "Counts of failed messages the agent has triaged and what happened to them: fixed automatically, sent to a person, or rejected.", "Only whitelisted, meaning-preserving fixes are applied automatically. Everything else waits for a reviewer."],
+  trust: ["Trust & safety", "These numbers show where the deterministic Triage step overruled or checked the agent.", "Grounding catches claims the agent could not trace to the message, its tool results or the LOINC knowledge base. A reviewer approves every learned mapping."],
+  aicost: ["AI cost", "Spend on LLM calls today, the cost of one message and the share of the daily token budget used.", "Replays and learned mappings cost nothing. Go to the Cost tab for the month, the forecast and the savings."],
+  recent: ["Recent decisions", "The newest messages the agent looked at, with the final outcome after Triage.", "Use View flow to see the path of one message step by step, including tool calls and the guardrail checks."],
+  mix: ["Outcome mix", "Final outcomes of triaged messages, grouped the same way as the status chips.", "Colours match the status chips used on the Messages tab."],
+  start: ["Getting started", "Four steps to see the system work from start to finish.", "Sending a message or a burst needs an account that may edit settings. Replay runs use recorded agent answers, so they cost nothing."],
+  "Send a burst": ["Send a burst", "Sends random evaluation cases as new messages so you can watch them move through the production.", "Replay mode costs nothing. Live mode calls the model and asks for confirmation first."],
+  "Recent decisions": ["Recent decisions", "Every message the agent has handled, newest first.", "Click a row or View flow to open its path, the agent's tool calls and the checks Triage ran."],
+  "Eval runs": ["Eval runs", "Each run scores the agent against labelled test cases.", "Select a run to see every case, what the agent proposed and whether it matched."],
+  "Providers": ["Providers & keys", "Model providers and API keys the agent can use.", "Keys are stored in the Wallet and shown only as set or not set."],
+  "Agents": ["Agents", "Settings of the triage agent: model, temperature and limits.", "The instructions are read-only here; they live in the agent class."],
+  "Guardrails": ["Guardrails", "Switches for the checks that run after the agent and before Triage acts.", "Injection and grounding checks can only make the outcome safer, never less safe."],
+  "Budgets": ["Budgets & mode", "Daily token budget, replay or live mode and the kill switch.", "When the budget is used up or the kill switch is on, every failed message goes to a person."],
+  "Prices": ["Prices", "Token prices per model, used to compute every cost figure.", "Change a price and later cost figures use it; recorded runs keep the price they were made with."],
+  "Productions": ["Productions", "Which productions have the AI plug-in enabled.", "Turning a production off sends its failures to a person without calling the agent."],
+  "Memory": ["Memory", "Code mappings learned from reviewer approvals.", "A learned mapping answers the same code next time without an LLM call. You can revoke one at any time."],
+  "Change log": ["Change log", "Who changed which setting and when.", "The last 50 changes are shown."],
+  "Agent metrics": ["Agent metrics", "Charts of outcomes, tokens, latency and tool use for recent agent runs.", "Open More metrics for hourly mix, tool timings and validation results."]
+};
+var SETTING_CARDS = ["Providers", "Agents", "Guardrails", "Budgets", "Prices", "Productions", "Memory", "Change log"];
+
+function openHelp(key) {
+  var h = CARD_INFO[key];
+  if (!h) return;
+  document.getElementById("help-title").textContent = h[0];
+  var b = document.getElementById("help-body");
+  b.replaceChildren();
+  h.slice(1).forEach(function (t) { b.appendChild(el("p", t)); });
+  document.getElementById("help-back").classList.remove("hidden");
+  document.getElementById("help-panel").classList.remove("hidden");
+}
+function closeHelp() {
+  document.getElementById("help-back").classList.add("hidden");
+  document.getElementById("help-panel").classList.add("hidden");
+}
+
+// Wraps the first h2 of every card in a header row with an Info link; adds the footer link
+function cardify() {
+  Array.prototype.forEach.call(document.querySelectorAll("section.card, section.panel"), function (c) {
+    if (c.classList.contains("fl-mapbox") || c.dataset.carded) return;
+    var h2 = c.querySelector(":scope > h2");
+    if (!h2) return;
+    c.dataset.carded = "1";
+    var key = c.dataset.info;
+    if (!key) {
+      var t = h2.firstChild ? h2.firstChild.textContent.trim() : "";
+      key = Object.keys(CARD_INFO).filter(function (k) { return t.indexOf(k) === 0; })[0];
+    }
+    var head = el("div", null, "card-h");
+    c.insertBefore(head, h2);
+    head.appendChild(h2);
+    if (key) {
+      var info = el("button", "Info", "info");
+      info.type = "button";
+      info.addEventListener("click", function () { openHelp(key); });
+      head.appendChild(info);
+      if (SETTING_CARDS.indexOf(key) >= 0) {
+        var d = el("p", CARD_INFO[key][1], "card-desc");
+        head.insertAdjacentElement("afterend", d);
+      }
+    }
+    if (c.dataset.foot) {
+      var f = el("div", null, "card-f");
+      var a = el("a", c.dataset.foot + " →");
+      a.href = "#";
+      a.addEventListener("click", function (e) { e.preventDefault(); showTab(c.dataset.footTab); });
+      f.appendChild(a);
+      c.appendChild(f);
+    }
+  });
+}
+
+// Overview list: the newest decisions as icon, message, status chip and View flow
+function renderRecent(rows) {
+  var ul = document.getElementById("ov-recent");
+  ul.replaceChildren();
+  rows.forEach(function (d) {
+    var li = el("li");
+    var kind = outcomeKind(d.Outcome);
+    var dot = el("span", null, "dot");
+    dot.style.background = { good: "var(--c-applied)", warn: "var(--c-approval)", bad: "var(--c-rejected)", info: "var(--c-resent)" }[kind] || "var(--c-other)";
+    li.appendChild(dot);
+    var txt = el("span", null, "txt");
+    txt.appendChild(document.createTextNode(d.ControlId || (d.EvalRunId ? "EV" + d.EvalRunId + "-" + d.CaseId : "hdr " + d.HeaderId)));
+    txt.appendChild(el("small", (d.ErrorClass || "") + (d.CreatedAt ? " · " + d.CreatedAt.substring(5, 16) : "")));
+    li.appendChild(txt);
+    li.appendChild(tag(d.Outcome || "—", kind));
+    var go = el("button", "View flow");
+    go.type = "button";
+    var rowNs = d.Namespace || homeNs || "IRISAPP";
+    go.addEventListener("click", function () { window.flowOpen(d.ID, rowNs); });
+    li.appendChild(go);
+    ul.appendChild(li);
+  });
+  if (!rows.length) ul.appendChild(el("li", "No decisions yet.", "muted"));
+}
+
+// Getting started buttons use the existing burst endpoint and the existing View flow
+function startSteps() {
+  var msg = document.getElementById("gs-msg");
+  document.getElementById("gs-1").addEventListener("click", function () {
+    msg.className = "msg"; msg.textContent = "";
+    send("POST", "api/burst", { n: 1, mode: "replay", ns: homeNs || "IRISAPP", confirm: false }).then(function () {
+      msg.className = "msg ok"; msg.textContent = "Sent one replay message. It appears under Recent decisions in a few seconds.";
+      setTimeout(load, 4000);
+    }).catch(function (e) { msg.className = "msg bad"; msg.textContent = e.message; });
+  });
+  document.getElementById("gs-2").addEventListener("click", function () {
+    var first = document.querySelector("#decisions tr[data-id]");
+    if (first) { showTab("messages"); first.click(); } else { msg.className = "msg bad"; msg.textContent = "No message yet. Send one first."; }
+  });
+  var inbox = document.getElementById("inbox-link");
+  var gs3 = document.getElementById("gs-3");
+  new MutationObserver(function () { gs3.href = inbox.href; }).observe(inbox, { attributes: true });
+  document.getElementById("gs-4").addEventListener("click", function () {
+    showTab("messages");
+    var b = document.getElementById("burst-box");
+    if (b) b.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+  document.getElementById("help-close").addEventListener("click", closeHelp);
+  document.getElementById("help-back").addEventListener("click", closeHelp);
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeHelp(); });
+}
+cardify();
+startSteps();
+
+
 function noAgentText(why) {
   if (why === "agent error") return "agent gave no decision";
   return "no agent call" + (why ? " (" + why + ")" : "");
@@ -632,6 +842,7 @@ function renderDecisions(rows) {
   document.getElementById("dec-more").classList.toggle("hidden", !more);
   document.getElementById("dec-count").textContent = "(" + (includeEval ? "live and eval" : "live") + ", last " + rows.length + ")";
   document.getElementById("dec-note").classList.toggle("hidden", includeEval || rows.length > 0);
+  renderRecent(rows.slice(0, 6));
   rows.forEach(function (d) {
     var tr = el("tr", null, "click" + (d.ID === selectedDecision ? " sel" : ""));
     tr.tabIndex = 0;
@@ -1179,13 +1390,14 @@ function fillNsFilter(list) {
   var sel = document.getElementById("dec-ns");
   var items = [["", "All productions"]];
   list.forEach(function (p) {
-    if (p.native) homeNs = p.namespace;
+    if (p.native) { homeNs = p.namespace; var hn = document.getElementById("hdr-ns"); hn.textContent = "Namespace " + homeNs; hn.classList.remove("hidden"); }
     if (p.enabled) items.push([p.namespace, prodLabel(p)]);
   });
   fillSelect(sel, items, decNs);
 }
 function renderSettings(s) {
   settings = s;
+  if (s.user) { var hu = document.getElementById("hdr-user"); hu.textContent = "Signed in as " + s.user; hu.classList.remove("hidden"); }
   var edit = s.canEdit;
   document.getElementById("set-readonly").classList.toggle("hidden", edit);
   setKillBanner(s.budgets.KillSwitch);
