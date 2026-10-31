@@ -706,7 +706,7 @@ ClassMethod GroundingStep(pLog As AgenticProd.Data.DecisionLog, ByRef pSecrets) 
 	}
 	If tGround.grounded {
 		Do tStep.%Set("status", "passed")
-		Do tStep.%Set("text", "Triage traced every claim in the proposal to the message, this run's tool results or the LOINC knowledge base ("_tStep.checks.%Size()_" checks).")
+		Do tStep.%Set("text", "Triage traced every claim in the proposal to the message, this run's tool results or the LOINC knowledge base ("_tStep.checks.%Size()_" check"_$SELECT(tStep.checks.%Size()=1: "", 1: "s")_").")
 	} Else {
 		Do tStep.%Set("status", $SELECT(tGround.strictness = "warn": "warned", 1: "caught"))
 		Do tStep.%Set("text", "Some claims could not be traced ("_$TRANSLATE(tGround.failed, ",", " ")_"). "_$SELECT(tGround.strictness = "warn": "Grounding is in warn mode, so this was recorded and shown to the reviewer only.", 1: "Grounding is enforced, so the proposal was not acted on and went to a person."))

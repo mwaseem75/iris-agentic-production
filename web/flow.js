@@ -268,8 +268,9 @@
       g.sub.appendChild(row); g[r] = mark;
     });
     mkNode("triage", 722, 92, 96, 96, "Triage", "triage", "main");
-    var gap = outs.length > 1 ? Math.min(78, 250 / (outs.length - 1)) : 0, y0 = outs.length > 1 ? 8 : 100;
-    outs.forEach(function (k, i) { mkNode(k, 840, y0 + i * gap, 152, 70, nodeTitle(k), outIcon(k)); });
+    // the human review card carries wrapped status text, so it is the tall one
+    var oh = function (k) { return k === "out:human" ? 108 : 56; }, oy = outs.length > 1 ? 8 : 100;
+    outs.forEach(function (k) { mkNode(k, 840, oy, 152, oh(k), nodeTitle(k), outIcon(k)); oy += oh(k) + 8; });
     SUBS.forEach(function (k, i) { mkNode(k, 8 + i * 166, 312, 156, 136, SUB_TITLE[k], k); });
     (ag.tools || []).forEach(function (t) { if (t !== "search_loinc" && t !== "load_skill") cvUi.tools.sub.appendChild(h("span", "chip", t)); });
     (ag.skills || []).forEach(function (t) { cvUi.skills.sub.appendChild(h("span", "chip", t)); });
@@ -378,7 +379,7 @@
     if (!ag.used) live = first < 0 && cur >= 0 ? "agent not used" : "";
     else if (cur >= first && first >= 0) {
       if (cur < last || (cur === last && prog < 1)) live = cs.kind === "tool" ? "calling " + cs.tool : "model call";
-      else if (cur >= last) live = "Decision: " + ag.decision + (ag.confidence !== "" ? " · confidence " + Number(ag.confidence).toFixed(2) : "") + "\n" + ag.tokens + " tokens · $" + Number(ag.costUsd).toFixed(5);
+      else if (cur >= last) live = "Decision: " + ag.decision + (ag.confidence !== "" && Number(ag.confidence) > 0 ? " · confidence " + Number(ag.confidence).toFixed(2) : "") + "\n" + ag.tokens + " tokens · $" + Number(ag.costUsd).toFixed(5);
     }
     cvUi.agent.live.textContent = live;
     if (!cvUi.tools.sub.firstChild) cvUi.tools.sub.textContent = "no tool called";
