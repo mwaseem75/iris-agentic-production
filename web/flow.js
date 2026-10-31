@@ -148,7 +148,7 @@
   }
 
   // ---- workflow canvas ----
-  var CW = 960, CH = 460;
+  var CW = 960, CH = 560;
   var ORDER = ["trigger", "router", "agent", "guard", "triage"];
   var SUBS = ["model", "memory", "tools", "skills", "knowledge", "policies"];
   var ICON = {
@@ -198,10 +198,19 @@
 
   function mkNode(key, x, y, w, hh, title, ico, extra) {
     var n = h("div", "fl-nd" + (extra ? " " + extra : ""));
+    if (SUBS.indexOf(ico) >= 0) n.classList.add("subn");
     n.style.left = x + "px"; n.style.top = y + "px"; n.style.width = w + "px"; n.style.height = hh + "px";
     var head = h("div", "h"), st = h("span", "st"), sub = h("div", "s");
-    head.appendChild(icon(ico)); head.appendChild(h("span", null, title)); head.appendChild(st);
-    n.appendChild(head); n.appendChild(sub);
+    var wrapIco = SUBS.indexOf(ico) >= 0 || extra === "agent";
+    var ic = icon(ico);
+    if (wrapIco) { var ring = h("span", "ico"); ring.appendChild(ic); head.appendChild(ring); } else head.appendChild(ic);
+    if (extra === "agent") {
+      var tt = h("span", "tt"), b = h("b", null, title);
+      tt.appendChild(b); tt.appendChild(sub); head.appendChild(tt); head.appendChild(st); n.appendChild(head);
+    } else {
+      var tl = h("span", null, title); tl.title = title;
+      head.appendChild(tl); head.appendChild(st); n.appendChild(head); n.appendChild(sub);
+    }
     n.appendChild(h("span", "port i")); n.appendChild(h("span", "port o"));
     cv.root.appendChild(n);
     cvUi[key] = { el: n, st: st, sub: sub, x: x, y: y, w: w, h: hh };
@@ -236,19 +245,19 @@
     var ag = J.agent || {}, outs = [];
     J.steps.forEach(function (st) { var k = keyOf(st); if (/^out:/.test(k) && outs.indexOf(k) < 0) outs.push(k); });
     if (J.outcome === "rejected" && outs.indexOf("out:Rejected") < 0) outs.push("out:Rejected");
-    mkNode("trigger", 10, 82, 108, 76, "Trigger", "trigger");
-    mkNode("router", 148, 82, 108, 76, "Router", "router");
-    mkNode("agent", 286, 62, 212, 116, "AI Hub Agent", "agent", "agent").sub.textContent = (ag.name || "TriageAgent") + " · " + (ag["class"] || "%AI.Agent");
-    var g = mkNode("guard", 528, 62, 132, 116, "Guardrails", "guard");
+    mkNode("trigger", 8, 102, 96, 96, "Trigger", "trigger");
+    mkNode("router", 128, 102, 96, 96, "Router", "router");
+    mkNode("agent", 252, 65, 244, 170, "AI Hub Agent", "agent", "agent").sub.textContent = (ag.name || "TriageAgent") + " · " + (ag["class"] || "%AI.Agent");
+    var g = mkNode("guard", 528, 85, 124, 130, "Guardrails", "guard");
     GUARDS.forEach(function (r) {
       var row = h("div", "rw"), mark = h("i", null, "·");
       row.appendChild(mark); row.appendChild(h("span", null, r.charAt(0).toUpperCase() + r.slice(1)));
       g.sub.appendChild(row); g[r] = mark;
     });
-    mkNode("triage", 690, 82, 96, 76, "Triage", "triage");
-    var gap = outs.length > 1 ? Math.min(60, 280 / (outs.length - 1)) : 0, y0 = outs.length > 1 ? 14 : 100;
-    outs.forEach(function (k, i) { mkNode(k, 816, y0 + i * gap, 134, 50, nodeTitle(k), outIcon(k)); });
-    SUBS.forEach(function (k, i) { mkNode(k, 10 + i * 158, 300, 148, 120, SUB_TITLE[k], k); });
+    mkNode("triage", 684, 102, 92, 96, "Triage", "triage");
+    var gap = outs.length > 1 ? Math.min(88, 290 / (outs.length - 1)) : 0, y0 = outs.length > 1 ? 10 : 112;
+    outs.forEach(function (k, i) { mkNode(k, 812, y0 + i * gap, 140, 72, nodeTitle(k), outIcon(k)); });
+    SUBS.forEach(function (k, i) { mkNode(k, 8 + i * 158, 390, 148, 150, SUB_TITLE[k], k); });
     (ag.tools || []).forEach(function (t) { if (t !== "search_loinc" && t !== "load_skill") cvUi.tools.sub.appendChild(h("span", "chip", t)); });
     (ag.skills || []).forEach(function (t) { cvUi.skills.sub.appendChild(h("span", "chip", t)); });
     for (var i = 0; i < ORDER.length - 1; i++) wire(ORDER[i], ORDER[i + 1]);
@@ -258,6 +267,8 @@
     cv.label = svg("text", { "class": "wl", x: -80, y: -50 }, "1 message");
     wires.appendChild(cv.dot); wires.appendChild(cv.label);
   }
+  // Sub text of a node; the card's tooltip carries the full text when the card clips it
+  function setSub(key, text) { cvUi[key].sub.textContent = text; cvUi[key].el.title = text.replace(/\n/g, " · "); }
   function fitCanvas() {
     var wrap = $("fl-wrap"), root = $("fl-canvas");
     if (!wrap || !root || !wrap.clientWidth) return;
@@ -307,10 +318,10 @@
       m.textContent = v === "ok" ? "✓" : v === "bad" ? "✕" : "·";
       m.style.color = v === "ok" ? "#36a56b" : v === "bad" ? "#ef6a5b" : "#6b7c92";
     });
-    cvUi.model.sub.textContent = ag.used ? ag.provider + " · " + ag.model + (ag.replay ? " (replay)" : "") + "\n" + tokens + " tokens · $" + cost.toFixed(5) : "agent not used";
-    cvUi.memory.sub.textContent = (ag.sessionId ? "session " + ag.sessionId : "no agent session") + (learned ? "\nlearned " + learned : "");
-    cvUi.knowledge.sub.textContent = "search_loinc on IRIS vector search" + (searches ? "\n" + searches + " search" + (searches > 1 ? "es" : "") + " run" : "");
-    cvUi.policies.sub.textContent = "ReadOnly + Audit\nallowed " + allowed + " · denied " + denied;
+    setSub("model", ag.used ? ag.provider + " · " + ag.model + (ag.replay ? " (replay)" : "") + "\n" + tokens + " tokens · $" + cost.toFixed(5) : "agent not used");
+    setSub("memory", (ag.sessionId ? "session " + ag.sessionId : "no agent session") + (learned ? "\nlearned " + learned : ""));
+    setSub("knowledge", "search_loinc on IRIS vector search" + (searches ? "\n" + searches + " search" + (searches > 1 ? "es" : "") + " run" : ""));
+    setSub("policies", "ReadOnly + Audit\nallowed " + allowed + " · denied " + denied);
     Array.prototype.forEach.call(cvUi.tools.sub.querySelectorAll(".chip"), function (c) { c.classList.toggle("on", !!called[c.textContent]); });
     Array.prototype.forEach.call(cvUi.skills.sub.querySelectorAll(".chip"), function (c) { c.classList.toggle("on", !!called.load_skill); });
     if (!cvUi.tools.sub.firstChild) cvUi.tools.sub.textContent = "no tool called";
@@ -320,8 +331,16 @@
       if (prog < 1) { le.classList.remove("pulse"); void le.offsetWidth; le.classList.add("pulse"); }
     }
     if (denied) cvUi.policies.el.classList.add("bad");
+    cvUi.agent.el.classList.toggle("glow", prog < 1 && /^(agent|tool)$/.test((J.steps[cur] || {}).kind || ""));
     var hs = J.steps.filter(function (x) { return x.kind === "workflow"; })[0];
-    if (cvUi["out:human"]) cvUi["out:human"].sub.textContent = hs && J.steps.indexOf(hs) <= cur ? (hs.waitLabel || (hs.status === "wait" ? "waiting for the reviewer" : hs.status === "bad" ? "rejected" : "approved")) : "";
+    if (cvUi["out:human"]) {
+      var reached = hs && J.steps.indexOf(hs) <= cur, txt = "";
+      if (reached) {
+        var wl = hs.waitLabel || "", who = /for (.+)$/.exec(wl), wait = wl.replace(/ for .*$/, "");
+        txt = (hs.status === "wait" ? "waiting for the reviewer" : hs.status === "bad" ? "rejected by " + (who ? who[1] : "reviewer") : "approved by " + (who ? who[1] : "reviewer")) + (wait ? "\n" + wait : "");
+      }
+      setSub("out:human", txt);
+    }
     Object.keys(cv.paths).forEach(function (p) { cv.paths[p].classList.remove("on", "lit", "bad"); });
     for (i = 1; i < seq.length; i++) { var w = cv.paths[seq[i - 1] + ">" + seq[i]]; if (w) w.classList.add("on"); }
     if (lit && cv.paths["agent>" + lit]) { var sw = cv.paths["agent>" + lit]; sw.classList.add("lit"); if (litBad) sw.classList.add("bad"); }
