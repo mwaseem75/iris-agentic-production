@@ -87,6 +87,8 @@ ClassMethod Build(pLog As AgenticProd.Data.DecisionLog, pNs As %String, pItems A
 	// Sort hops into the phases of the path
 	Set tIter = pHops.%GetIterator()
 	While tIter.%GetNext(, .tHop) {
+		// old item names kept in stored history map to the renamed items
+		Do tHop.%Set("From", ##class(AgenticProd.UI.Flow).Alias(tHop.From)), tHop.%Set("To", ##class(AgenticProd.UI.Flow).Alias(tHop.To))
 		Set tSrc = pItems.%Get($ZCONVERT(tHop.From, "U")), tDst = pItems.%Get($ZCONVERT(tHop.To, "U"))
 		Set tSrcLane = $SELECT($IsObject(tSrc): tSrc.lane, 1: ""), tDstLane = $SELECT($IsObject(tDst): tDst.lane, 1: "")
 		If (tHop.SessionId '= tS0) || ((tReviewed '= "") && (tHop.T0 ] tReviewed)) {
@@ -221,7 +223,9 @@ ClassMethod AddHops(pSteps As %DynamicArray, pHops As %DynamicArray, pKind As %S
 		Set tKind = pKind, tTitle = $SELECT(pTitle '= "": pTitle_": ", 1: "")_tHop.From_" to "_tHop.To
 		Set:pKind="resend" tTitle = "Resend: "_tHop.From_" to "_tHop.To
 		Set tMs = ..Diff(tHop.T0, tHop.T1)
-		Set tText = $SELECT(tHop.T1 = "": "Still open.", 1: "Handled in "_$SELECT(tMs > 0: tMs, 1: 0)_" ms.")_$SELECT(tHop.Error: " The hop ended in an error.", 1: "")
+		Set tText = $SELECT(tHop.T1 = "": "Still open.", 1: "Handled in "_$SELECT(tMs > 0: tMs, 1: 0)_" ms.")
+		// this hop covers the whole Triage run, agent included
+		If (pKind = "hop") && (pTitle [ "to Triage") Set tText = $SELECT(tHop.T1 = "": "Still open.", 1: "Triage total (includes agent): "_$FNUMBER($SELECT(tMs > 0: tMs, 1: 0) / 1000, "", 1)_" s.")_$SELECT(tHop.Error: " The hop ended in an error.", 1: "")
 		Do ..Add(pSteps, tKind, tTitle, tText, tHop.T0, $SELECT(tHop.T1 '= "": tHop.T1, 1: tHop.T0), {"edge":{"from":(tHop.From), "to":(tHop.To)}}, tHop.SessionId, $SELECT(tHop.Error: "bad", 1: "ok"), .pPrevEnd)
 	}
 }

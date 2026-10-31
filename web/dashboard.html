@@ -152,9 +152,17 @@ summary { cursor: pointer; color: var(--accent); }
 .fl-steps .x { margin: 2px 0; }
 #burst-box label { display: inline-block; margin: 0 10px 8px 0; }
 #burst-box input[type=number] { width: 64px; }
+#mp-back { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 50; }
+#msg-panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(980px, 96vw); background: var(--bg); border-left: 1px solid var(--line); box-shadow: -4px 0 18px rgba(0,0,0,.25); z-index: 51; overflow-y: auto; padding: 14px 16px; }
+.mp-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-bottom: 8px; }
+.mp-head h2 { margin: 0; }
+.mp-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+.mp-tabs button[aria-selected=true] { border-color: var(--accent); font-weight: 650; }
+td.go { white-space: nowrap; }
 @media (max-width: 600px) {
   .fl-grid { grid-template-columns: minmax(0, 1fr); }
-  .fl-mapbox, #burst-box { display: none; }
+  #burst-box { display: none; }
+  #msg-panel { width: 100vw; }
   .fl-list { max-height: 260px; }
   .tiles, .tiles.three, .tiles.five { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .tabs button { padding: 8px 10px; }
@@ -184,7 +192,6 @@ summary { cursor: pointer; color: var(--accent); }
     <button type="button" role="tab" data-tab="messages" aria-selected="false">Messages</button>
     <button type="button" role="tab" data-tab="evaluation" aria-selected="false">Evaluation</button>
     <button type="button" role="tab" data-tab="cost" aria-selected="false">Cost</button>
-    <button type="button" role="tab" data-tab="flow" aria-selected="false">Flow</button>
     <button type="button" role="tab" data-tab="settings" aria-selected="false">Settings</button>
   </nav>
   <p class="err hidden" id="error"></p>
@@ -219,15 +226,24 @@ summary { cursor: pointer; color: var(--accent); }
   </div>
 
   <div class="tabpanel hidden" id="tab-messages" role="tabpanel">
+    <section class="panel" id="burst-box">
+      <h2>Send a burst</h2>
+      <p class="muted">Sends random eval cases as new messages. Replay costs nothing; live needs the agent in live mode and a confirm. New rows appear below as they arrive.</p>
+      <label>Cases <input type="number" id="burst-n" min="1" max="30" value="8"></label>
+      <label>Mode <select id="burst-mode"><option value="replay">Replay ($0)</option><option value="live">Live (LLM, max 10)</option></select></label>
+      <button type="button" id="burst-go">Send a burst</button>
+      <button type="button" id="burst-confirm" class="hidden">Confirm and send</button>
+      <p class="msg" id="burst-msg"></p>
+    </section>
     <section class="panel">
-      <h2>Recent decisions <span class="muted" id="dec-count"></span> <span class="muted">(select a row to see what happened)</span></h2>
+      <h2>Recent decisions <span class="muted" id="dec-count"></span> <span class="muted">(click a row or "View flow" to see what happened)</span></h2>
       <p class="filter-row"><label>Production <select id="dec-ns"><option value="">All productions</option></select></label></p>
       <p class="muted hidden" id="dec-note">No live traffic yet. Tick "Include eval runs" to see eval messages.</p>
       <div class="scroll">
         <table>
           <thead><tr>
             <th>Time (UTC)</th><th>Control id</th><th>Error class</th><th>Agent &rarr; Final</th>
-            <th class="num">Confidence</th><th class="num opt">Cost</th><th class="opt">Model</th>
+            <th class="num">Confidence</th><th class="num opt">Cost</th><th class="opt">Model</th><th>Current status</th><th></th>
           </tr></thead>
           <tbody id="decisions"></tbody>
         </table>
@@ -235,19 +251,6 @@ summary { cursor: pointer; color: var(--accent); }
       <div class="more-row"><button id="dec-more" type="button" class="hidden">Show more</button></div>
     </section>
 
-    <section class="panel hidden" id="story">
-      <div class="story-head">
-        <h2 id="story-title"></h2>
-        <span class="muted" id="story-sub"></span>
-        <span class="spacer"></span>
-        <span id="story-links"></span>
-        <button id="story-close" type="button">Close</button>
-      </div>
-      <ol class="steps" id="story-steps"></ol>
-      <h3>Timeline <span id="story-trace" class="muted"></span></h3>
-      <div class="wf" id="story-spans"></div>
-      <details id="story-msg-box"><summary>Message (patient name, birth date, address and phone masked)</summary><pre id="story-msg"></pre></details>
-    </section>
   </div>
 
   <div class="tabpanel hidden" id="tab-evaluation" role="tabpanel">
@@ -297,47 +300,6 @@ summary { cursor: pointer; color: var(--accent); }
         <div class="chart-card"><h3>Cost by error class (USD)</h3><div class="chart" id="ch-costec"></div></div>
       </div>
     </section>
-  </div>
-
-  <div class="tabpanel hidden" id="tab-flow" role="tabpanel">
-    <div class="flow-bar">
-      <label>Production <select id="flow-ns"><option value="IRISAPP">IRISAPP</option><option value="LEGACY">LEGACY</option></select></label>
-      <span class="muted" id="flow-status">waiting for the first poll</span>
-    </div>
-    <p class="err" id="flow-msg"></p>
-    <div class="fl-grid">
-      <div class="fl-left">
-        <section class="panel">
-          <div class="fl-list-head"><h2>Messages (live)</h2><button type="button" id="fl-pause">Pause</button></div>
-          <ul class="fl-list" id="fl-list"></ul>
-        </section>
-        <section class="panel" id="burst-box">
-          <h2>Send a burst</h2>
-          <p class="muted">Sends random eval cases as new messages. Replay costs nothing; live needs the agent in live mode and a confirm.</p>
-          <label>Cases <input type="number" id="burst-n" min="1" max="30" value="8"></label>
-          <label>Mode <select id="burst-mode"><option value="replay">Replay ($0)</option><option value="live">Live (LLM, max 10)</option></select></label>
-          <button type="button" id="burst-go">Send a burst</button>
-          <button type="button" id="burst-confirm" class="hidden">Confirm and send</button>
-          <p class="msg" id="burst-msg"></p>
-        </section>
-      </div>
-      <div class="fl-right">
-        <section class="panel fl-mapbox">
-          <svg class="fl-map" id="fl-map" role="img" aria-label="Production map with the path of the selected message"></svg>
-        </section>
-        <section class="panel">
-          <div class="fl-steps-head">
-            <h2 id="fl-title">Journey</h2>
-            <button type="button" id="fj-back" title="Previous step">&laquo; Step</button>
-            <button type="button" id="fj-play">Play</button>
-            <button type="button" id="fj-fwd" title="Next step">Step &raquo;</button>
-            <button type="button" id="fj-speed">1x</button>
-            <a href="#" id="fj-story" class="hidden">Open the full story</a>
-          </div>
-          <ol class="fl-steps" id="fl-steps"></ol>
-        </section>
-      </div>
-    </div>
   </div>
 
   <div class="tabpanel hidden" id="tab-settings" role="tabpanel">
@@ -483,7 +445,7 @@ var GROUP_LABEL = { applied: "Applied", approval: "To a person", rejected: "Reje
 var charts = {};
 var traceUrl = "";
 var selectedRun = null;
-var selectedDecision = null;
+var selectedDecision = null, lastStory = null;
 var DEC_PAGE = 15;
 var decLimit = DEC_PAGE;
 // Options for charts whose box was hidden (other tab, closed details): drawn once it is shown
@@ -595,8 +557,9 @@ function renderDecisions(rows) {
     var tr = el("tr", null, "click" + (d.ID === selectedDecision ? " sel" : ""));
     tr.tabIndex = 0;
     tr.dataset.id = d.ID;
-    tr.addEventListener("click", function () { showStory(d.ID); });
-    tr.addEventListener("keydown", function (e) { if (e.key === "Enter") showStory(d.ID); });
+    var rowNs = d.Namespace || homeNs || "IRISAPP";
+    tr.addEventListener("click", function () { window.flowOpen(d.ID, rowNs); });
+    tr.addEventListener("keydown", function (e) { if (e.key === "Enter") window.flowOpen(d.ID, rowNs); });
     cell(tr, d.CreatedAt ? d.CreatedAt.substring(5, 16) : "");
     var cid = el("span", d.ControlId || (d.EvalRunId ? "EV" + d.EvalRunId + "-" + d.CaseId : "hdr " + d.HeaderId));
     // Header and session IDs repeat across productions: name the other one
@@ -619,9 +582,15 @@ function renderDecisions(rows) {
     cell(tr, !(d.agentCalled || replay) || d.Confidence == null ? "" : Number(d.Confidence).toFixed(2), "num");
     cell(tr, d.agentCalled ? money(d.CostUsd) : replay ? "$0 (replay)" : "", "num opt");
     cell(tr, d.agentCalled ? d.Model : replay ? (d.Model || "—") + " (replay)" : "", "opt");
+    cell(tr, "", "st");
+    var goBtn = el("button", "View flow");
+    goBtn.type = "button";
+    goBtn.addEventListener("click", function (e) { e.stopPropagation(); window.flowOpen(d.ID, rowNs); });
+    cell(tr, goBtn, "go");
     body.appendChild(tr);
   });
-  if (!rows.length) { var tr = el("tr"); var td2 = cell(tr, "No decisions yet.", "muted"); td2.colSpan = 7; body.appendChild(tr); }
+  if (window.flowDecorate) window.flowDecorate();
+  if (!rows.length) { var tr = el("tr"); var td2 = cell(tr, "No decisions yet.", "muted"); td2.colSpan = 9; body.appendChild(tr); }
 }
 
 // Runs with fewer cases than this are smoke tests and stay behind "Show test runs"
@@ -710,13 +679,18 @@ function showStory(id) {
   Array.prototype.forEach.call(document.querySelectorAll("#decisions tr"), function (tr) {
     tr.classList.toggle("sel", tr.dataset.id === String(id));
   });
-  get("api/decisions/" + id + "/story").then(renderStory).catch(showError);
+  return get("api/decisions/" + id + "/story").then(renderStory).catch(showError);
+}
+
+function refreshDecisions() {
+  var ev = includeEval ? "eval=1" : "eval=0";
+  return get("api/decisions?limit=" + (decLimit + 1) + "&" + ev + "&ns=" + encodeURIComponent(decNs)).then(renderDecisions).catch(showError);
 }
 
 function renderStory(st) {
-  document.getElementById("story-title").textContent = "What happened: " + (st.case || "header " + st.headerId);
-  document.getElementById("story-sub").textContent = st.createdAt + " UTC, final " + (st.outcome || "—") + (st.namespace ? ", namespace " + st.namespace : "");
-  var links = document.getElementById("story-links");
+  document.getElementById("mp-title").textContent = "Message " + (st.case || "header " + st.headerId);
+  document.getElementById("mp-sub").textContent = st.createdAt + " UTC, final " + (st.outcome || "—") + (st.namespace ? ", namespace " + st.namespace : "");
+  var links = document.getElementById("mp-links");
   links.replaceChildren();
   // Session IDs are per namespace: the story carries the trace URL of the row's own namespace
   var storyTrace = st.traceUrl || traceUrl;
@@ -758,11 +732,9 @@ function renderStory(st) {
   var msg = document.getElementById("story-msg-box");
   msg.classList.toggle("hidden", !st.message);
   document.getElementById("story-msg").textContent = st.message || "";
-  var box = document.getElementById("story");
-  box.classList.remove("hidden");
-  // After the panel is shown: ECharts sizes the chart from its box, which is 0 wide while hidden
-  renderSpans(st);
-  box.scrollIntoView({ behavior: "smooth", block: "start" });
+  lastStory = st;
+  // ECharts sizes the chart from its box, which is 0 wide while the Details tab is hidden
+  if (!document.getElementById("mp-details").classList.contains("hidden")) renderSpans(st);
 }
 
 // Waterfall: an invisible bar up to the span's start, then its duration, on one time axis
@@ -1288,7 +1260,7 @@ function renderSettings(s) {
       if (m.DecisionLogId) {
         var a = el("a", "decision " + m.DecisionLogId);
         a.href = "#"; a.style.marginLeft = "6px";
-        a.addEventListener("click", function (ev) { ev.preventDefault(); showTab("overview"); showStory(m.DecisionLogId); });
+        a.addEventListener("click", function (ev) { ev.preventDefault(); showTab("messages"); window.flowOpen(m.DecisionLogId, homeNs || "IRISAPP"); });
         pv.appendChild(a);
       }
       if (m.Evidence) pv.appendChild(el("div", "evidence: " + m.Evidence.split("\n").join("; "), "muted"));
@@ -1442,11 +1414,6 @@ document.getElementById("runs-test").addEventListener("click", function () {
 });
 document.getElementById("refresh").addEventListener("click", load);
 window.addEventListener("resize", function () { Object.keys(charts).forEach(function (k) { charts[k].resize(); }); });
-document.getElementById("story-close").addEventListener("click", function () {
-  selectedDecision = null;
-  document.getElementById("story").classList.add("hidden");
-  Array.prototype.forEach.call(document.querySelectorAll("#decisions tr.sel"), function (tr) { tr.classList.remove("sel"); });
-});
 var evalBox = document.getElementById("incl-eval");
 evalBox.checked = includeEval;
 evalBox.addEventListener("change", function () {
@@ -1458,6 +1425,40 @@ evalBox.addEventListener("change", function () {
 load();
 setInterval(load, 30000);
 </script>
+<div id="mp-back" class="hidden"></div>
+<aside id="msg-panel" class="hidden" role="dialog" aria-modal="true" aria-labelledby="mp-title">
+  <div class="mp-head">
+    <h2 id="mp-title">Message</h2>
+    <span id="mp-status"></span>
+    <span class="muted" id="mp-sub"></span>
+    <span class="spacer"></span>
+    <span id="mp-links"></span>
+    <button type="button" id="mp-close">Close (Esc)</button>
+  </div>
+  <div class="mp-tabs" role="tablist">
+    <button type="button" role="tab" data-mp="journey" aria-selected="true">Journey</button>
+    <button type="button" role="tab" data-mp="details" aria-selected="false">Details</button>
+  </div>
+  <div id="mp-journey">
+    <section class="panel fl-mapbox">
+      <svg class="fl-map" id="fl-map" role="img" aria-label="Path of this message through the production"></svg>
+    </section>
+    <div class="fl-steps-head">
+      <h3 id="fl-title">Journey</h3>
+      <button type="button" id="fj-back" title="Previous step">&laquo; Step</button>
+      <button type="button" id="fj-play">Play</button>
+      <button type="button" id="fj-fwd" title="Next step">Step &raquo;</button>
+      <button type="button" id="fj-speed">1x</button>
+    </div>
+    <ol class="fl-steps" id="fl-steps"></ol>
+  </div>
+  <div id="mp-details" class="hidden">
+    <ol class="steps" id="story-steps"></ol>
+    <h3>Timeline <span id="story-trace" class="muted"></span></h3>
+    <div class="wf" id="story-spans"></div>
+    <details id="story-msg-box"><summary>Message (patient name, birth date, address and phone masked)</summary><pre id="story-msg"></pre></details>
+  </div>
+</aside>
 <script src="flow.js"></script>
 </body>
 </html>

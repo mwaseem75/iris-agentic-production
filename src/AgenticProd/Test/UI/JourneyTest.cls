@@ -64,6 +64,18 @@ Method TestMapCodeApprovedThenResent()
 	Do $$$AssertEquals(tJ.steps.%Get(8).outcome, "SENT_FOR_APPROVAL")
 }
 
+Method TestOldItemNamesMapToRenamedItems()
+{
+	Set tLog = ..Log("AUTO_FIX")
+	Set tHops = [(..Hop(100, "LabFileIn", "LabRouter", "2026-10-31 10:00:00.000", "2026-10-31 10:00:00.050")),
+		(..Hop(100, "LabRouter", "Triage", "2026-10-31 10:00:00.040", "2026-10-31 10:00:00.500")),
+		(..Hop(100, "Triage", "TriageAgent", "2026-10-31 10:00:00.100", "2026-10-31 10:00:00.400")),
+		(..Hop(100, "Triage", "LabRouter", "2026-10-31 10:00:00.480", "2026-10-31 10:00:00.520")),
+		(..Hop(100, "LabRouter", "NphiesOut", "2026-10-31 10:00:00.530", "2026-10-31 10:00:00.560"))]
+	Set tJ = ##class(AgenticProd.UI.Journey).Build(tLog, "IRISAPP", ..Items(), tHops, [], ..Usage("AUTO_FIX"), "", "APPLIED")
+	Do $$$AssertEquals(tJ.steps.%Get(tJ.steps.%Size() - 1).edge.to, "EhrOut", "stored hop to the old name shows as EhrOut")
+}
+
 Method TestAutoFixApplied()
 {
 	Set tLog = ..Log("AUTO_FIX")
@@ -73,6 +85,7 @@ Method TestAutoFixApplied()
 		(..Hop(100, "Triage", "EhrOut", "2026-10-31 10:00:00.480", "2026-10-31 10:00:00.520"))]
 	Set tJ = ##class(AgenticProd.UI.Journey).Build(tLog, "IRISAPP", ..Items(), tHops, [], ..Usage("AUTO_FIX"), "", "APPLIED")
 	Do $$$AssertEquals(..Kinds(tJ), "inbound,router,hop,hop,agent,injection,triage,out", "no workflow, no learning")
+	Do $$$AssertEquals(tJ.steps.%Get(2).text, "Triage total (includes agent): 0.5 s.", "the Triage hop includes the agent run")
 	Do $$$AssertEquals(tJ.outcome, "applied")
 	Do $$$AssertEquals(tJ.steps.%Get(6).outcome, "APPLIED")
 	Do $$$AssertEquals(tJ.steps.%Get(7).edge.to, "EhrOut")

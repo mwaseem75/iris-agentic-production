@@ -1,6 +1,7 @@
 "use strict";
-// Flow tab: live message list, a compact production map, and a step-by-step journey of the selected
-// message. Needs el, get, send, money, showTab, showStory and includeEval from the dashboard script.
+// Messages tab: live status for the rows, and the message panel (drawer) with the path map and the
+// step-by-step journey. Needs el, get, send, money, showTab, showStory, refreshDecisions, renderSpans,
+// homeNs, decNs and includeEval from the dashboard script.
 (function () {
   var LANES = ["inbound", "router", "ai", "checks", "decision", "outcome"];
   var LANE_LABEL = { inbound: "Inbound", router: "Router", ai: "AI triage", checks: "Checks", decision: "Decision", outcome: "Outcome" };
@@ -18,78 +19,82 @@
   var MAP_W = 900, LANE_W = MAP_W / LANES.length, NODE_W = 132, NODE_H = 40, ROW_H = 54, HEAD_H = 30;
   var SVGNS = "http://www.w3.org/2000/svg";
 
-  var ns = "IRISAPP", active = false, started = false, timer = null, polling = false, paused = false;
-  var msgs = [], selId = null, auto = true, J = null, jStatus = "", cur = -1;
-  var map = null, mapAt = 0, playTimer = null, speed = 1, loadSeq = 0;
+  var ns = "IRISAPP", active = false, started = false, timer = null, polling = false, lastTop = "", lastSig = "";
+  var msgs = [], selId = null, J = null, jStatus = "", cur = -1, panelOpen = false;
+  var panelNs = "IRISAPP", map = null, mapAt = 0, playTimer = null, speed = 1, loadSeq = 0;
 
   function $(id) { return document.getElementById(id); }
   function evalOn() { return typeof includeEval !== "undefined" && includeEval; }
+  function listNs() { return decNs || homeNs || "IRISAPP"; }
   function evalParam() { return "&eval=" + (evalOn() ? 1 : 0); }
   function fmtMs(ms) { return ms < 1000 ? ms + " ms" : (ms < 60000 ? (ms / 1000).toFixed(1) + " s" : Math.round(ms / 60000) + " min"); }
   function statusInfo(s) {
     return STATUS[s] || [String(s).replace(/^REVIEW_/, "Review ").replace(/_/g, " ").toLowerCase().replace(/^./, function (c) { return c.toUpperCase(); }), "other"];
   }
-  function showError(e) { $("flow-msg").textContent = "Flow: " + e.message; }
+  function showError(e) { $("error").textContent = "Flow: " + e.message; $("error").classList.remove("hidden"); }
 
-  // ---- message list ----
-  function renderList() {
-    var ul = $("fl-list");
-    ul.textContent = "";
-    msgs.forEach(function (m) {
-      var si = statusInfo(m.status), li = el("li", null, m.id === selId ? "sel" : "");
-      li.style.borderLeftColor = BORDER[si[1]];
-      var r1 = el("div", null, "r1");
-      r1.appendChild(el("span", (m.at || "").slice(11, 19) + "  " + (m.controlId || "#" + m.headerId), "id"));
-      r1.appendChild(el("span", si[0], "tag t-" + si[1]));
-      li.appendChild(r1);
-      li.appendChild(el("div", m.errorClass + (m.error ? ": " + m.error : "") + (m.burst ? " (burst)" : (m.eval ? " (eval)" : "")), "r2"));
-      li.title = m.error || m.errorClass;
-      li.addEventListener("click", function () { auto = false; select(m.id); });
-      ul.appendChild(li);
+  // ---- live status for the rows ----
+  function statusTag(s) { var si = statusInfo(s); return el("span", si[0], "tag t-" + si[1]); }
+  function byId(id) { return msgs.filter(function (x) { return x.id === id; })[0]; }
+  window.flowDecorate = function () {
+    Array.prototype.forEach.call(document.querySelectorAll("#decisions tr[data-id]"), function (tr) {
+      var m = byId(+tr.dataset.id), td = tr.querySelector("td.st");
+      if (td) td.replaceChildren(m ? statusTag(m.status) : document.createTextNode(""));
     });
-    if (!msgs.length) ul.appendChild(el("li", "No messages yet. Send a burst to see one.", "r2"));
+  };
+  function headStatus() {
+    var m = byId(selId), box = $("mp-status");
+    box.textContent = "";
+    if (m) box.appendChild(statusTag(m.status));
   }
   function poll() {
-    if (!active || polling || paused) return;
+    if (!active || polling) return;
     polling = true;
+    ns = listNs();
     get("api/flow/messages?ns=" + ns + evalParam()).then(function (r) {
       msgs = r.messages;
-      $("flow-msg").textContent = "";
-      $("flow-status").textContent = "updated " + new Date().toLocaleTimeString("en-GB") + " · " + msgs.length + " messages";
-      if (auto && msgs.length && msgs[0].id !== selId) select(msgs[0].id);
-      else if (selId != null) {
-        var m = msgs.filter(function (x) { return x.id === selId; })[0];
-        // the reviewer answered or a resend finished: the journey has new steps
-        if (m && m.status !== jStatus && !playTimer) select(selId, true);
+      // a new message or a changed status: reload the table so the row appears
+      var sig = msgs.map(function (m) { return m.id + m.status; }).join(",");
+      if (sig !== lastSig) {
+        var firstPoll = lastSig === "";
+        lastSig = sig;
+        var top = msgs.length ? String(msgs[0].id) : "";
+        if (!firstPoll && top !== lastTop) refreshDecisions();
+        lastTop = top;
       }
-      renderList();
+      window.flowDecorate();
+      if (panelOpen && selId != null) {
+        headStatus();
+        var m = byId(selId);
+        // the reviewer answered or a resend finished: the journey has new steps
+        if (m && m.status !== jStatus && !playTimer) select(selId, panelNs, true);
+      }
     }).catch(showError).then(function () { polling = false; });
     if (Date.now() - mapAt > MAP_MS) { mapAt = Date.now(); loadMap(); }
   }
   function loadMap() {
-    return get("api/flow/map?ns=" + ns + evalParam()).then(function (m) { map = m; drawMap(); }).catch(showError);
+    return get("api/flow/map?ns=" + (panelOpen ? panelNs : ns) + evalParam()).then(function (m) { map = m; drawMap(); }).catch(showError);
   }
 
   // ---- journey ----
-  function select(id, keepStep) {
+  function select(id, jns, keepStep) {
     var seq = ++loadSeq;
-    selId = id;
-    get("api/flow/journey/" + id + "?ns=" + ns).then(function (j) {
+    selId = id; panelNs = jns;
+    return get("api/flow/journey/" + id + "?ns=" + jns).then(function (j) {
       if (seq !== loadSeq) return;
       var wasLast = cur < 0 || !J || cur >= J.steps.length - 1;
       J = j;
-      var m = msgs.filter(function (x) { return x.id === id; })[0];
+      var m = byId(id);
       jStatus = m ? m.status : "";
       stopPlay();
       cur = keepStep && !wasLast ? Math.min(cur, j.steps.length - 1) : j.steps.length - 1;
-      renderSteps(); drawMap(); renderList(); syncControls();
+      renderSteps(); drawMap(); headStatus(); syncControls();
     }).catch(showError);
   }
   function renderSteps() {
     var ol = $("fl-steps");
     ol.textContent = "";
-    $("fl-title").textContent = J ? "Journey: message " + J.headerId + " (" + J.decision + ")" : "Journey";
-    $("fj-story").classList.toggle("hidden", !J);
+    $("fl-title").textContent = J ? "Journey (agent proposed " + J.decision + ")" : "Journey";
     if (!J) { ol.appendChild(el("li", "No message selected.", "m")); return; }
     J.steps.forEach(function (st, i) {
       var li = el("li", null, "s-" + st.status);
@@ -171,13 +176,13 @@
     if (!root || !map) return;
     var canon = canonOf(), full = {};
     pathUpTo(J ? J.steps.length - 1 : -1, canon).forEach(function (n) { full[n] = 1; });
-    // Items with no traffic in the window stay out of the picture unless the selected message used them
+    // Only the nodes this message passed, resend targets (LabRouter, EhrOut, FhirOut) included
     var lanes = {};
     LANES.forEach(function (l) { lanes[l] = []; });
     map.items.forEach(function (it) {
-      if (lanes[it.lane] && (it.in + it.out > 0 || full[it.name])) lanes[it.lane].push({ key: it.name, label: it.name, sub: "in " + it.in + " · out " + it.out + (it.errors ? " · err " + it.errors : ""), err: it.errors > 0 });
+      if (lanes[it.lane] && full[it.name]) lanes[it.lane].push({ key: it.name, label: it.name, sub: "in " + it.in + " · out " + it.out + (it.errors ? " · err " + it.errors : ""), err: it.errors > 0 });
     });
-    GATES.forEach(function (g) { lanes.checks.push({ key: g.key, label: g.label, sub: "" }); });
+    GATES.forEach(function (g) { if (full[g.key]) lanes.checks.push({ key: g.key, label: g.label, sub: "" }); });
     var rows = Math.max.apply(null, LANES.map(function (l) { return lanes[l].length; }).concat([3])), H = HEAD_H + rows * ROW_H + 4;
     root.textContent = "";
     root.setAttribute("viewBox", "0 0 " + MAP_W + " " + H);
@@ -220,24 +225,56 @@
     $("burst-confirm").classList.add("hidden");
     send("POST", "api/burst", { n: n, mode: mode, ns: ns, confirm: !!confirm }).then(function (r) {
       msg.className = "msg ok"; msg.textContent = "Sent " + r.sent.length + " " + r.mode + " messages" + (r.estimatedCostUsd ? ", about " + money(r.estimatedCostUsd, 4) : ", no LLM cost") + ".";
-      auto = true;
+      lastTop = "";
+      poll();
     }).catch(function (e) {
       msg.className = "msg bad"; msg.textContent = e.message;
       if (/costs about/.test(e.message)) $("burst-confirm").classList.remove("hidden");
     });
   }
 
+  function openPanel(id, jns) {
+    jns = jns || listNs();
+    panelOpen = true; selId = id; panelNs = jns; J = null; cur = -1;
+    $("msg-panel").classList.remove("hidden"); $("mp-back").classList.remove("hidden");
+    $("mp-title").textContent = "Message " + id; $("mp-sub").textContent = ""; $("mp-links").textContent = "";
+    mpTab("journey");
+    renderSteps(); headStatus(); syncControls();
+    var h = "msg=" + id + (jns !== (homeNs || "IRISAPP") ? "&ns=" + jns : "");
+    try { history.replaceState(null, "", "#" + h); } catch (e) { location.hash = h; }
+    if (!started) start();
+    mapAt = Date.now(); loadMap();
+    select(id, jns);
+    showStory(id);
+    if (!byId(id)) poll();
+  }
+  function closePanel() {
+    if (!panelOpen) return;
+    panelOpen = false; stopPlay();
+    $("msg-panel").classList.add("hidden"); $("mp-back").classList.add("hidden");
+    try { history.replaceState(null, "", location.pathname + location.search); } catch (e) { location.hash = ""; }
+  }
+  function mpTab(name) {
+    Array.prototype.forEach.call(document.querySelectorAll(".mp-tabs button"), function (b) { b.setAttribute("aria-selected", b.dataset.mp === name ? "true" : "false"); });
+    $("mp-journey").classList.toggle("hidden", name !== "journey");
+    $("mp-details").classList.toggle("hidden", name !== "details");
+    if (name === "details" && lastStory) renderSpans(lastStory);
+    if (name === "journey") drawMap();
+  }
+  function fromHash() {
+    var m = /^#msg=(\d+)(?:&ns=(\w+))?$/.exec(location.hash);
+    if (!m) { closePanel(); return; }
+    showTab("messages");
+    if (!(panelOpen && String(selId) === m[1])) openPanel(+m[1], m[2] || homeNs || "IRISAPP");
+  }
+
   function start() {
     started = true;
-    $("flow-ns").addEventListener("change", function (e) {
-      ns = e.target.value; msgs = []; J = null; selId = null; cur = -1; auto = true; map = null; stopPlay();
-      renderList(); renderSteps(); loadMap(); poll();
-    });
-    $("fl-pause").addEventListener("click", function () {
-      paused = !paused;
-      $("fl-pause").textContent = paused ? "Resume" : "Pause";
-      if (paused) $("flow-status").textContent = "list paused at " + new Date().toLocaleTimeString("en-GB");
-    });
+    $("mp-close").addEventListener("click", closePanel);
+    $("mp-back").addEventListener("click", closePanel);
+    document.addEventListener("keydown", function (e) { if (e.key === "Escape") closePanel(); });
+    Array.prototype.forEach.call(document.querySelectorAll(".mp-tabs button"), function (b) { b.addEventListener("click", function () { mpTab(b.dataset.mp); }); });
+    window.addEventListener("hashchange", fromHash);
     $("fj-play").addEventListener("click", play);
     $("fj-back").addEventListener("click", function () { stopPlay(); goTo(cur - 1); });
     $("fj-fwd").addEventListener("click", function () { stopPlay(); goTo(cur + 1); });
@@ -246,7 +283,6 @@
       if (playTimer) { var on = playTimer; stopPlay(); if (on) play(); }
       syncControls();
     });
-    $("fj-story").addEventListener("click", function (e) { e.preventDefault(); if (J) { showTab("messages"); showStory(J.id); } });
     $("burst-go").addEventListener("click", function () { burst(false); });
     $("burst-confirm").addEventListener("click", function () { burst(true); });
     $("burst-mode").addEventListener("change", function () {
@@ -255,21 +291,23 @@
       $("burst-confirm").classList.add("hidden");
     });
     // The dashboard's own handler has already updated includeEval
-    $("incl-eval").addEventListener("change", function () { if (active) { auto = true; selId = null; mapAt = 0; poll(); } });
+    $("incl-eval").addEventListener("change", function () { lastSig = ""; if (active) poll(); });
     renderSteps(); syncControls();
   }
 
-  // Called by the dashboard when a tab is shown
+  window.flowOpen = openPanel;
+  // Called by the dashboard when a tab is shown: poll live status while Messages is on screen
   window.flowShow = function (name) {
-    var on = name === "flow";
+    var on = name === "messages";
     if (!started) start();
     if (on === active) return;
     active = on;
-    if (!on) { clearInterval(timer); timer = null; stopPlay(); return; }
+    if (!on) { clearInterval(timer); timer = null; return; }
     get("api/settings/productions").then(function (r) { $("burst-box").classList.toggle("hidden", !r.canEdit); }).catch(function () {});
-    mapAt = Date.now(); loadMap(); poll();
+    lastSig = ""; poll();
     timer = setInterval(poll, POLL_MS);
   };
   var sel = document.querySelector(".tabs button[aria-selected=true]");
   if (sel) window.flowShow(sel.dataset.tab);
+  if (location.hash) fromHash();
 })();
