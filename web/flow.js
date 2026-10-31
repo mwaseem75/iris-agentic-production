@@ -76,7 +76,7 @@
     return get("api/flow/journey/" + id + "?ns=" + jns).then(function (j) {
       if (seq !== loadSeq) return;
       var wasLast = cur < 0 || !J || cur >= J.steps.length - 1;
-      J = j;
+      J = j; selKey = "";
       var m = byId(id);
       jStatus = m ? m.status : "";
       stopPlay();
@@ -113,6 +113,7 @@
     for (var k = 0; k < items.length; k++) {
       items[k].classList.toggle("cur", k === cur);
       items[k].classList.toggle("future", k > cur);
+      items[k].classList.toggle("sel", !!(selKey && cvUi[selKey] && cvUi[selKey].steps.indexOf(k + 1) >= 0));
     }
     var ol = $("fl-steps"), li = items[cur];
     if (scroll && li) {
@@ -163,7 +164,7 @@
   };
   var SUB_TITLE = { model: "Model", memory: "Memory", tools: "Tools", skills: "Skills", knowledge: "Knowledge", policies: "Policies" };
   var GUARDS = ["injection", "grounding", "ambiguity"];
-  var cv = null, cvKey = "", anim = null, raf = 0, cvUi = {};
+  var selKey = "", cv = null, cvKey = "", anim = null, raf = 0, cvUi = {};
 
   function h(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function icon(name) {
@@ -246,6 +247,7 @@
     root.textContent = ""; cvUi = {};
     var wires = svg("svg", { "class": "wires", viewBox: "0 0 " + CW + " " + CH });
     root.appendChild(wires);
+    root.onclick = function () { if (selKey) { selKey = ""; markCurrent(false); paintCanvas(1); } };
     cv = { root: root, wires: wires, paths: {}, dot: null, label: null };
     if (!J) return;
     var ag = J.agent || {}, outs = [];
@@ -306,16 +308,31 @@
     });
     Object.keys(nums).forEach(function (k) {
       var list = nums[k].filter(function (n, i, a) { return a.indexOf(n) === i; }), from = list[0], prev = from, u = cvUi[k];
+      u.steps = list;
+      u.el.classList.add("click");
+      u.el.title = "steps " + (list.length > 1 && list[list.length - 1] - list[0] === list.length - 1 ? list[0] + "–" + list[list.length - 1] : list.join(", "));
+      u.tip = u.el.title;
+      u.el.addEventListener("click", function (e) { e.stopPropagation(); pick(k, list[0]); });
       function flush(last) {
+        var from0 = from;
         var g = h("span", null, from === last ? String(from) : from + "\u2013" + last);
         u.bd.appendChild(g); u.groups.push({ from: from, to: last, el: g });
+        g.addEventListener("click", function (e) { e.stopPropagation(); pick(k, from0); });
       }
       list.slice(1).forEach(function (n) { if (n !== prev + 1) { flush(prev); from = n; } prev = n; });
       flush(prev);
     });
   }
+  // Select a node (and jump to step n of it); playback stops so Play resumes from there
+  function pick(key, n) {
+    stopPlay();
+    selKey = key;
+    goTo(n - 1);
+    markCurrent(false);
+    paintCanvas(1);
+  }
   // Sub text of a node; the card's tooltip carries the full text when the card clips it
-  function setSub(key, text) { cvUi[key].sub.textContent = text; cvUi[key].el.title = text.replace(/\n/g, " · "); }
+  function setSub(key, text) { cvUi[key].sub.textContent = text; cvUi[key].el.title = (cvUi[key].tip ? cvUi[key].tip + " · " : "") + text.replace(/\n/g, " · "); }
   function fitCanvas() {
     var wrap = $("fl-wrap"), root = $("fl-canvas");
     if (!wrap || !root || !wrap.clientWidth) return;
@@ -329,6 +346,7 @@
   function paintCanvas(prog) {
     if (!cv || !J || !cvUi.agent) return;
     var ag = J.agent || {}, st = {}, i;
+    Object.keys(cvUi).forEach(function (key) { cvUi[key].el.classList.toggle("pick", key === selKey); });
     Object.keys(cvUi).forEach(function (key) { cvUi[key].groups.forEach(function (g) { g.el.classList.toggle("cur", cur + 1 >= g.from && cur + 1 <= g.to); }); });
     Object.keys(cvUi).forEach(function (key) { cvUi[key].el.classList.remove("run", "done", "fail", "wait", "lit", "bad", "seen"); });
     SUBS.forEach(function (key) { cvUi[key].el.classList.add("seen"); });
