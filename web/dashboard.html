@@ -231,10 +231,30 @@ section.panel { background: var(--panel); border: 1px solid var(--line); border-
 .fl-steps .x { margin: 2px 0; }
 #mp-back { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 1050; }
 #msg-panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(980px, 96vw); background: var(--bg); border-left: 1px solid var(--line); box-shadow: -4px 0 18px rgba(0,0,0,.25); z-index: 1051; overflow-y: auto; padding: 14px 16px; }
-.mp-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-bottom: 8px; }
-.mp-head h2 { margin: 0; font-size: 18px; }
-.mp-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
-.mp-tabs button[aria-selected=true] { border-color: var(--accent); font-weight: 650; }
+.mp-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-bottom: 12px; }
+.mp-head h2 { margin: 0; font-size: 20px; font-family: ui-monospace, Consolas, monospace; }
+.mp-ico { width: 36px; height: 36px; border-radius: 50%; background: var(--info-bg); color: var(--accent); display: inline-flex; align-items: center; justify-content: center; font-size: 18px; }
+.mp-x { border: 0; background: none; color: var(--muted); font-size: 18px; padding: 4px 6px; cursor: pointer; }
+#mp-links a { display: inline-flex; align-items: center; gap: 4px; }
+#mp-links a, #mp-task { padding: 3px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: inherit; font-size: 13px; text-decoration: none; }
+#mp-task:not(.hidden) { display: inline-flex; align-items: center; gap: 4px; }
+.mp-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px 16px; margin-bottom: 12px; }
+.mp-facts .k { font-size: 12.5px; color: var(--muted); }
+.mp-facts .v { font-weight: 600; font-size: 13.5px; }
+.mp-tabs { display: flex; gap: 20px; margin-bottom: 0; border-bottom: 1px solid var(--line); }
+.mp-tabs button { border: 0; border-bottom: 2px solid transparent; background: none; padding: 8px 2px; color: var(--muted); cursor: pointer; font-size: 14px; }
+.mp-tabs button i { margin-right: 6px; }
+.mp-tabs button[aria-selected=true] { border-bottom-color: var(--accent); color: var(--accent); font-weight: 650; }
+.mp-player { display: flex; align-items: center; gap: 12px; padding: 10px 0; flex-wrap: wrap; }
+.mp-player .btn-group { display: inline-flex; }
+.mp-player .btn-group .btn:not(:first-child) { margin-left: -1px; border-radius: 0; }
+.mp-player .btn-group .btn:first-child { border-radius: 6px 0 0 6px; }
+.mp-player .btn-group .btn:last-child { border-radius: 0 6px 6px 0; }
+.mp-player .btn-group .btn.on { background: var(--info-bg); border-color: var(--accent); color: var(--accent); }
+.mp-pos { font-size: 13px; color: var(--muted); white-space: nowrap; }
+.mp-pos b { color: var(--text, inherit); }
+.mp-bar { flex: 1 1 120px; min-width: 80px; height: 6px; border-radius: 3px; background: var(--bar-bg); overflow: hidden; }
+.mp-bar > div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
 td.go { white-space: nowrap; }
 #msg-panel:not(.hidden) { display: flex; flex-direction: column; }
 #mp-journey:not(.hidden) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -1179,13 +1199,13 @@ function refreshDecisions() {
 
 function renderStory(st) {
   document.getElementById("mp-title").textContent = "Message " + (st.case || "header " + st.headerId);
-  document.getElementById("mp-sub").textContent = st.createdAt + " UTC, final " + (st.outcome || "—") + (st.namespace ? ", namespace " + st.namespace : "");
   var links = document.getElementById("mp-links");
   links.replaceChildren();
   // Session IDs are per namespace: the story carries the trace URL of the row's own namespace
   var storyTrace = st.traceUrl || traceUrl;
   if (st.sessionId && storyTrace) {
-    var a = el("a", "Open in Visual Trace");
+    var a = el("a", "Visual Trace");
+    a.prepend(el("i", "", "ti ti-external-link"));
     a.href = storyTrace + encodeURIComponent(st.sessionId);
     a.target = "_blank"; a.rel = "noopener";
     links.appendChild(a);
@@ -1981,24 +2001,34 @@ setInterval(load, 30000);
 <div id="mp-back" class="hidden"></div>
 <aside id="msg-panel" class="hidden" role="dialog" aria-modal="true" aria-labelledby="mp-title">
   <div class="mp-head">
+    <span class="mp-ico"><i class="ti ti-route"></i></span>
     <h2 id="mp-title">Message</h2>
     <span id="mp-status"></span>
-    <span class="muted" id="mp-sub"></span>
     <span class="spacer"></span>
     <span id="mp-links"></span>
-    <button type="button" id="mp-close">Close (Esc)</button>
+    <a class="btn btn-sm hidden" id="mp-task" target="_blank" rel="noopener"><i class="ti ti-clipboard-check"></i>Open task</a>
+    <button type="button" class="mp-x" id="mp-close" title="Close (Esc)" aria-label="Close"><i class="ti ti-x"></i></button>
   </div>
+  <div class="mp-facts" id="mp-facts"></div>
   <div class="mp-tabs" role="tablist">
-    <button type="button" role="tab" data-mp="journey" aria-selected="true">Journey</button>
-    <button type="button" role="tab" data-mp="details" aria-selected="false">Details</button>
+    <button type="button" role="tab" data-mp="journey" aria-selected="true"><i class="ti ti-chart-line"></i>Journey</button>
+    <button type="button" role="tab" data-mp="details" aria-selected="false"><i class="ti ti-file-text"></i>Details</button>
   </div>
   <div id="mp-journey">
-    <div class="fl-steps-head">
-      <h3 id="fl-title">Journey</h3>
-      <button type="button" id="fj-back" title="Previous step">&laquo; Step</button>
-      <button type="button" id="fj-play">Play</button>
-      <button type="button" id="fj-fwd" title="Next step">Step &raquo;</button>
-      <button type="button" id="fj-speed">1x</button>
+    <div class="mp-player">
+      <div class="btn-group">
+        <button type="button" class="btn btn-sm" id="fj-back" title="Previous step" aria-label="Previous step"><i class="ti ti-player-skip-back"></i></button>
+        <button type="button" class="btn btn-sm btn-primary" id="fj-play" title="Play / pause" aria-label="Play or pause"><i class="ti ti-player-pause"></i></button>
+        <button type="button" class="btn btn-sm" id="fj-fwd" title="Next step" aria-label="Next step"><i class="ti ti-player-skip-forward"></i></button>
+      </div>
+      <span class="mp-pos" id="fj-pos"></span>
+      <div class="mp-bar"><div id="fj-bar"></div></div>
+      <div class="btn-group" id="fj-speeds">
+        <button type="button" class="btn btn-sm" data-speed="1">1x</button>
+        <button type="button" class="btn btn-sm" data-speed="2">2x</button>
+        <button type="button" class="btn btn-sm" data-speed="4">4x</button>
+      </div>
+      <button type="button" class="btn btn-sm" id="fj-replay" title="Replay from step 1" aria-label="Replay"><i class="ti ti-refresh"></i></button>
     </div>
     <section class="panel fl-mapbox">
       <div class="fl-canvas-wrap" id="fl-wrap"><div class="fl-canvas" id="fl-canvas" role="img" aria-label="Workflow canvas: path of this message and what the agent used"></div></div>

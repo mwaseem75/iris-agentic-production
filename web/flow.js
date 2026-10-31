@@ -39,6 +39,7 @@
     var m = byId(selId), box = $("mp-status");
     box.textContent = "";
     if (m) box.appendChild(statusTag(m.status));
+    renderFacts();
   }
   function poll() {
     if (!active || polling) return;
@@ -68,7 +69,7 @@
     if (Date.now() - mapAt > MAP_MS) { mapAt = Date.now(); loadMap(); }
   }
   function loadMap() {
-    return get("api/flow/map?ns=" + (panelOpen ? panelNs : ns) + evalParam()).then(function (m) { map = m; drawMap(); }).catch(showError);
+    return get("api/flow/map?ns=" + (panelOpen ? panelNs : ns) + evalParam()).then(function (m) { map = m; drawMap(); if (panelOpen) renderFacts(); }).catch(showError);
   }
 
   // ---- journey ----
@@ -89,7 +90,6 @@
   function renderSteps() {
     var ol = $("fl-steps");
     ol.textContent = "";
-    $("fl-title").textContent = J ? "Journey (agent proposed " + J.decision + ")" : "Journey";
     if (!J) { ol.appendChild(el("li", "No message selected.", "m")); return; }
     J.steps.forEach(function (st, i) {
       var li = el("li", null, "s-" + st.status);
@@ -140,10 +140,42 @@
     syncControls();
   }
   function syncControls() {
-    $("fj-play").textContent = playTimer ? "Pause" : "Play";
-    $("fj-speed").textContent = speed + "x";
+    $("fj-play").firstChild.className = "ti " + (playTimer ? "ti-player-pause" : "ti-player-play");
+    Array.prototype.forEach.call(document.querySelectorAll("#fj-speeds button"), function (b) { b.classList.toggle("on", +b.dataset.speed === speed); });
     $("fj-back").disabled = !J || cur <= 0;
     $("fj-fwd").disabled = !J || cur >= J.steps.length - 1;
+    $("fj-replay").disabled = !J;
+    var n = J ? J.steps.length : 0, pos = $("fj-pos");
+    pos.textContent = "";
+    if (J) {
+      pos.appendChild(document.createTextNode("Step "));
+      pos.appendChild(el("b", String(cur + 1)));
+      pos.appendChild(document.createTextNode(" of " + n + (cur >= 0 ? " · " : "")));
+      if (cur >= 0) pos.appendChild(el("b", J.steps[cur].title));
+    }
+    $("fj-bar").style.width = (n ? Math.round((cur + 1) * 100 / n) : 0) + "%";
+  }
+  // Header facts: what came in, what the agent proposed, what Triage did, what it cost
+  function renderFacts() {
+    var box = $("mp-facts"), m = byId(selId), a = J && J.agent || {};
+    box.textContent = "";
+    if (!J) return;
+    var used = a.used, conf = used && a.confidence !== "" ? " · " + Number(a.confidence).toFixed(2) : "";
+    [["Received", J.createdAt ? J.createdAt.slice(5, 19) + " UTC" : "—"],
+     ["Production", panelNs + (map && map.production ? " · " + map.production : "")],
+     ["Problem", EC_LABEL[J.errorClass] || J.errorClass || "—"],
+     ["Agent proposed", used ? (ACT_LABEL[J.decision] || J.decision) + conf : "Agent not used"],
+     ["Final decision", m ? statusInfo(m.status)[0] : (J.outcome || "—")],
+     ["AI cost", used ? money(a.costUsd, 4) + " · " + Number(a.tokens).toLocaleString() + " tokens" : "No LLM cost"]
+    ].forEach(function (f) {
+      var d = el("div");
+      d.appendChild(el("div", f[0], "k")); d.appendChild(el("div", f[1], "v"));
+      box.appendChild(d);
+    });
+    var task = $("mp-task"), inbox = $("inbox-link").href;
+    var has = J.steps.some(function (s) { return s.kind === "workflow"; }) && inbox;
+    task.classList.toggle("hidden", !has);
+    if (has) task.href = inbox;
   }
 
   function svg(tag, attrs, text) {
@@ -475,7 +507,7 @@
     opening = true; speed = 2; selKey = "";
     panelOpen = true; selId = id; panelNs = jns; J = null; cur = -1;
     $("msg-panel").classList.remove("hidden"); $("mp-back").classList.remove("hidden");
-    $("mp-title").textContent = "Message " + id; $("mp-sub").textContent = ""; $("mp-links").textContent = "";
+    $("mp-title").textContent = "Message " + id; $("mp-links").textContent = "";
     mpTab("journey");
     renderSteps(); headStatus(); syncControls();
     var h = "msg=" + id + (jns !== (homeNs || "IRISAPP") ? "&ns=" + jns : "");
@@ -524,11 +556,14 @@
     $("fj-play").addEventListener("click", play);
     $("fj-back").addEventListener("click", function () { stopPlay(); goTo(cur - 1); });
     $("fj-fwd").addEventListener("click", function () { stopPlay(); goTo(cur + 1); });
-    $("fj-speed").addEventListener("click", function () {
-      speed = speed === 1 ? 2 : (speed === 2 ? 4 : 1);
-      if (playTimer) { var on = playTimer; stopPlay(); if (on) play(); }
-      syncControls();
+    Array.prototype.forEach.call(document.querySelectorAll("#fj-speeds button"), function (b) {
+      b.addEventListener("click", function () {
+        speed = +b.dataset.speed;
+        if (playTimer) { stopPlay(); play(); }
+        syncControls();
+      });
     });
+    $("fj-replay").addEventListener("click", function () { stopPlay(); cur = -1; play(); });
     $("burst-go").addEventListener("click", function () { burst(false); });
     $("burst-confirm").addEventListener("click", function () { burst(true); });
     $("burst-mode").addEventListener("change", function () {

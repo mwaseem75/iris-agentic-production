@@ -198,7 +198,7 @@ ClassMethod Build(pLog As AgenticProd.Data.DecisionLog, pNs As %String, pItems A
 		Do:(tGap > ..#LONGWAITMS)&&(tStep.waitLabel = "") tStep.%Set("waitLabel", "waited "_..Human(tGap))
 		Set tPrev = $SELECT(tStep.endAt ] tStep.at: tStep.endAt, 1: tStep.at)
 	}
-	Quit {"id":(+pLog.%Id()), "headerId":(pLog.HeaderId), "sessionId":(tS0), "namespace":(pNs), "decision":(pLog.Decision), "outcome":(##class(AgenticProd.UI.Flow).OutcomeLane(tOutcome)),
+	Quit {"id":(+pLog.%Id()), "headerId":(pLog.HeaderId), "sessionId":(tS0), "namespace":(pNs), "decision":(pLog.Decision), "errorClass":(pLog.ErrorClass), "createdAt":(pLog.CreatedAt), "outcome":(##class(AgenticProd.UI.Flow).OutcomeLane(tOutcome)),
 		"traceUrl":(##class(AgenticProd.UI.REST).TraceUrl(pNs)), "agent":(..AgentInfo(tAgentName, pUsage, pTools, pLearned)), "steps":(tSteps)}
 }
 
