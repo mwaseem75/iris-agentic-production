@@ -259,6 +259,8 @@
     mkNode("trigger", 8, 92, 112, 96, "Trigger", "trigger", "main", names.trigger);
     mkNode("router", 142, 92, 112, 96, "Router", "router", "main", names.router);
     mkNode("agent", 280, 55, 250, 170, "AI Hub Agent", "agent", "agent").sub.textContent = (ag.name || "TriageAgent") + " · " + (ag["class"] || "%AI.Agent");
+    cvUi.agent.live = h("div", "s live");
+    cvUi.agent.sub.parentNode.appendChild(cvUi.agent.live);
     var g = mkNode("guard", 562, 75, 130, 130, "Guardrails", "guard");
     GUARDS.forEach(function (r) {
       var row = h("div", "rw"), mark = h("i", null, "·");
@@ -271,12 +273,23 @@
     SUBS.forEach(function (k, i) { mkNode(k, 8 + i * 166, 312, 156, 136, SUB_TITLE[k], k); });
     (ag.tools || []).forEach(function (t) { if (t !== "search_loinc" && t !== "load_skill") cvUi.tools.sub.appendChild(h("span", "chip", t)); });
     (ag.skills || []).forEach(function (t) { cvUi.skills.sub.appendChild(h("span", "chip", t)); });
+    cvUi.skills.sub.appendChild(h("div", "note", "inferred from tools"));
+    var calls = {};
+    J.steps.forEach(function (s) { if (s.kind === "tool") calls[s.tool] = (calls[s.tool] || 0) + 1; });
+    var anyTool = Object.keys(calls).length > 0;
+    var unused = { model: !ag.used, memory: !ag.sessionId && !ag.learned, tools: !(ag.tools || []).some(function (t) { return t !== "search_loinc" && t !== "load_skill"; }),
+      skills: !(ag.skillsUsed || []).length, knowledge: !calls.search_loinc, policies: !anyTool };
+    SUBS.forEach(function (k) {
+      var nu = h("div", "nu", "not used");
+      cvUi[k].el.appendChild(nu);
+      if (unused[k]) cvUi[k].el.classList.add("unused");
+    });
     for (var i = 0; i < ORDER.length - 1; i++) wire(ORDER[i], ORDER[i + 1]);
     outs.forEach(function (k) { wire("triage", k); });
     SUBS.forEach(function (k, i) { wire("agent", k, "sub", i, SUBS.length); });
     addBadges();
-    cv.dot = svg("circle", { "class": "dot", r: 6, cx: -20, cy: -20 });
-    cv.label = svg("text", { "class": "wl", x: -80, y: -50 }, "1 message");
+    cv.dot = svg("circle", { "class": "dot", r: 6, cx: 0, cy: 0, visibility: "hidden" });
+    cv.label = svg("text", { "class": "wl", x: 0, y: 0, visibility: "hidden" }, "1 message");
     wires.appendChild(cv.dot); wires.appendChild(cv.label);
   }
   // Numbered badges: the journey steps each node took part in, consecutive numbers as a range
@@ -358,7 +371,16 @@
     setSub("knowledge", "search_loinc on IRIS vector search" + (searches ? "\n" + searches + " search" + (searches > 1 ? "es" : "") + " run" : ""));
     setSub("policies", "ReadOnly + Audit\nallowed " + allowed + " · denied " + denied);
     Array.prototype.forEach.call(cvUi.tools.sub.querySelectorAll(".chip"), function (c) { c.classList.toggle("on", !!called[c.textContent]); });
-    Array.prototype.forEach.call(cvUi.skills.sub.querySelectorAll(".chip"), function (c) { c.classList.toggle("on", !!called.load_skill); });
+    Array.prototype.forEach.call(cvUi.skills.sub.querySelectorAll(".chip"), function (c) { c.classList.toggle("on", Object.keys(called).length > 0 && (ag.skillsUsed || []).indexOf(c.textContent) >= 0); });
+    var first = -1, last = -1;
+    J.steps.forEach(function (s, ix) { if (s.kind === "agent" || s.kind === "tool") { if (first < 0) first = ix; last = ix; } });
+    var live = "", cs = J.steps[cur] || {};
+    if (!ag.used) live = first < 0 && cur >= 0 ? "agent not used" : "";
+    else if (cur >= first && first >= 0) {
+      if (cur < last || (cur === last && prog < 1)) live = cs.kind === "tool" ? "calling " + cs.tool : "model call";
+      else if (cur >= last) live = "Decision: " + ag.decision + (ag.confidence !== "" ? " · confidence " + Number(ag.confidence).toFixed(2) : "") + "\n" + ag.tokens + " tokens · $" + Number(ag.costUsd).toFixed(5);
+    }
+    cvUi.agent.live.textContent = live;
     if (!cvUi.tools.sub.firstChild) cvUi.tools.sub.textContent = "no tool called";
     if (lit && cvUi[lit]) {
       var le = cvUi[lit].el;
@@ -383,7 +405,8 @@
     if (wp && prog < 1) {
       var pt = wp.getPointAtLength(wp.getTotalLength() * Math.min(1, prog / 0.6));
       cv.dot.setAttribute("cx", pt.x); cv.dot.setAttribute("cy", pt.y); cv.label.setAttribute("x", pt.x - 22); cv.label.setAttribute("y", pt.y - 12);
-    } else { cv.dot.setAttribute("cx", -20); cv.label.setAttribute("x", -80); }
+      cv.dot.setAttribute("visibility", "visible"); cv.label.setAttribute("visibility", "visible");
+    } else { cv.dot.setAttribute("visibility", "hidden"); cv.label.setAttribute("visibility", "hidden"); }
   }
   function frame(now) {
     raf = 0;

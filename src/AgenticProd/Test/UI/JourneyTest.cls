@@ -76,6 +76,9 @@ Method TestMapCodeApprovedThenResent()
 	Do $$$AssertEquals(tJ.agent.allowed, 2)
 	Do $$$AssertEquals(tJ.agent.denied, 0)
 	Do $$$AssertEquals(tJ.agent.learned, "ZZ1")
+	Do $$$AssertEquals(tJ.agent.skillsUsed.%Size(), 1, "search_loinc belongs to CodeMapping")
+	Do $$$AssertEquals(tJ.agent.skillsUsed.%Get(0), "CodeMapping")
+	Do $$$AssertEquals(tJ.agent.decision, "MAP_CODE")
 }
 
 Method TestOldItemNamesMapToRenamedItems()

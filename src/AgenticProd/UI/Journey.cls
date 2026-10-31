@@ -222,17 +222,39 @@ ClassMethod AgentInfo(pName As %String, pUsage As %DynamicObject, pTools As %Dyn
 		Set tSeen = tSeen_$SELECT(tSeen'="": ",", 1: "")_tCall.Tool
 		Do tNames.%Push(tCall.Tool)
 	}
-	Set tSkills = []
+	Set tSkills = [], tSkillsUsed = []
 	For i = 1:1:$LENGTH($PARAMETER(tCls, "SKILLS"), ",") {
 		Set tOne = $PIECE($PIECE($PARAMETER(tCls, "SKILLS"), ",", i), ".", *)
 		Do:tOne'="" tSkills.%Push(tOne)
+		// build 154 does not audit load_skill: a skill counts as used when one of its tools was called
+		Set tSkillCls = $PIECE($PARAMETER(tCls, "SKILLS"), ",", i)
+		If (tOne'="") && ..SkillUsed(tSkillCls, tSeen) Do tSkillsUsed.%Push(tOne)
 	}
 	Quit {"name":(pName), "class":"%AI.Agent", "used":(''tUsed),
 		"model":($SELECT(tUsed: pUsage.Model, 1: "")), "provider":($PARAMETER(tCls, "PROVIDER")), "replay":($SELECT(tUsed: ''pUsage.Replay, 1: 0)),
 		"sessionId":($SELECT(tUsed: pUsage.AgentSessionId, 1: "")),
+		"decision":($SELECT(tUsed: pUsage.Decision, 1: "")), "confidence":($SELECT(tUsed: pUsage.Confidence, 1: "")),
 		"tokens":($SELECT(tUsed: +pUsage.PromptTokens + pUsage.CompletionTokens, 1: 0)), "costUsd":($SELECT(tUsed: +pUsage.CostUsd, 1: 0)),
-		"tools":(tNames), "skills":(tSkills), "skillCalls":(tSkillCalls), "searches":(tCand),
+		"tools":(tNames), "skills":(tSkills), "skillsUsed":(tSkillsUsed), "skillCalls":(tSkillCalls), "searches":(tCand),
 		"allowed":(tAllowed), "denied":(tDenied), "learned":($SELECT($IsObject(pLearned): pLearned.LocalCode, 1: ""))}
+}
+
+/// 1 when a tool method of skill class pSkillCls, in snake_case, is in the comma list pCalled.
+ClassMethod SkillUsed(pSkillCls As %String, pCalled As %String) As %Boolean [ Internal ]
+{
+	Set tList = $PARAMETER(pSkillCls, "TOOLS")
+	For i = 1:1:$LENGTH(tList, ",") {
+		Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT Name FROM %Dictionary.CompiledMethod WHERE parent = ? AND ClassMethod = 0 AND Internal = 0", $PIECE(tList, ",", i))
+		While tRS.%Next() {
+			Set tSnake = "", tName = tRS.Name
+			For j = 1:1:$LENGTH(tName) {
+				Set tCh = $EXTRACT(tName, j)
+				Set tSnake = tSnake_$SELECT((j>1)&&(tCh?1U): "_", 1: "")_$ZCONVERT(tCh, "L")
+			}
+			Return:(","_pCalled_",")[(","_tSnake_",") 1
+		}
+	}
+	Quit 0
 }
 
 /// pStep appended; pExtra adds node/edge/outcome. pPrevEnd is moved to the step's end.
