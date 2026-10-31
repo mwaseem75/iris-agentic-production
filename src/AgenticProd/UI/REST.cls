@@ -35,6 +35,7 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
 <Route Url="/flow/live" Method="GET" Call="FlowLive"/>
 <Route Url="/flow/window" Method="GET" Call="FlowWindow"/>
 <Route Url="/flow/journey/:decisionId" Method="GET" Call="FlowJourney"/>
+<Route Url="/flow/messages" Method="GET" Call="FlowMessages"/>
 <Route Url="/burst" Method="POST" Call="Burst"/>
 <Route Url="/evalruns" Method="GET" Call="EvalRuns"/>
 <Route Url="/evalruns/:id" Method="GET" Call="EvalResults"/>
@@ -370,6 +371,23 @@ ClassMethod FlowJourney(pDecisionId As %String) As %Status
 			Quit
 		}
 		Write tJourney.%ToJSON()
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// GET /flow/messages?ns=&eval=: the newest messages with their current status, for the list.
+ClassMethod FlowMessages() As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		Set tNs = ##class(AgenticProd.UI.Flow).CheckNs(%request.Get("ns"))
+		If tNs = "" {
+			Do ..FlowBadNs()
+			Quit
+		}
+		Write {"now":(##class(AgenticProd.UI.Flow).Ago(0)), "messages":(##class(AgenticProd.UI.Flow).Messages(tNs, ..FlowEval()))}.%ToJSON()
 	} Catch ex {
 		Set tSC = ex.AsStatus()
 	}

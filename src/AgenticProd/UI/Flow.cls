@@ -206,6 +206,44 @@ ClassMethod Slice(pNs As %String, pFrom As %String = "", pTo As %String = "", pC
 	Quit tOut
 }
 
+/// Where a message stands now. DecisionLog.Outcome is what Triage did until a reviewer answers, then
+/// the answer (APPROVED, REVIEW_*). An open approval task shows as "waiting".
+ClassMethod Status(pOutcome As %String, pReviewedAt As %String) As %String
+{
+	Quit:(pReviewedAt="")&&((pOutcome="SENT_FOR_APPROVAL")||($EXTRACT(pOutcome, 1, 11)="DOWNGRADED:")||($EXTRACT(pOutcome, 1, 9)="PROPOSED:")) "waiting"
+	Quit:$EXTRACT(pOutcome, 1, 9)="OBSERVED:" "OBSERVED"
+	Quit:$EXTRACT(pOutcome, 1, 6)="ERROR:" "ERROR"
+	Quit:pOutcome="" "waiting"
+	Quit pOutcome
+}
+
+/// Newest pLimit messages of pNs, newest first, for the Flow tab's list. status is the current one
+/// (see Status). Eval rows are left out unless pIncludeEval; burst rows follow the same rule.
+ClassMethod Messages(pNs As %String, pIncludeEval As %Boolean = 0, pLimit As %Integer = 25) As %DynamicArray
+{
+	New $NAMESPACE
+	Set $NAMESPACE = pNs
+	Set pLimit = $SELECT(pLimit<1: 25, pLimit>60: 60, 1: pLimit\1)
+	Set tRows = ##class(AgenticProd.UI.REST).Rows("SELECT TOP ? d.ID, d.HeaderId, d.CreatedAt, d.EvalRunId, d.ErrorClass, d.ErrorText, d.Decision, d.Outcome, d.ReviewedAt,"
+		_" (SELECT MAX(t.ControlId) FROM AgenticProd_Msg.TriageRequest t WHERE t.HeaderId = d.HeaderId) AS ControlId"
+		_" FROM AgenticProd_Data.DecisionLog d WHERE d.Namespace = ?"_$SELECT(pIncludeEval: "", 1: " AND (d.EvalRunId IS NULL OR (d.EvalRunId >= "_..#BURSTRUN_" AND d.EvalRunId < "_..#BURSTEND_"))")
+		_" ORDER BY d.ID DESC", pLimit, pNs)
+	Set tOut = []
+	Set tIter = tRows.%GetIterator()
+	While tIter.%GetNext(, .tRow) {
+		Kill tSecrets
+		Set tText = ""
+		If tRow.ErrorText '= "" {
+			Do ##class(AgenticProd.UI.REST).MaskedMessage(tRow.HeaderId, .tSecrets, pNs)
+			Set tText = ##class(AgenticProd.UI.REST).Mask($EXTRACT(tRow.ErrorText, 1, 90), .tSecrets)
+		}
+		Do tOut.%Push({"id":(+tRow.ID), "headerId":(tRow.HeaderId), "at":(tRow.CreatedAt), "controlId":(tRow.ControlId), "errorClass":(tRow.ErrorClass), "error":(tText),
+			"decision":(tRow.Decision), "status":(..Status(tRow.Outcome, tRow.ReviewedAt)),
+			"eval":(tRow.EvalRunId '= ""), "burst":((tRow.EvalRunId '= "") && (tRow.EvalRunId >= ..#BURSTRUN) && (tRow.EvalRunId < ..#BURSTEND))})
+	}
+	Quit tOut
+}
+
 /// Cursor at the newest rows of pNs, for a live poll that starts from now.
 ClassMethod Head(pNs As %String) As %DynamicObject
 {

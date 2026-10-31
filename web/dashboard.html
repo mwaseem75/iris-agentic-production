@@ -115,51 +115,47 @@ h3 { font-size: 13px; margin: 0 0 8px; font-weight: 650; color: var(--muted); }
 details pre { font: 12px/1.4 ui-monospace, Consolas, monospace; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; overflow-x: auto; margin: 8px 0 0; }
 summary { cursor: pointer; color: var(--accent); }
 .flow-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 8px; }
-.flow-slide { display: inline-flex; align-items: center; gap: 6px; }
-.flow-slide input { width: 220px; }
-section.flow-map-box { padding: 6px; }
-.flow-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
-.flow-main.journey { grid-template-columns: minmax(0, 1fr) 360px; }
-.flow-canvas { position: relative; min-width: 0; }
-.flow-jlabel { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); background: var(--warn-bg); color: var(--warn); border: 1px solid currentColor; border-radius: 12px; padding: 3px 12px; font-size: 13px; font-weight: 600; pointer-events: none; }
-.flow-steps { max-height: 560px; overflow-y: auto; border-left: 1px solid var(--line); padding-left: 8px; }
-.flow-steps h3 { margin: 2px 0 6px; }
-.flow-steps ol { list-style: none; margin: 0; padding: 0; }
-.flow-steps li { padding: 6px 6px 6px 10px; border-left: 4px solid var(--line); margin-bottom: 4px; cursor: pointer; border-radius: 0 4px 4px 0; font-size: 13px; }
-.flow-steps li:hover { background: var(--info-bg); }
-.flow-steps li.cur { background: var(--info-bg); outline: 1px solid var(--accent); }
-.flow-steps li.done { opacity: 0.75; }
-.flow-steps li.s-bad { border-left-color: var(--bad); }
-.flow-steps li.s-warn { border-left-color: var(--warn); }
-.flow-steps li.s-wait { border-left-color: #7b8794; }
-.flow-steps li.s-ok { border-left-color: var(--good); }
-.flow-steps .t { font-weight: 600; }
-.flow-steps .m { color: var(--muted); font-size: 12px; }
-.flow-steps .x { margin: 2px 0; }
-.flow-mode { font-weight: 600; }
-.flow-chart { width: 100%; height: 560px; }
-.flow-wait { position: absolute; left: 0; right: 0; bottom: 14px; text-align: center; color: var(--muted); pointer-events: none; }
-.flow-status { padding: 2px 4px 0; font-size: 12px; }
-.flow-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 6px 4px 0; color: var(--muted); font-size: 12px; }
-.flow-legend .lg { display: inline-flex; align-items: center; gap: 5px; }
-.flow-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
-.flow-table { overflow-x: auto; }
-.flow-outcomes { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
-.flow-out { border-top: 4px solid var(--line); background: var(--bg); border-radius: 6px; padding: 8px 10px; }
-.flow-out .n { font-size: 22px; font-weight: 650; }
-.flow-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
-.flow-tools { margin: 0 0 8px; padding-left: 22px; }
+.fl-grid { display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 12px; align-items: start; }
+.fl-left, .fl-right { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.fl-left section.panel, .fl-right section.panel { margin-bottom: 0; }
+.fl-list-head { display: flex; align-items: center; gap: 8px; }
+.fl-list-head h2 { margin: 0; }
+.fl-list { list-style: none; margin: 8px 0 0; padding: 0; max-height: 520px; overflow-y: auto; }
+.fl-list li { padding: 6px 8px; border-left: 4px solid var(--line); border-bottom: 1px solid var(--line); cursor: pointer; font-size: 13px; }
+.fl-list li:hover { background: var(--info-bg); }
+.fl-list li.sel { background: var(--info-bg); outline: 1px solid var(--accent); }
+.fl-list .r1 { display: flex; justify-content: space-between; gap: 6px; }
+.fl-list .r2 { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fl-list .id { font-weight: 600; }
+.fl-map { width: 100%; display: block; }
+.fl-map text { font: 11px system-ui, sans-serif; fill: var(--text); }
+.fl-map .lane-h { font-weight: 700; font-size: 12px; }
+.fl-map .sub { fill: var(--muted); font-size: 10px; }
+.fl-map rect.node { fill: var(--panel, #fff); stroke: var(--line); stroke-width: 1.5; }
+.fl-map rect.node.on { stroke: var(--accent); stroke-width: 2; }
+.fl-map rect.node.cur { stroke: var(--accent); stroke-width: 4; }
+.fl-map rect.node.err { stroke: var(--bad); }
+.fl-path { fill: none; stroke: var(--accent); stroke-width: 4; stroke-linejoin: round; stroke-linecap: round; opacity: .85; }
+.fl-steps-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.fl-steps-head h2 { margin: 0 8px 0 0; }
+.fl-steps { list-style: none; margin: 8px 0 0; padding: 0; max-height: 420px; overflow-y: auto; }
+.fl-steps li { padding: 6px 6px 6px 10px; border-left: 4px solid var(--line); margin-bottom: 4px; cursor: pointer; border-radius: 0 4px 4px 0; font-size: 13px; }
+.fl-steps li:hover { background: var(--info-bg); }
+.fl-steps li.cur { background: var(--info-bg); outline: 1px solid var(--accent); }
+.fl-steps li.future { opacity: .35; }
+.fl-steps li.s-bad { border-left-color: var(--bad); }
+.fl-steps li.s-warn { border-left-color: var(--warn); }
+.fl-steps li.s-wait { border-left-color: #7b8794; }
+.fl-steps li.s-ok { border-left-color: var(--good); }
+.fl-steps .t { font-weight: 600; }
+.fl-steps .m { color: var(--muted); font-size: 12px; }
+.fl-steps .x { margin: 2px 0; }
 #burst-box label { display: inline-block; margin: 0 10px 8px 0; }
 #burst-box input[type=number] { width: 64px; }
-.flow-table tbody tr { cursor: pointer; }
-.flow-table tbody tr:hover { background: var(--info-bg); }
-.flow-phone { display: none; }
-.flow-phone ul { list-style: none; margin: 0; padding: 0; }
-.flow-phone li { padding: 6px 0; border-bottom: 1px solid var(--line); }
 @media (max-width: 600px) {
-  .flow-map-box, .flow-slide, .flow-table, .flow-cols { display: none; }
-  .flow-phone { display: block; }
-  .flow-outcomes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fl-grid { grid-template-columns: minmax(0, 1fr); }
+  .fl-mapbox, #burst-box { display: none; }
+  .fl-list { max-height: 260px; }
   .tiles, .tiles.three, .tiles.five { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .tabs button { padding: 8px 10px; }
   .tile .value { font-size: 20px; }
@@ -306,59 +302,42 @@ section.flow-map-box { padding: 6px; }
   <div class="tabpanel hidden" id="tab-flow" role="tabpanel">
     <div class="flow-bar">
       <label>Production <select id="flow-ns"><option value="IRISAPP">IRISAPP</option><option value="LEGACY">LEGACY</option></select></label>
-      <span class="tag t-good flow-mode" id="flow-mode">Live</span>
-      <span id="flow-lbar">
-        <button type="button" id="flow-pause">Pause</button>
-        <button type="button" id="flow-speed">1x</button>
-      </span>
-      <span id="flow-jbar" class="hidden">
-        <button type="button" id="fj-back" title="Previous step">&laquo; Step</button>
-        <button type="button" id="fj-play">Play</button>
-        <button type="button" id="fj-fwd" title="Next step">Step &raquo;</button>
-        <button type="button" id="fj-speed">1x</button>
-      </span>
-      <button type="button" id="flow-live" class="hidden">Back to live</button>
-      <span class="muted" id="flow-clock"></span>
-      <span class="spacer"></span>
-      <label class="flow-slide" id="flow-slide-box">Last 60 min <input type="range" id="flow-slider" min="0" max="3600" value="3600" step="5"> <span id="flow-slider-label" class="muted">now</span></label>
+      <span class="muted" id="flow-status">waiting for the first poll</span>
     </div>
-    <p class="muted opt">Items of the selected production in lanes; node counters cover the last 60 minutes (eval and burst traffic follow the toggle above). Dots are messages moving along their real hops. Outcome counts cover the last 10 minutes plus what arrives while this tab is open. Click a dot or a row to follow that one message step by step.</p>
     <p class="err" id="flow-msg"></p>
-    <section class="panel flow-map-box">
-      <div class="flow-main" id="flow-main">
-        <div class="flow-canvas">
-          <div class="flow-chart" id="ch-flow"></div>
-          <div class="flow-wait" id="flow-wait">Waiting for messages… press Send a burst</div>
-          <div class="flow-jlabel hidden" id="flow-jlabel"></div>
-        </div>
-        <aside class="flow-steps hidden" id="flow-steps"></aside>
+    <div class="fl-grid">
+      <div class="fl-left">
+        <section class="panel">
+          <div class="fl-list-head"><h2>Messages (live)</h2><button type="button" id="fl-pause">Pause</button></div>
+          <ul class="fl-list" id="fl-list"></ul>
+        </section>
+        <section class="panel" id="burst-box">
+          <h2>Send a burst</h2>
+          <p class="muted">Sends random eval cases as new messages. Replay costs nothing; live needs the agent in live mode and a confirm.</p>
+          <label>Cases <input type="number" id="burst-n" min="1" max="30" value="8"></label>
+          <label>Mode <select id="burst-mode"><option value="replay">Replay ($0)</option><option value="live">Live (LLM, max 10)</option></select></label>
+          <button type="button" id="burst-go">Send a burst</button>
+          <button type="button" id="burst-confirm" class="hidden">Confirm and send</button>
+          <p class="msg" id="burst-msg"></p>
+        </section>
       </div>
-      <div class="flow-legend" id="flow-legend"></div>
-      <div class="flow-status muted" id="flow-status">last update: waiting for the first poll</div>
-    </section>
-    <section class="panel">
-      <div class="flow-outcomes" id="flow-outcomes"></div>
-    </section>
-    <div class="flow-cols">
-      <section class="panel flow-agent" id="flow-agent"></section>
-      <section class="panel" id="burst-box">
-        <h2>Send a burst</h2>
-        <p class="muted">Sends random eval cases as new messages. Replay costs nothing; live needs the agent in live mode and a confirm.</p>
-        <label>Cases <input type="number" id="burst-n" min="1" max="30" value="8"></label>
-        <label>Mode <select id="burst-mode"><option value="replay">Replay ($0)</option><option value="live">Live (LLM, max 10)</option></select></label>
-        <button type="button" id="burst-go">Send a burst</button>
-        <button type="button" id="burst-confirm" class="hidden">Confirm and send</button>
-        <p class="msg" id="burst-msg"></p>
-      </section>
+      <div class="fl-right">
+        <section class="panel fl-mapbox">
+          <svg class="fl-map" id="fl-map" role="img" aria-label="Production map with the path of the selected message"></svg>
+        </section>
+        <section class="panel">
+          <div class="fl-steps-head">
+            <h2 id="fl-title">Journey</h2>
+            <button type="button" id="fj-back" title="Previous step">&laquo; Step</button>
+            <button type="button" id="fj-play">Play</button>
+            <button type="button" id="fj-fwd" title="Next step">Step &raquo;</button>
+            <button type="button" id="fj-speed">1x</button>
+            <a href="#" id="fj-story" class="hidden">Open the full story</a>
+          </div>
+          <ol class="fl-steps" id="fl-steps"></ol>
+        </section>
+      </div>
     </div>
-    <section class="panel flow-table">
-      <h2>Recent decisions and their gates</h2>
-      <table>
-        <thead><tr><th>Time</th><th>Message</th><th>Agent</th><th>Injection</th><th>Grounding</th><th>Triage rule</th><th>Outcome</th></tr></thead>
-        <tbody id="flow-rows"></tbody>
-      </table>
-    </section>
-    <section class="panel flow-phone"><h2>Live messages</h2><ul id="flow-list"></ul></section>
   </div>
 
   <div class="tabpanel hidden" id="tab-settings" role="tabpanel">

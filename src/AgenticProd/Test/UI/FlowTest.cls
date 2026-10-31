@@ -26,6 +26,18 @@ Method TestLaneAndOutcomeMapping()
 	Do $$$AssertEquals(##class(AgenticProd.UI.Flow).CheckNs("%SYS"), "", "only the two production namespaces")
 }
 
+Method TestCurrentStatus()
+{
+	Set tF = "AgenticProd.UI.Flow"
+	Do $$$AssertEquals($CLASSMETHOD(tF, "Status", "SENT_FOR_APPROVAL", ""), "waiting")
+	Do $$$AssertEquals($CLASSMETHOD(tF, "Status", "DOWNGRADED:AUTO_FIX:x", ""), "waiting")
+	Do $$$AssertEquals($CLASSMETHOD(tF, "Status", "APPROVED", "2026-10-31 10:03:01"), "APPROVED", "the reviewer's answer replaces the Triage outcome")
+	Do $$$AssertEquals($CLASSMETHOD(tF, "Status", "REVIEW_REJECTED", "2026-10-31 10:03:01"), "REVIEW_REJECTED")
+	Do $$$AssertEquals($CLASSMETHOD(tF, "Status", "APPLIED", ""), "APPLIED")
+	Do $$$AssertEquals($CLASSMETHOD(tF, "Status", "RESENT", ""), "RESENT")
+	Do $$$AssertEquals($CLASSMETHOD(tF, "Status", "OBSERVED:AUTO_FIX", ""), "OBSERVED")
+}
+
 /// The head cursor must be the newest header, not 0: a poll from 0 reads the oldest rows first.
 Method TestHeadCursorIsNewest()
 {
