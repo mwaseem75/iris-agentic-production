@@ -31,6 +31,10 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
 <Route Url="/decisions/:id/story" Method="GET" Call="Story"/>
 <Route Url="/metrics/summary" Method="GET" Call="Metrics"/>
 <Route Url="/cost/summary" Method="GET" Call="Cost"/>
+<Route Url="/flow/map" Method="GET" Call="FlowMap"/>
+<Route Url="/flow/live" Method="GET" Call="FlowLive"/>
+<Route Url="/flow/window" Method="GET" Call="FlowWindow"/>
+<Route Url="/burst" Method="POST" Call="Burst"/>
 <Route Url="/evalruns" Method="GET" Call="EvalRuns"/>
 <Route Url="/evalruns/:id" Method="GET" Call="EvalResults"/>
 <Route Url="/settings" Method="GET" Call="Settings"/>
@@ -275,6 +279,108 @@ ClassMethod Cost() As %Status
 	Set tSC = $$$OK
 	Try {
 		Write ##class(AgenticProd.UI.Cost).Data(''%request.Get("eval"), %request.Get("days", 30)).%ToJSON()
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// GET /flow/map?ns=&from=&to=: production items in lanes with counters, and the hops between them.
+ClassMethod FlowMap() As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		Set tNs = ##class(AgenticProd.UI.Flow).CheckNs(%request.Get("ns"))
+		If tNs = "" {
+			Do ..FlowBadNs()
+			Quit
+		}
+		Write ##class(AgenticProd.UI.Flow).Map(tNs, %request.Get("from"), %request.Get("to"), ..FlowEval()).%ToJSON()
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// GET /flow/live?ns=&since=&dec=&tool=&usage=: rows after the cursor the last answer returned.
+/// Without since it answers with the cursor only, so a live view starts from now.
+ClassMethod FlowLive() As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		Set tNs = ##class(AgenticProd.UI.Flow).CheckNs(%request.Get("ns"))
+		If tNs = "" {
+			Do ..FlowBadNs()
+			Quit
+		}
+		If %request.Get("since") = "" {
+			Write ##class(AgenticProd.UI.Flow).Head(tNs).%ToJSON()
+			Quit
+		}
+		Set tCursor = {"hop":(+%request.Get("since")), "dec":(+%request.Get("dec")), "tool":(+%request.Get("tool")), "usage":(+%request.Get("usage"))}
+		Write ##class(AgenticProd.UI.Flow).Slice(tNs, , , tCursor).%ToJSON()
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// GET /flow/window?ns=&from=&to=: the same rows for a past window (UTC timestamps), for the slider.
+ClassMethod FlowWindow() As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		Set tNs = ##class(AgenticProd.UI.Flow).CheckNs(%request.Get("ns"))
+		If tNs = "" {
+			Do ..FlowBadNs()
+			Quit
+		}
+		Set tFrom = %request.Get("from"), tTo = %request.Get("to")
+		If '$MATCH(tFrom_tTo, "[0-9 :.T-]*") {
+			Set %response.Status = ..#HTTP400BADREQUEST
+			Write {"error":"from and to are UTC timestamps"}.%ToJSON()
+			Quit
+		}
+		Set tFrom = $TRANSLATE(tFrom, "T"), tTo = $TRANSLATE(tTo, "T")
+		Set tOut = ##class(AgenticProd.UI.Flow).Slice(tNs, tFrom, tTo)
+		Set tOut.map = ##class(AgenticProd.UI.Flow).Map(tNs, $SELECT(tFrom'="": tFrom, 1: ##class(AgenticProd.UI.Flow).Ago(60)), tTo, ..FlowEval())
+		Write tOut.%ToJSON()
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// eval=1 on a Flow call: count eval and burst traffic too.
+ClassMethod FlowEval() As %Boolean [ Internal ]
+{
+	Quit ''%request.Get("eval")
+}
+
+ClassMethod FlowBadNs() [ Internal ]
+{
+	Set %response.Status = ..#HTTP400BADREQUEST
+	Write {"error":("ns must be one of "_##class(AgenticProd.UI.Flow).#NAMESPACES)}.%ToJSON()
+}
+
+/// POST /burst {"n":8,"mode":"replay|live","confirm":false}: admin only. See UI.Flow.Burst.
+ClassMethod Burst() As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		Try {
+			Set tBody = {}.%FromJSON(%request.Content)
+		} Catch {
+			Set tBody = ""
+		}
+		If '$IsObject(tBody) {
+			Set %response.Status = ..#HTTP400BADREQUEST
+			Write {"error":"Body must be a JSON object"}.%ToJSON()
+			Quit
+		}
+		Set tResult = ##class(AgenticProd.UI.Flow).Burst(tBody, ..CanEditSettings())
+		Set %response.Status = $CASE(tResult.status, 200: ..#HTTP200OK, 400: ..#HTTP400BADREQUEST, 403: ..#HTTP403FORBIDDEN, 409: ..#HTTP409CONFLICT, : ..#HTTP500INTERNALSERVERERROR)
+		Write tResult.%ToJSON()
 	} Catch ex {
 		Set tSC = ex.AsStatus()
 	}
