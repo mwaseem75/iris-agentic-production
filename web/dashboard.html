@@ -102,7 +102,7 @@ a:hover { text-decoration: underline; }
 .chart-card h3 { margin-bottom: 4px; }
 .chart-card .note { color: var(--muted); font-size: 12px; margin: 0 0 4px; }
 .chart { width: 100%; height: 240px; }
-.mini { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.mini { display: flex; flex-wrap: wrap; gap: 16px 0; margin-bottom: 14px; }
 .err { color: var(--bad); margin: 0 0 12px; }
 /* !important: .form .actions and other display rules are more specific */
 .hidden { display: none !important; }
@@ -250,14 +250,14 @@ td.go { white-space: nowrap; }
   .tile .value { font-size: 20px; }
   .opt { display: none; }
   .charts { grid-template-columns: minmax(0, 1fr); }
-  .mini { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .mini { gap: 12px 0; }
   .chart { height: 220px; }
 }
 
 /* ---- console style: cards, grid, header bar, help panel (tokens are in :root) ---- */
 body { font: 14px/1.5 var(--font); }
 .wrap { max-width: 1280px; padding: 0 24px 48px; }
-.appbar { background: var(--panel); border-bottom: 1px solid var(--line); margin: 0 -24px 24px; padding: 14px 24px 0; }
+.appbar { background: var(--panel); border-bottom: 1px solid var(--line); margin: 0 calc(50% - 50vw) 24px; padding: 14px calc(50vw - 50%) 0; }
 .appbar-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
 .appbar h1 { font-size: 20px; font-weight: 600; }
 .appbar .lede { margin: 2px 0 0; flex-basis: 100%; font-size: 13px; }
@@ -274,14 +274,28 @@ section.panel, .card { background: var(--panel); border: 1px solid var(--line); 
 .card-h .info:hover { text-decoration: underline; }
 .card-f { border-top: 1px solid var(--line); margin: 16px -20px -4px; padding: 12px 20px 0; font-size: 13px; }
 .card-desc { margin: -6px 0 12px; color: var(--muted); font-size: 13px; }
-.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; margin-bottom: 24px; align-items: start; }
+.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; margin-bottom: 24px; align-items: stretch; }
 .grid > .card { margin-bottom: 0; }
 .grid > .span2 { grid-column: span 2; }
-.tiles { gap: 12px; margin-bottom: 0; }
-.tiles.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.tile { background: #f8f9fb; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.tiles, .tiles.two, .tiles.three, .tiles.five { display: flex; flex-wrap: wrap; gap: 16px 0; margin-bottom: 0; }
+.tile, .tile.over { background: none; border: 0; border-left: 1px solid var(--line); border-radius: 0; padding: 0 20px; min-width: 120px; flex: 1 1 130px; }
+.tile:first-child { border-left: 0; padding-left: 0; }
+.tile .label { font-size: 13px; }
 .tile .value { font-size: 30px; font-weight: 600; line-height: 1.2; }
-.tile .label { font-size: 12px; }
+.tile .value.link { color: var(--accent); cursor: pointer; background: none; border: 0; padding: 0; text-align: left; font-family: inherit; }
+.tile .value.link:hover { text-decoration: underline; }
+.tile .value.zero-ok { color: var(--good); }
+.tile .sub { font-size: 12px; }
+.card-h .win { color: var(--muted); font-size: 13px; }
+.linkbtn { background: none; border: 0; padding: 0; color: var(--accent); font-size: 13px; cursor: pointer; }
+.linkbtn:hover { text-decoration: underline; }
+.steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; }
+.step { padding: 0 20px; border-left: 1px solid var(--line); }
+.step:first-child { border-left: 0; padding-left: 0; }
+.step .n { width: 26px; height: 26px; border-radius: 50%; background: var(--info-bg); color: var(--accent); font-weight: 600; display: flex; align-items: center; justify-content: center; margin-bottom: 6px; }
+.step b { display: block; font-weight: 600; }
+.step p { margin: 2px 0 8px; color: var(--muted); font-size: 13px; }
+.grid > .span3 { grid-column: 1 / -1; }
 button { border-radius: 8px; padding: 6px 14px; }
 a.btn { border-radius: 8px; padding: 6px 14px; }
 button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
@@ -303,12 +317,13 @@ input, select { border-radius: 8px; padding: 6px 10px; }
 #help-panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(380px, 100vw); background: var(--panel); border-left: 1px solid var(--line); box-shadow: -4px 0 18px rgba(0,0,0,.15); z-index: 61; padding: 24px; overflow-y: auto; }
 #help-panel h2 { font-size: 18px; }
 #help-panel p { margin: 0 0 12px; }
-@media (max-width: 1100px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .grid > .span2 { grid-column: span 2; } }
+@media (max-width: 1100px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .grid > .span2 { grid-column: span 2; } .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 0; } .step:nth-child(3) { border-left: 0; padding-left: 0; } }
 @media (max-width: 700px) {
   .wrap { padding: 0 16px 32px; }
-  .appbar { margin: 0 -16px 16px; padding: 12px 16px 0; }
+  .appbar { margin: 0 calc(50% - 50vw) 16px; padding: 12px calc(50vw - 50%) 0; }
   .grid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
   .grid > .span2 { grid-column: auto; }
+  .steps { grid-template-columns: minmax(0, 1fr); } .step { border-left: 0; padding: 0; }
   section.panel, .card { padding: 16px; margin-bottom: 16px; }
   .card-f { margin: 16px -16px -4px; padding: 12px 16px 0; }
   .tabs { overflow-x: auto; }
@@ -345,24 +360,24 @@ input, select { border-radius: 8px; padding: 6px 10px; }
 
   <div class="tabpanel" id="tab-overview" role="tabpanel">
     <div class="grid">
+      <section class="card span3" data-info="start"><h2>Getting started</h2>
+        <div class="steps">
+          <div class="step"><div class="n">1</div><b>Send a sample</b><p>Sends eval case 01 as a replay message. It costs nothing.</p><button type="button" class="primary" id="gs-1">Send case 01</button></div>
+          <div class="step"><div class="n">2</div><b>Watch it flow</b><p>See the path of the latest message, step by step.</p><button type="button" class="linkbtn" id="gs-2">View flow &rarr;</button></div>
+          <div class="step"><div class="n">3</div><b>Review the queue</b><p>Open the tasks waiting for a person.</p><a id="gs-3" target="_blank" rel="noopener" style="font-size:13px">Workflow inbox &rarr;</a></div>
+          <div class="step"><div class="n">4</div><b>Try a burst</b><p>Send several random cases at once.</p><button type="button" class="linkbtn" id="gs-4">Send a burst &rarr;</button></div>
+        </div>
+        <p class="msg" id="gs-msg"></p></section>
       <section class="card" data-info="health"><h2>Production health</h2>
-        <div class="tiles two" id="tiles-what"></div></section>
+        <div class="tiles" id="tiles-what"></div></section>
       <section class="card" data-info="trust"><h2>Trust &amp; safety</h2>
-        <div class="tiles two" id="tiles-trust"></div></section>
+        <div class="tiles" id="tiles-trust"></div></section>
       <section class="card" data-info="aicost" data-foot="Go to Cost" data-foot-tab="cost"><h2>AI cost</h2>
-        <div class="tiles two" id="tiles-cost"></div></section>
+        <div class="tiles" id="tiles-cost"></div></section>
       <section class="card span2" data-info="recent" data-foot="All messages" data-foot-tab="messages"><h2>Recent decisions</h2>
         <ul class="rlist" id="ov-recent"></ul></section>
       <section class="card" data-info="mix"><h2>Outcome mix</h2>
         <div class="chart" id="ch-outcomes"></div></section>
-      <section class="card" data-info="start"><h2>Getting started</h2>
-        <ol class="gs">
-          <li><button type="button" id="gs-1">Send one replay message</button></li>
-          <li><button type="button" id="gs-2">View flow of the latest message</button></li>
-          <li><a class="btn" id="gs-3" target="_blank" rel="noopener">Open the Workflow inbox</a></li>
-          <li><button type="button" id="gs-4">Send a burst</button></li>
-        </ol>
-        <p class="msg" id="gs-msg"></p></section>
     </div>
 
     <section class="panel">
@@ -652,10 +667,13 @@ function get(path) {
   });
 }
 
-function tile(label, value, sub, meter, cls) {
+// tab: the number opens that tab (blue); good: the number is green
+function tile(label, value, sub, meter, cls, tab, good) {
   var t = el("div", null, "tile" + (cls ? " " + cls : ""));
   t.appendChild(el("div", label, "label"));
-  t.appendChild(el("div", value, "value"));
+  var v = el(tab ? "button" : "div", value, "value" + (tab ? " link" : "") + (good ? " zero-ok" : ""));
+  if (tab) { v.type = "button"; v.addEventListener("click", function () { showTab(tab); }); }
+  t.appendChild(v);
   if (sub) t.appendChild(el("div", sub, "sub"));
   if (meter !== undefined) {
     var m = el("div", null, "meter" + (meter >= 1 ? " over" : ""));
@@ -677,26 +695,58 @@ function renderSummary(s, m) {
   var budgetSub = !s.dailyTokenBudget ? "no daily budget"
     : s.tokensPercent + "% of " + num(s.dailyTokenBudget) + " daily budget"
       + (s.overBudget ? " — over budget: new messages go to a person" : "");
+  var fhir = num(s.fhirValid) + " valid / " + num(s.fhirInvalid) + " invalid FHIR out";
   document.getElementById("tiles-what").replaceChildren(
-    tile("Messages triaged", num(s.triaged)),
+    tile("Messages triaged", num(s.triaged), fhir, undefined, "", "messages"),
     tile("Auto-fixed", num(s.autoFixed), "whitelisted fixes applied"),
     tile("Sent for approval", num(s.sentForApproval), num(s.waiting) + " waiting"),
     tile("Rejected", num(s.rejected), "returned to sender")
   );
   document.getElementById("tiles-trust").replaceChildren(
-    tile("Changed by Triage", num(s.changedByTriage), "agent proposal not applied as sent"),
-    tile("Mappings learned", num(s.mappingsLearned), "approved by a reviewer"),
-    tile("LLM calls saved", num(sv.calls), sv.costUsd == null ? "by learned mappings" : "~" + num(sv.tokens) + " tokens, " + money(sv.costUsd)),
-    tile("FHIR out", num(s.fhirValid) + " / " + num(s.fhirInvalid), "valid / invalid R4 bundles"),
-    tile("Grounding", num(s.groundingPassed) + " / " + num(s.groundingCaught), "passed / caught: claims not traced to message, tools or KB")
+    tile("Unsafe actions", num(s.unsafeActions), "applied against the rules", undefined, "", null, !s.unsafeActions),
+    tile("Grounding caught", num(s.groundingCaught), num(s.groundingPassed) + " passed"),
+    tile("Injection flagged", num(s.injectionFlagged), "instruction-like text in a message"),
+    tile("Changed by Triage", num(s.changedByTriage), "agent proposal not applied as sent")
   );
   document.getElementById("tiles-cost").replaceChildren(
-    tile("LLM cost today", money(s.costToday), num(s.agentRunsToday) + " agent runs"),
+    tile("LLM cost today", money(s.costToday), num(s.agentRunsToday) + " agent runs", undefined, "", "cost"),
     tile("Cost per message", money(s.costPerMessage), (s.model || "no model") + ", " + num(s.agentRunsModel) + " runs"),
     // Bar width is capped at 100% in tile(); the text carries the real figure
     tile("Tokens today", num(s.tokensToday), budgetSub,
-      s.dailyTokenBudget ? s.tokensToday / s.dailyTokenBudget : undefined, s.overBudget ? "over" : "")
+      s.dailyTokenBudget ? s.tokensToday / s.dailyTokenBudget : undefined, s.overBudget ? "over" : ""),
+    tile("LLM calls saved", num(sv.calls), num(s.mappingsLearned) + " mappings learned" + (sv.costUsd == null ? "" : ", ~" + money(sv.costUsd)))
   );
+  setWindow("health", s.window); setWindow("trust", s.window); setWindow("aicost", s.costWindow);
+  if (s.namespace) { var hn = document.getElementById("hdr-ns"); hn.textContent = "Namespace " + s.namespace; hn.classList.remove("hidden"); }
+  if (s.user) { var hu = document.getElementById("hdr-user"); hu.textContent = "Signed in as " + s.user; hu.classList.remove("hidden"); }
+}
+
+// Period label on the right of a card header, left of Info
+function setWindow(key, text) {
+  var c = document.querySelector('section.card[data-info="' + key + '"] .card-h');
+  if (!c || !text) return;
+  var w = c.querySelector(".win");
+  if (!w) { w = el("span", null, "win"); c.insertBefore(w, c.querySelector(".info")); }
+  w.textContent = text;
+}
+
+// Plain label for a DecisionLog outcome; the raw code stays in the tooltip
+function outcomeLabel(o) {
+  if (!o) return "\u2014";
+  if (o === "APPLIED") return "Applied";
+  if (o === "SENT_FOR_APPROVAL") return "Waiting for approval";
+  if (o === "REJECTED") return "Rejected";
+  if (o.indexOf("DOWNGRADED:") === 0) return "Mapping proposed (downgraded)";
+  if (o.indexOf("PROPOSED:") === 0) return "Mapping proposed";
+  if (o.indexOf("ESCALAT") === 0) return "Escalated";
+  if (o === "APPROVED") return "Approved";
+  if (o === "RESENT") return "Resent";
+  return o;
+}
+function outcomeTag(o) {
+  var t = tag(outcomeLabel(o), outcomeKind(o));
+  t.title = o || "";
+  return t;
 }
 
 // ---- cards: Info link and footer link, built from data-info / data-foot ----
@@ -787,8 +837,8 @@ function renderRecent(rows) {
     txt.appendChild(document.createTextNode(d.ControlId || (d.EvalRunId ? "EV" + d.EvalRunId + "-" + d.CaseId : "hdr " + d.HeaderId)));
     txt.appendChild(el("small", (d.ErrorClass || "") + (d.CreatedAt ? " · " + d.CreatedAt.substring(5, 16) : "")));
     li.appendChild(txt);
-    li.appendChild(tag(d.Outcome || "—", kind));
-    var go = el("button", "View flow");
+    li.appendChild(outcomeTag(d.Outcome));
+    var go = el("button", "View flow", "linkbtn");
     go.type = "button";
     var rowNs = d.Namespace || homeNs || "IRISAPP";
     go.addEventListener("click", function () { window.flowOpen(d.ID, rowNs); });
@@ -803,8 +853,8 @@ function startSteps() {
   var msg = document.getElementById("gs-msg");
   document.getElementById("gs-1").addEventListener("click", function () {
     msg.className = "msg"; msg.textContent = "";
-    send("POST", "api/burst", { n: 1, mode: "replay", ns: homeNs || "IRISAPP", confirm: false }).then(function () {
-      msg.className = "msg ok"; msg.textContent = "Sent one replay message. It appears under Recent decisions in a few seconds.";
+    send("POST", "api/burst", { n: 1, mode: "replay", ns: homeNs || "IRISAPP", confirm: false, "case": "01" }).then(function () {
+      msg.className = "msg ok"; msg.textContent = "Sent case 01 as a replay message. It appears under Recent decisions in a few seconds.";
       setTimeout(load, 4000);
     }).catch(function (e) { msg.className = "msg bad"; msg.textContent = e.message; });
   });
@@ -860,7 +910,7 @@ function renderDecisions(rows) {
     var agent = d.AgentDecision || (d.agentCalled ? d.Decision : "");
     var td = cell(tr, tag(agent || noAgentText(d.noAgentReason), "other"), "wrap-cell");
     td.appendChild(el("span", "→", "arrow"));
-    td.appendChild(tag(d.Outcome || "—", outcomeKind(d.Outcome)));
+    td.appendChild(outcomeTag(d.Outcome));
     if (d.flagged && d.flagged.length) td.appendChild(tag("flagged", "bad"));
     if (d.fhirOut && d.fhirOut !== "valid") td.appendChild(tag("FHIR " + d.fhirOut, "bad"));
     td.title = [d.triageChanged ? "Triage changed the agent's proposal" : "",
@@ -944,7 +994,7 @@ function showRun(run) {
       cell(tr, c.ExpectedDecision + (c.ExpectedLoinc ? " " + c.ExpectedLoinc : ""));
       cell(tr, c.AgentDecision || "—");
       cell(tr, c.AgentLoinc || "", "opt");
-      cell(tr, tag(c.FinalOutcome || "—", outcomeKind(c.FinalOutcome)));
+      cell(tr, outcomeTag(c.FinalOutcome));
       var res = c.UnsafeFinal ? tag("unsafe final", "bad")
         : c.UnsafeAgent ? tag("unsafe proposal", "warn")
         : c.Acceptable ? tag(c.Exact ? "exact" : "acceptable", "good")

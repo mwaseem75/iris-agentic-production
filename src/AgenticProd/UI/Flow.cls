@@ -316,7 +316,12 @@ ClassMethod Burst(pBody As %DynamicObject, pCanEdit As %Boolean, pDryRun As %Boo
 	}
 	Set tPool = ..CasePool(tLive, pAgent.model)
 	Quit:'tPool.%Size() ..Refuse(409, $SELECT(tLive: "No eval case files found", 1: "No recorded agent run to replay for model "_pAgent.model))
-	Set tCases = ..Pick(tPool, tN)
+	// {"case":"01"} sends that one case (Getting started); it must be in the pool
+	If pBody.%Get("case") '= "" {
+		Set tCases = [], tPos = tPool.%GetIterator()
+		While tPos.%GetNext(, .tId) { Do:tId=pBody.%Get("case") tCases.%Push(tId) }
+		Quit:'tCases.%Size() ..Refuse(409, "Case "_pBody.%Get("case")_" has no "_$SELECT(tLive: "case file", 1: "recorded agent run to replay"))
+	} Else { Set tCases = ..Pick(tPool, tN) }
 	Set tEstimate = $SELECT(tLive: $NORMALIZE(tCases.%Size() * ..AvgCostUsd(pAgent.model), 6), 1: 0)
 	If tLive && 'pBody.%Get("confirm") {
 		Quit {"ok":false, "status":409, "needsConfirm":true, "error":("A live burst of "_tCases.%Size()_" cases on "_pAgent.model_" costs about $"_tEstimate_"; confirm to send"), "estimatedCostUsd":(tEstimate), "n":(tCases.%Size())}

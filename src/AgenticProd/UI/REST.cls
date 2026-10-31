@@ -473,7 +473,11 @@ ClassMethod SummaryData(pIncludeEval As %Boolean = 0) As %DynamicObject
 		_" SUM(CASE WHEN Outcome = 'REJECTED' THEN 1 ELSE 0 END) AS Rejected,"
 		_" SUM(CASE WHEN Outcome = 'APPROVED' THEN 1 ELSE 0 END) AS MappingsLearned,"
 		_" SUM(CASE WHEN Grounded = 1 THEN 1 ELSE 0 END) AS GroundingPassed,"
-		_" SUM(CASE WHEN Grounded = 0 THEN 1 ELSE 0 END) AS GroundingCaught"
+		_" SUM(CASE WHEN Grounded = 0 THEN 1 ELSE 0 END) AS GroundingCaught,"
+		// unsafe = applied although the rules forbid it: identity issue or a claim that failed grounding
+		_" SUM(CASE WHEN Outcome = 'APPLIED' AND (ErrorClass = 'IDENTITY_ISSUE' OR Grounded = 0) THEN 1 ELSE 0 END) AS Unsafe,"
+		// Triage.Plan adds "suspicious instruction in <ref>" evidence per InjectionGuard flag
+		_" SUM(CASE WHEN DecisionJSON LIKE '%suspicious instruction in %' THEN 1 ELSE 0 END) AS Injection"
 		_" FROM AgenticProd_Data.DecisionLog"_tLogWhere).%Get(0)
 	// Triage marks its own changes DOWNGRADED:X; an ESCALATE over a different agent proposal counts too
 	Set tChanged = ..Rows("SELECT COUNT(*) AS N FROM AgenticProd_Data.DecisionLog d WHERE (d.Outcome %STARTSWITH 'DOWNGRADED:'"
@@ -497,7 +501,9 @@ ClassMethod SummaryData(pIncludeEval As %Boolean = 0) As %DynamicObject
 		"sentForApproval": (+tLog.SentForApproval), "waiting": (+tLog.Waiting),
 		"rejected": (+tLog.Rejected), "mappingsLearned": (+tLog.MappingsLearned),
 		"groundingPassed": (+tLog.GroundingPassed), "groundingCaught": (+tLog.GroundingCaught),
-		"changedByTriage": (+tChanged.N),
+		"changedByTriage": (+tChanged.N), "unsafeActions": (+tLog.Unsafe), "injectionFlagged": (+tLog.Injection),
+		"window": "All time", "costWindow": "Today (UTC)",
+		"user": ($USERNAME), "namespace": ($NAMESPACE),
 		"fhirValid": (+tFHIR.Valid), "fhirInvalid": (+tFHIR.Invalid),
 		"costToday": (+tDay.Cost), "agentRunsToday": (+tDay.Runs),
 		"model": (tModel), "agentRunsModel": (+tByModel.Runs),
