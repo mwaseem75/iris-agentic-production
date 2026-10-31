@@ -1,6 +1,6 @@
 /// HL7 -> SDA3 -> FHIR R4 build and validation on eval cases, called directly (no production, no LLM).
 /// The first profile check starts the Java validator, so the first test can take about 35 s.
-Class AgenticProd.Test.Operation.NphiesFHIROutTest Extends AgenticProd.Test.Case
+Class AgenticProd.Test.Operation.FhirOutTest Extends AgenticProd.Test.Case
 {
 
 Parameter PROFILE = "http://hl7.org/fhir/us/core/StructureDefinition/us-core-observation-lab|3.1.0";
@@ -10,7 +10,7 @@ Property Validator As HS.FHIRServer.Util.ResourceValidator;
 Method OnBeforeAllTests() As %Status
 {
 	$$$QuitOnError(##class(AgenticProd.Setup).SeedLabCodeMap())
-	Set tSC = ##class(AgenticProd.Operation.NphiesFHIROut).NewValidator("hl7.fhir.r4.core@4.0.1,hl7.fhir.us.core@3.1.0", .tValidator)
+	Set tSC = ##class(AgenticProd.Operation.FhirOut).NewValidator("hl7.fhir.r4.core@4.0.1,hl7.fhir.us.core@3.1.0", .tValidator)
 	Set ..Validator = tValidator
 	Quit tSC
 }
@@ -31,7 +31,7 @@ Method TestValidControl20()
 	Do $$$AssertEquals(tFlag.system_"|"_tFlag.code, "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation|N", "OBX-8")
 	Set tQty = tObs.valueQuantity
 	Do $$$AssertEquals(tQty.value_" "_tQty.code_" "_tQty.system, "139 mmol/L http://unitsofmeasure.org")
-	Set tErrors = ##class(AgenticProd.Operation.NphiesFHIROut).Validate(..Validator, tBundle, ..#PROFILE, .tOutcome, .tLines)
+	Set tErrors = ##class(AgenticProd.Operation.FhirOut).Validate(..Validator, tBundle, ..#PROFILE, .tOutcome, .tLines)
 	Do $$$AssertEquals(tErrors, 0, "valid: "_tLines)
 }
 
@@ -43,7 +43,7 @@ Method TestBrokenValueToTriage()
 	Set tObs = ..First(tBundle, "Observation")
 	Set tObs.valueQuantity.value = "one-three-nine"
 	Set tResult = ##class(AgenticProd.Msg.FHIRResult).%New()
-	Set tResult.IssueCount = ##class(AgenticProd.Operation.NphiesFHIROut).Validate(..Validator, tBundle, ..#PROFILE, .tOutcome, .tLines)
+	Set tResult.IssueCount = ##class(AgenticProd.Operation.FhirOut).Validate(..Validator, tBundle, ..#PROFILE, .tOutcome, .tLines)
 	Set tResult.Valid = (tResult.IssueCount = 0), tResult.Issues = tLines
 	Do $$$AssertTrue(tResult.IssueCount > 0, tLines)
 	Do $$$AssertTrue(tLines [ "WrongJsonType", tLines)
@@ -70,7 +70,7 @@ Method TestApprovedMapping01()
 	If $$$AssertTrue($IsObject(tObs), "Observation") {
 		Do $$$AssertEquals(tObs.code.coding.%Get(0).code, "2345-7")
 		Do $$$AssertEquals(tObs.code.coding.%Get(1).code, "GLU-01")
-		Set tErrors = ##class(AgenticProd.Operation.NphiesFHIROut).Validate(..Validator, tBundle, ..#PROFILE, , .tLines)
+		Set tErrors = ##class(AgenticProd.Operation.FhirOut).Validate(..Validator, tBundle, ..#PROFILE, , .tLines)
 		Do $$$AssertEquals(tErrors, 0, "valid: "_tLines)
 	}
 	// GLU-01 must stay unmapped for the eval and the learning-loop test
@@ -81,7 +81,7 @@ Method Bundle(pCaseId As %String, Output pBundle As %DynamicObject, Output pMsg 
 {
 	Do $$$AssertStatusOK(##class(AgenticProd.Test.Tools.HL7Test).LoadCase(pCaseId, .pHeaderId))
 	Do ##class(AgenticProd.Tools.Base).OpenBody(pHeaderId, .pMsg)
-	Do $$$AssertStatusOK(##class(AgenticProd.Operation.NphiesFHIROut).Build(pMsg, .pBundle, "http://lab-sim.example/codes"))
+	Do $$$AssertStatusOK(##class(AgenticProd.Operation.FhirOut).Build(pMsg, .pBundle, "http://lab-sim.example/codes"))
 }
 
 ClassMethod First(pBundle As %DynamicObject, pType As %String) As %DynamicObject

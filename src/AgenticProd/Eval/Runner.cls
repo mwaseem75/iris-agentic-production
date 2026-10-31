@@ -22,7 +22,7 @@ Parameter SETTLESECONDS = 5;
 Parameter NOTRIAGESECONDS = 10;
 
 /// Run the cases (pCases "all" or "01,05,20") with pModel, pMode live or replay. Sets the agent
-/// item's Model and Mode, resets LabCodeMap to the Setup seed and the NphiesOut timeout simulation,
+/// item's Model and Mode, resets LabCodeMap to the Setup seed and the EhrOut timeout simulation,
 /// then sends each case as MSH-10 "EV<runId>-<caseId>" and waits for its final Triage outcome.
 /// A live run is refused when DailyTokenBudget cannot cover TOKENSPERCASE per agent case.
 ClassMethod Run(pModel As %String, pLabel As %String = "", pCases As %String = "all", pMode As %String = "live", Output pRunId As %String) As %Status
@@ -432,7 +432,7 @@ ClassMethod PrepareAgent(pModel As %String, pMode As %String) As %Status
 }
 
 /// LabCodeMap back to the Setup seed (drops mappings approved in earlier runs) and the
-/// NphiesOut timeout simulation cleared. Triage's resend count needs no reset: it is keyed by
+/// EhrOut timeout simulation cleared. Triage's resend count needs no reset: it is keyed by
 /// header and body, and every eval send is a new file, so a new header and body.
 ClassMethod ResetState() As %Status
 {
@@ -440,7 +440,7 @@ ClassMethod ResetState() As %Status
 	Try {
 		Do ##class(Ens.Util.LookupTable).%ClearTable(##class(AgenticProd.Tools.Mapping).#CODEMAP)
 		$$$ThrowOnError(##class(AgenticProd.Setup).SeedLabCodeMap())
-		Do ##class(AgenticProd.Operation.NphiesOut).ResetSimulation()
+		Do ##class(AgenticProd.Operation.EhrOut).ResetSimulation()
 	} Catch ex {
 		Set tSC = ex.AsStatus()
 	}

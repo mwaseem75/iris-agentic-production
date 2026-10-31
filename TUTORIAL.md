@@ -416,7 +416,7 @@ These are facts and workarounds found while building this app, **as of build 154
 
 ## 13. Where to go next
 
-- **FHIR.** Valid results already go out as FHIR R4 (`Operation.NphiesFHIROut`). The next step is a `Tools.FHIR` class with its own `validate_fix` and a `FHIRRepair` skill. The core does not change: error classes and decisions are format-neutral, and Triage looks up the fix checker per format in its `CHECKERS` parameter.
+- **FHIR.** Valid results already go out as FHIR R4 (`Operation.FhirOut`). The next step is a `Tools.FHIR` class with its own `validate_fix` and a `FHIRRepair` skill. The core does not change: error classes and decisions are format-neutral, and Triage looks up the fix checker per format in its `CHECKERS` parameter.
 - **Any production.** Next on the roadmap: enabling the triage agent on an existing production that was never built for AI, starting in observe-only mode.
 - **Other formats.** X12 or JSON would follow the same pattern: a tool class with masking and a fix checker, a skill with instructions, one line in `CHECKERS`.
 - **AI Hub docs.** The [AI Hub EAP repo](https://github.com/intersystems-community/ai-hub-eap), the [ObjectScript SDK Guide](https://github.com/intersystems-community/ai-hub-eap/blob/master/ObjectScript_SDK_Guide.md) and [Advanced features](https://github.com/intersystems-community/ai-hub-eap/blob/master/ObjectScript_SDK_Advanced.md).

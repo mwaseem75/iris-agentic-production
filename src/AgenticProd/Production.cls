@@ -1,4 +1,4 @@
-/// Agentic Production: lab results in from files, routed to simulated NPHIES; failures go to
+/// Agentic Production: lab results in from files, routed to simulated EHR; failures go to
 /// Triage, which asks the agent and then applies, resends, rejects or escalates.
 Class AgenticProd.Production Extends Ens.Production
 {
@@ -15,16 +15,16 @@ XData ProductionDefinition
     <Setting Target="Host" Name="MessageSchemaCategory">2.5.1</Setting>
   </Item>
   <Item Name="LabRouter" Category="Lab" ClassName="AgenticProd.Process.LabRouter" PoolSize="1" Enabled="true" Foreground="false" LogTraceEvents="true" Comment="Validate, LabCodeMap lookup, transform; failures to Triage">
-    <Setting Target="Host" Name="TargetConfigName">NphiesOut</Setting>
+    <Setting Target="Host" Name="TargetConfigName">EhrOut</Setting>
     <Setting Target="Host" Name="TriageTarget">Triage</Setting>
     <Setting Target="Host" Name="FHIROutput">1</Setting>
-    <Setting Target="Host" Name="FHIRTarget">NphiesFHIROut</Setting>
+    <Setting Target="Host" Name="FHIRTarget">FhirOut</Setting>
   </Item>
-  <Item Name="NphiesOut" Category="Lab" ClassName="AgenticProd.Operation.NphiesOut" PoolSize="1" Enabled="true" Foreground="false" LogTraceEvents="true" Comment="Simulated NPHIES: files in data/out">
+  <Item Name="EhrOut" Category="Lab" ClassName="AgenticProd.Operation.EhrOut" PoolSize="1" Enabled="true" Foreground="false" LogTraceEvents="true" Comment="Simulated EHR: files in data/out">
     <Setting Target="Adapter" Name="FilePath">/home/irisowner/dev/data/out/</Setting>
     <Setting Target="Host" Name="SimulateTimeoutFor">MSG00015,15</Setting>
   </Item>
-  <Item Name="NphiesFHIROut" Category="Lab" ClassName="AgenticProd.Operation.NphiesFHIROut" PoolSize="1" Enabled="true" Foreground="false" LogTraceEvents="true" Comment="Simulated NPHIES FHIR endpoint: validated R4 bundles in data/out-fhir">
+  <Item Name="FhirOut" Category="Lab" ClassName="AgenticProd.Operation.FhirOut" PoolSize="1" Enabled="true" Foreground="false" LogTraceEvents="true" Comment="Simulated FHIR server (HIE): validated R4 bundles in data/out-fhir">
     <Setting Target="Adapter" Name="FilePath">/home/irisowner/dev/data/out-fhir/</Setting>
     <Setting Target="Adapter" Name="Charset">UTF-8</Setting>
     <Setting Target="Host" Name="LocalCodeSystem">http://lab-sim.example/codes</Setting>

@@ -5,7 +5,7 @@
   "title": "Valid message, downstream timed out",
   "format": "HL7v2",
   "source": "LAB_SIM",
-  "error_text": "ERROR #5922: Timed out waiting for response from NphiesOut (HTTP 504)",
+  "error_text": "ERROR #5922: Timed out waiting for response from EhrOut (HTTP 504)",
   "error_class": "TRANSIENT",
   "decision": "RESEND",
   "acceptable_decisions": [

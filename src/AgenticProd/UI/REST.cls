@@ -611,7 +611,7 @@ ClassMethod StoryData(pId As %String) As %DynamicObject
 	Do tSteps.%Push(..ReviewStep(tLog, ..TriageOutcome(tLog, tTriage), .tSecrets))
 
 	Set tFHIR = ..FHIRStatus(tLog.SessionId, tNS)
-	Do:tFHIR'="" tSteps.%Push({"step":"fhir", "title":"FHIR out", "text":("FHIR R4 bundle "_tFHIR_$SELECT(tFHIR = "valid": ", written to the simulated NPHIES FHIR endpoint.", 1: ", not sent; the issues went to Triage."))})
+	Do:tFHIR'="" tSteps.%Push({"step":"fhir", "title":"FHIR out", "text":("FHIR R4 bundle "_tFHIR_$SELECT(tFHIR = "valid": ", written to the simulated FHIR server (HIE).", 1: ", not sent; the issues went to Triage."))})
 
 	Set tN = 0, tIter = tSteps.%GetIterator()
 	While tIter.%GetNext(, .tStep) {
@@ -632,7 +632,7 @@ ClassMethod TraceUrl(pNamespace As %String = "") As %String
 	Quit $SYSTEM.CSP.GetDefaultApp($SELECT(pNamespace '= "": pNamespace, 1: $NAMESPACE))_"/EnsPortal.VisualTrace.zen?SESSIONID="
 }
 
-/// "valid" or "invalid (n issues)" for the latest NphiesFHIROut result in session pSessionId of
+/// "valid" or "invalid (n issues)" for the latest FhirOut result in session pSessionId of
 /// pNamespace, "" when the session has none (FHIR output off, or the message never got that far).
 ClassMethod FHIRStatus(pSessionId As %Integer, pNamespace As %String = "") As %String
 {

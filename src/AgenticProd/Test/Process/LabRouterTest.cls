@@ -11,7 +11,7 @@ Method TestValidControl20()
 {
 	Do ..CheckCase("20", .tClass, .tText, .tMsg)
 	Do $$$AssertEquals(tClass, "", "valid control needs no triage: "_tText)
-	Do $$$AssertStatusOK(##class(AgenticProd.DTL.LabToNphies).Transform(tMsg, .tOut))
+	Do $$$AssertStatusOK(##class(AgenticProd.DTL.LabToEhr).Transform(tMsg, .tOut))
 	Do $$$AssertEquals(tOut.GetValueAt("4:3"), "2951-2^Sodium [Moles/volume] in Serum or Plasma^LN", "OBX-3 mapped to LOINC")
 	Do $$$AssertEquals(tMsg.GetValueAt("4:3"), "NA-S^Sodium^L", "source unchanged")
 }

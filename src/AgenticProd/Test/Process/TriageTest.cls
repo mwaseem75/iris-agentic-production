@@ -541,7 +541,7 @@ Method TestLearningLoop01()
 	Set tTriage.TargetConfigName = "LabRouter"
 	If '$$$AssertStatusOK(tTriage.ResendOriginal(tResend, .tNewId)) Quit
 	Set tSession = ##class(Ens.MessageHeader).%OpenId(tNewId).SessionId
-	// LabRouter and NphiesOut run in their own jobs; a file within 15 s or the test fails
+	// LabRouter and EhrOut run in their own jobs; a file within 15 s or the test fails
 	For i = 1:1:30 {
 		Set tNew = ""
 		Set tAfter = ..OutFiles(tOutDir, "MSG00001_*")
@@ -570,7 +570,7 @@ Method TestLearningLoop01()
 		Set tStream = ##class(%Stream.FileCharacter).%New()
 		Do tStream.LinkToFile(tNew)
 		Set tBundle = ##class(%DynamicObject).%FromJSON(tStream)
-		Set tObs = ##class(AgenticProd.Test.Operation.NphiesFHIROutTest).First(tBundle, "Observation")
+		Set tObs = ##class(AgenticProd.Test.Operation.FhirOutTest).First(tBundle, "Observation")
 		Do $$$AssertEquals($SELECT($IsObject(tObs): tObs.code.coding.%Get(0).code, 1: ""), "2345-7", "GLU-01 Observation carries the approved LOINC")
 		Kill tStream
 		Do ##class(%File).Delete(tNew)

@@ -1,4 +1,4 @@
-/// What Operation.NphiesFHIROut did with one HL7 result: valid bundles are written, invalid ones
+/// What Operation.FhirOut did with one HL7 result: valid bundles are written, invalid ones
 /// are not, and LabRouter sends them to Triage with Format FHIR.
 Class AgenticProd.Msg.FHIRResult Extends Ens.Response
 {
@@ -17,7 +17,7 @@ Property Issues As %String(MAXLEN = "");
 /// OperationOutcome JSON with the error issues, expressions prefixed with the bundle entry.
 Property Outcome As %Stream.GlobalCharacter;
 
-/// File written to the simulated NPHIES FHIR endpoint; empty when invalid.
+/// File written to the simulated FHIR server (HIE); empty when invalid.
 Property FileName As %String(MAXLEN = 500);
 
 Storage Default

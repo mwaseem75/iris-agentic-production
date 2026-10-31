@@ -6,7 +6,7 @@ ClassMethod Items() As %DynamicObject
 {
 	Quit {"LABFILEIN":{"name":"LabFileIn","lane":"inbound","workflow":0}, "LABROUTER":{"name":"LabRouter","lane":"router","workflow":0},
 		"TRIAGE":{"name":"Triage","lane":"decision","workflow":0}, "TRIAGEAGENT":{"name":"TriageAgent","lane":"ai","workflow":0},
-		"NPHIESOUT":{"name":"NphiesOut","lane":"outcome","workflow":0}, "INTEGRATIONSUPPORT":{"name":"IntegrationSupport","lane":"outcome","workflow":1}}
+		"EHROUT":{"name":"EhrOut","lane":"outcome","workflow":0}, "INTEGRATIONSUPPORT":{"name":"IntegrationSupport","lane":"outcome","workflow":1}}
 }
 
 ClassMethod Hop(pSession As %Integer, pFrom As %String, pTo As %String, pT0 As %String, pT1 As %String) As %DynamicObject
@@ -44,7 +44,7 @@ Method TestMapCodeApprovedThenResent()
 		(..Hop(100, "LabRouter", "Triage", "2026-10-31 10:00:00.040", "2026-10-31 10:00:00.900")),
 		(..Hop(100, "Triage", "TriageAgent", "2026-10-31 10:00:00.100", "2026-10-31 10:00:00.700")),
 		(..Hop(100, "Triage", "IntegrationSupport", "2026-10-31 10:00:00.850", "2026-10-31 10:00:00.900")),
-		(..Hop(200, "LabRouter", "NphiesOut", "2026-10-31 10:03:02.000", "2026-10-31 10:03:02.080"))]
+		(..Hop(200, "LabRouter", "EhrOut", "2026-10-31 10:03:02.000", "2026-10-31 10:03:02.080"))]
 	Set tTools = [{"Tool":"get_failed_message", "Status":"OK", "DurationMs":30, "ResultLength":400, "ErrorText":"", "CreatedAt":"2026-10-31 10:00:00.300"},
 		{"Tool":"search_loinc", "Status":"OK", "DurationMs":60, "ResultLength":900, "ErrorText":"", "CreatedAt":"2026-10-31 10:00:00.500"}]
 	Set tLearned = {"ID":7, "LocalCode":"ZZ1", "Loinc":"2345-7", "Display":"Glucose", "Reviewer":"anna", "ApprovedAt":"2026-10-31 10:03:01"}
@@ -59,7 +59,7 @@ Method TestMapCodeApprovedThenResent()
 	Do $$$AssertEquals(tTool.node, "TriageAgent")
 	Set tResend = tJ.steps.%Get(12)
 	Do $$$AssertEquals(tResend.session, 200, "the resend runs in its own session")
-	Do $$$AssertEquals(tResend.edge.to, "NphiesOut")
+	Do $$$AssertEquals(tResend.edge.to, "EhrOut")
 	Do $$$AssertEquals(tJ.steps.%Get(11).kind, "learning")
 	Do $$$AssertEquals(tJ.steps.%Get(8).outcome, "SENT_FOR_APPROVAL")
 }
@@ -70,12 +70,12 @@ Method TestAutoFixApplied()
 	Set tHops = [(..Hop(100, "LabFileIn", "LabRouter", "2026-10-31 10:00:00.000", "2026-10-31 10:00:00.050")),
 		(..Hop(100, "LabRouter", "Triage", "2026-10-31 10:00:00.040", "2026-10-31 10:00:00.500")),
 		(..Hop(100, "Triage", "TriageAgent", "2026-10-31 10:00:00.100", "2026-10-31 10:00:00.400")),
-		(..Hop(100, "Triage", "NphiesOut", "2026-10-31 10:00:00.480", "2026-10-31 10:00:00.520"))]
+		(..Hop(100, "Triage", "EhrOut", "2026-10-31 10:00:00.480", "2026-10-31 10:00:00.520"))]
 	Set tJ = ##class(AgenticProd.UI.Journey).Build(tLog, "IRISAPP", ..Items(), tHops, [], ..Usage("AUTO_FIX"), "", "APPLIED")
 	Do $$$AssertEquals(..Kinds(tJ), "inbound,router,hop,hop,agent,injection,triage,out", "no workflow, no learning")
 	Do $$$AssertEquals(tJ.outcome, "applied")
 	Do $$$AssertEquals(tJ.steps.%Get(6).outcome, "APPLIED")
-	Do $$$AssertEquals(tJ.steps.%Get(7).edge.to, "NphiesOut")
+	Do $$$AssertEquals(tJ.steps.%Get(7).edge.to, "EhrOut")
 	Do $$$AssertEquals(tJ.steps.%Get(7).waitLabel, "", "short steps are not labelled")
 }
 

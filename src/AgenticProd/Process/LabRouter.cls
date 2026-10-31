@@ -1,7 +1,7 @@
 Include Ensemble
 
-/// HL7 v2 lab results in: check the message type, validate against the NPHIES_SIM profile, look up
-/// every OBX-3.1 in LabCodeMap, transform and send to NphiesOut. Any failure becomes a
+/// HL7 v2 lab results in: check the message type, validate against the EHR_SIM profile, look up
+/// every OBX-3.1 in LabCodeMap, transform and send to EhrOut. Any failure becomes a
 /// TriageRequest to Triage; the router never repairs a message itself.
 Class AgenticProd.Process.LabRouter Extends Ens.BusinessProcess
 {
@@ -10,7 +10,7 @@ Class AgenticProd.Process.LabRouter Extends Ens.BusinessProcess
 Parameter CLASSORDER = "ROUTING,IDENTITY_ISSUE,STRUCTURE_ERROR,MISSING_FIELD,BAD_FORMAT,INVALID_VALUE,UNMAPPED_CODE,OTHER";
 
 /// Receiver of the transformed message.
-Property TargetConfigName As Ens.DataType.ConfigName [ InitialExpression = "NphiesOut" ];
+Property TargetConfigName As Ens.DataType.ConfigName [ InitialExpression = "EhrOut" ];
 
 /// Where failed messages go as a TriageRequest.
 Property TriageTarget As Ens.DataType.ConfigName [ InitialExpression = "Triage" ];
@@ -22,7 +22,7 @@ Property SendTimeout As %Integer(MINVAL = 1) [ InitialExpression = 30 ];
 Property FHIROutput As %Boolean [ InitialExpression = 1 ];
 
 /// Receiver of the original HL7 message for FHIR output.
-Property FHIRTarget As Ens.DataType.ConfigName [ InitialExpression = "NphiesFHIROut" ];
+Property FHIRTarget As Ens.DataType.ConfigName [ InitialExpression = "FhirOut" ];
 
 /// Seconds to wait for FHIRTarget; validation of a cold Java validator takes about 35 s.
 Property FHIRTimeout As %Integer(MINVAL = 1) [ InitialExpression = 60 ];
@@ -36,9 +36,9 @@ Method OnRequest(pRequest As EnsLib.HL7.Message, Output pResponse As %Library.Pe
 	Try {
 		$$$ThrowOnError(..Check(pRequest, .tClass, .tText))
 		If tClass = "" {
-			Set tSC = ##class(AgenticProd.DTL.LabToNphies).Transform(pRequest, .tOut)
+			Set tSC = ##class(AgenticProd.DTL.LabToEhr).Transform(pRequest, .tOut)
 			If $$$ISERR(tSC) {
-				Set tClass = "OTHER", tText = "DTL LabToNphies failed: "_$SYSTEM.Status.GetErrorText(tSC)
+				Set tClass = "OTHER", tText = "DTL LabToEhr failed: "_$SYSTEM.Status.GetErrorText(tSC)
 			} Else {
 				Set tSC = ..SendRequestSync(..TargetConfigName, tOut, .tResponse, ..SendTimeout)
 				// The content passed every check, so a failed send is the receiver's problem

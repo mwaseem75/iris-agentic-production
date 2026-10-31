@@ -119,7 +119,7 @@ ClassMethod BackfillNamespace() As %Status
 	Quit tSC
 }
 
-/// LabCodeMap lookup: local code -> "LOINC^display" (DTL.LabToNphies appends ^LN).
+/// LabCodeMap lookup: local code -> "LOINC^display" (DTL.LabToEhr appends ^LN).
 /// Exactly the seed table in eval/cases/README.md; the eval cases' other codes (GLU-01,
 /// CREA-S, ...) must stay unmapped so they reach the agent as UNMAPPED_CODE.
 ClassMethod SeedLabCodeMap() As %Status

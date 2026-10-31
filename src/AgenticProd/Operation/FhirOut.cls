@@ -1,16 +1,16 @@
 Include (Ensemble, HS.FHIRServer)
 
-/// Simulated NPHIES FHIR endpoint. HL7 v2 ORU^R01 (already checked by LabRouter) -> SDA3 -> FHIR R4
+/// Simulated FHIR server (HIE). HL7 v2 ORU^R01 (already checked by LabRouter) -> SDA3 -> FHIR R4
 /// bundle with LOINC codings, validated structurally and against the lab profile. A valid bundle is
 /// written to the adapter FilePath; an invalid one is only reported back in the FHIRResult.
-Class AgenticProd.Operation.NphiesFHIROut Extends Ens.BusinessOperation
+Class AgenticProd.Operation.FhirOut Extends Ens.BusinessOperation
 {
 
 Parameter ADAPTER = "EnsLib.File.OutboundAdapter";
 
 Property Adapter As EnsLib.File.OutboundAdapter;
 
-/// Profile every Observation must meet, "url|version". US Core lab stands in for the NPHIES profiles.
+/// Profile every Observation must meet, "url|version". US Core lab is the target profile.
 Property ObservationProfile As %String(MAXLEN = 500) [ InitialExpression = "http://hl7.org/fhir/us/core/StructureDefinition/us-core-observation-lab|3.1.0" ];
 
 /// FHIR packages loaded for validation, comma-separated; must include the profile's package.

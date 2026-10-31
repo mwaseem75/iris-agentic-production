@@ -47,6 +47,12 @@ ClassMethod CheckNs(pNs As %String) As %String
 	Quit $SELECT((","_..#NAMESPACES_",")[(","_pNs_","): pNs, 1: "")
 }
 
+/// Item names before the US rename; stored headers and spans still carry them.
+ClassMethod Alias(pName As %String) As %String
+{
+	Quit $CASE(pName, "NphiesOut": "EhrOut", "NphiesFHIROut": "FhirOut", : pName)
+}
+
 /// Map lane of a production item: inbound, router, ai, decision or outcome.
 ClassMethod Lane(pClass As %String) As %String
 {
@@ -123,11 +129,11 @@ ClassMethod Map(pNs As %String, pFrom As %String = "", pTo As %String = "", pInc
 	Set tWhere = " WHERE Type = 1 AND TimeCreated >= ? AND TimeCreated <= ?"_$SELECT(pIncludeEval: "", 1: " AND SessionId NOT IN (SELECT SessionId FROM AgenticProd_Data.DecisionLog WHERE EvalRunId IS NOT NULL AND NOT (EvalRunId >= "_..#BURSTRUN_" AND EvalRunId < "_..#BURSTEND_") AND SessionId IS NOT NULL AND Namespace = '"_pNs_"')")
 	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT TargetConfigName AS N, COUNT(*) AS C, SUM(IsError) AS E FROM Ens.MessageHeader"_tWhere_" GROUP BY TargetConfigName", pFrom, pTo)
 	While tRS.%Next() {
-		Set tIn($ZCONVERT(tRS.N, "U")) = tRS.C, tErr($ZCONVERT(tRS.N, "U")) = +tRS.E
+		Set tK = $ZCONVERT(..Alias(tRS.N), "U"), tIn(tK) = $GET(tIn(tK)) + tRS.C, tErr(tK) = $GET(tErr(tK)) + tRS.E
 	}
 	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT SourceConfigName AS N, COUNT(*) AS C FROM Ens.MessageHeader"_tWhere_" GROUP BY SourceConfigName", pFrom, pTo)
 	While tRS.%Next() {
-		Set tOutN($ZCONVERT(tRS.N, "U")) = tRS.C
+		Set tK = $ZCONVERT(..Alias(tRS.N), "U"), tOutN(tK) = $GET(tOutN(tK)) + tRS.C
 	}
 	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT Name, ""Count"" AS Depth FROM Ens.Queue_Enumerate()")
 	While tRS.%Next() {
@@ -142,7 +148,7 @@ ClassMethod Map(pNs As %String, pFrom As %String = "", pTo As %String = "", pInc
 	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT SourceConfigName AS S, TargetConfigName AS T, COUNT(*) AS C, AVG(DATEDIFF('ms', TimeCreated, TimeProcessed)) AS Ms"
 		_" FROM Ens.MessageHeader"_tWhere_" GROUP BY SourceConfigName, TargetConfigName", pFrom, pTo)
 	While tRS.%Next() {
-		Set tFrom = $GET(tItems($ZCONVERT(tRS.S, "U"))), tTo = $GET(tItems($ZCONVERT(tRS.T, "U")))
+		Set tFrom = $GET(tItems($ZCONVERT(..Alias(tRS.S), "U"))), tTo = $GET(tItems($ZCONVERT(..Alias(tRS.T), "U")))
 		Do:(tFrom'="")&&(tTo'="") tOut.edges.%Push({"from":(tFrom), "to":(tTo), "count":(tRS.C), "avgMs":(+tRS.Ms\1)})
 	}
 	Quit tOut
@@ -169,7 +175,7 @@ ClassMethod Slice(pNs As %String, pFrom As %String = "", pTo As %String = "", pC
 	While tRS.%Next() {
 		If $INCREMENT(tN) > tCap Set tOut.capped = 1 Quit
 		Set tDone = tRS.TimeProcessed '= ""
-		Set tHop = {"id":(tRS.ID), "session":(tRS.SessionId), "from":(tRS.SourceConfigName), "to":(tRS.TargetConfigName),
+		Set tHop = {"id":(tRS.ID), "session":(tRS.SessionId), "from":(..Alias(tRS.SourceConfigName)), "to":(..Alias(tRS.TargetConfigName)),
 			"t0":(tRS.TimeCreated), "t1":($SELECT(tDone: tRS.TimeProcessed, 1: "")), "error":(''tRS.IsError)}
 		Set tOpen = 'tDone && (tRS.TimeCreated ] tStuckCut)
 		Do tHop.%Set("open", tOpen, "boolean")

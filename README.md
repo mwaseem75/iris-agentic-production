@@ -56,7 +56,7 @@ The agent proposes. A deterministic business process (`AgenticProd.Process.Triag
 
 - **Settings page.** Providers, API keys, models, guardrails, budgets, the AI kill switch and prices are managed in one place, with a change log. Keys live in IRIS Wallet and configuration in the AI Hub Config Store. See [Settings](#settings).
 - **Grounding check and memory governance.** Agent decisions are checked against the message, the tool results and the LOINC knowledge base before anything happens; learned mappings carry their provenance and can be revoked.
-- **FHIR R4 output.** Valid lab results also go out as FHIR R4: HL7 v2 → SDA → FHIR R4, with the LOINC coding taken from `LabCodeMap`. Bundles are checked against the US Core lab profile, which stands in for the NPHIES profiles. See [FHIR output](#fhir-output).
+- **FHIR R4 output.** Valid lab results also go out as FHIR R4: HL7 v2 → SDA → FHIR R4, with the LOINC coding taken from `LabCodeMap`. Bundles are checked against the US Core lab profile, the target profile for the FHIR output. See [FHIR output](#fhir-output).
 - **Dashboard tabs.** The dashboard now has three tabs: Overview, Messages and Evaluation. Click a message to open its story view: the steps in plain words, a timeline of its spans and the masked message.
 - **Spans stored in IRIS.** Every failed message gets one trace in `Data.Span`. Export to an OpenTelemetry collector (OTLP) is optional.
 - **Prometheus metrics.** `/api/monitor/metrics` also serves the agent's metrics. Like IRIS's own metrics on that URL, it can be read without a login. It returns totals only, never message content.
@@ -83,8 +83,8 @@ If no provider config is chosen, the agent uses `OPENAI_API_KEY` from `.env`, so
 ```
 LabFileIn (HL7 file service)
    │
-LabRouter ── valid ──► DTL (local code → LOINC) ──► NphiesOut (simulated receiver, HL7 v2)
-   │                └──► NphiesFHIROut (HL7 v2 → SDA → FHIR R4, LOINC from LabCodeMap, profile check)
+LabRouter ── valid ──► DTL (local code → LOINC) ──► EhrOut (simulated receiver, HL7 v2)
+   │                └──► FhirOut (HL7 v2 → SDA → FHIR R4, LOINC from LabCodeMap, profile check)
    │ error
    ▼
 Triage ◄──► TriageAgent operation (%AI.Agent + skills + tools, runs as agentic_agent)
@@ -101,7 +101,7 @@ Records ─► Data.Span (traces) ─► dashboard (UI.REST) · /api/monitor/met
 | Agent | `Agent.TriageAgent` (declarative `%AI.Agent`, built on `Agent.Base`), skills `Skill.HL7Repair`, `Skill.CodeMapping` |
 | Tools | `Tools.Base` (format-neutral), `Tools.HL7`, `Tools.Mapping` |
 | Policies | `Policy.ReadOnly`, `Policy.Audit`, `Policy.InjectionGuard` |
-| Production | `Process.LabRouter`, `Process.Triage`, `Operation.Agent`, `Operation.NphiesOut`, `Operation.NphiesFHIROut`, `DTL.LabToNphies` |
+| Production | `Process.LabRouter`, `Process.Triage`, `Operation.Agent`, `Operation.EhrOut`, `Operation.FhirOut`, `DTL.LabToEhr` |
 | Records | `Data.DecisionLog`, `Data.Usage`, `Data.ToolCall`, `Data.Span`, `Data.PriceTable`, `Data.EvalRun`, `Data.EvalResult`, `Data.LearnedMapping`, `Data.SettingsAudit` |
 | Settings | `Settings.Store` (Config Store + Wallet, item settings, memory), `Agent.Base` (loads the provider from Config Store), `Service.MemoryReview` (review tasks after a revoke) |
 | Monitoring | `Telemetry.Trace` (spans), `Monitor.Metrics` and `Monitor.GenAI` (Prometheus metrics on `/api/monitor/metrics`) |
@@ -223,10 +223,10 @@ do ##class(AgenticProd.Plugin.Installer).Disable("LEGACY", , .removed)          
 
 Every lab result that passes LabRouter also goes out as FHIR R4, built with the converters that
 ship with IRIS for Health: HL7 v2 → SDA3 (`HS.Gateway.HL7.HL7ToSDA3`) → FHIR R4 bundle
-(`HS.FHIR.DTL.Util.API.Transform.SDA3ToFHIR`). `NphiesFHIROut` adds the LOINC coding from
+(`HS.FHIR.DTL.Util.API.Transform.SDA3ToFHIR`). `FhirOut` adds the LOINC coding from
 LabCodeMap to each Observation (the local code stays as a second coding), checks every resource
 against the R4 base structure and every Observation against US Core `us-core-observation-lab`
-3.1.0, which stands in for the NPHIES profiles. Valid bundles land in `data/out-fhir/`. An invalid
+3.1.0, the target profile for the FHIR output. Valid bundles land in `data/out-fhir/`. An invalid
 bundle is not sent: its issues go to Triage as a `FHIR` problem, and until there is a FHIR fix
 checker Triage hands it to a person without calling the agent. LabRouter's `FHIROutput` setting
 turns this off; the HL7 output to `data/out/` is unchanged.

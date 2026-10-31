@@ -52,7 +52,7 @@ Method Approved(pHeader As %Integer, pRun As %String) As %Status
 /// Saved synthetic ORU^R01 with OBX-3.1 = CODE.
 Method Message() As EnsLib.HL7.Message
 {
-	Set tText = "MSH|^~\&|LAB_SIM|SIM_HOSP|AGENTIC|NPHIES_SIM|20261023101500||ORU^R01^ORU_R01|EV77-01|P|2.5.1"_$CHAR(13)
+	Set tText = "MSH|^~\&|LAB_SIM|SIM_HOSP|AGENTIC|EHR_SIM|20261023101500||ORU^R01^ORU_R01|EV77-01|P|2.5.1"_$CHAR(13)
 		_"OBX|1|NM|"_..#CODE_"^Test^L||5.4|mmol/L|||||F"
 	Set tMsg = ##class(EnsLib.HL7.Message).ImportFromString(tText, .tSC)
 	Do $$$AssertStatusOK(tSC)

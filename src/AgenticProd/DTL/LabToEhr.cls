@@ -1,6 +1,6 @@
-/// LAB_SIM ORU^R01 to NPHIES_SIM: copy, then OBX-3 local code -> LOINC^display^LN from LabCodeMap.
+/// LAB_SIM ORU^R01 to EHR_SIM: copy, then OBX-3 local code -> LOINC^display^LN from LabCodeMap.
 /// LabRouter only calls it once every OBX-3.1 is mapped; an unmapped code is left as it is.
-Class AgenticProd.DTL.LabToNphies Extends Ens.DataTransformDTL [ DependsOn = EnsLib.HL7.Message ]
+Class AgenticProd.DTL.LabToEhr Extends Ens.DataTransformDTL [ DependsOn = EnsLib.HL7.Message ]
 {
 
 Parameter IGNOREMISSINGSOURCE = 1;
