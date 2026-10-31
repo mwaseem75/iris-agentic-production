@@ -216,7 +216,9 @@ ClassMethod Head(pNs As %String) As %DynamicObject
 
 ClassMethod MaxId(pTable As %String, pNs As %String) As %Integer [ Internal ]
 {
-	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT MAX(ID) AS M FROM "_pTable_$SELECT(pNs'="": " WHERE Namespace = ?", 1: ""), pNs)
+	// an extra "" argument with no ? in the SQL makes the query return nothing
+	Set tSQL = "SELECT MAX(ID) AS M FROM "_pTable_$SELECT(pNs'="": " WHERE Namespace = ?", 1: "")
+	Set tRS = $SELECT(pNs'="": ##class(%SQL.Statement).%ExecDirect(, tSQL, pNs), 1: ##class(%SQL.Statement).%ExecDirect(, tSQL))
 	Quit $SELECT(tRS.%Next(): +tRS.M, 1: 0)
 }
 

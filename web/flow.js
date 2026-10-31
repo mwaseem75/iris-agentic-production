@@ -11,6 +11,7 @@
   var OUT_COLOR = { applied: COLORS.applied, person: COLORS.approval, rejected: COLORS.rejected, resent: COLORS.resent, observed: COLORS.other };
   var OUT_LABEL = { applied: "Applied", person: "To a person", rejected: "Rejected", resent: "Resent", observed: "Observed" };
   var OUT_ORDER = ["applied", "person", "rejected", "resent", "observed"];
+  var GATE_STATES = { injection: ["clean", "flagged"], grounding: ["passed", "ungrounded", "ambiguous"], triage: [] };
   var CHIP_KIND = { clean: "g", passed: "g", applied: "g", flagged: "b", ungrounded: "b", ambiguous: "w" };
   var INFLIGHT = "#7b8794";
   var POLL_MS = 1000, HOLD_MS = 2500, LAG_MS = 3000, WINDOW_S = 120, SLIDER_S = 3600, PREFILL_S = 600, TABLE_ROWS = 12, MAX_DOTS = 60;
@@ -18,6 +19,7 @@
   var NODE_H = 60, NODE_W = 176, HEAD_H = 34, DOT = 8, CURVE = 0.2;
 
   var S = null;
+  var JMIN_MS = 700, JMAX_MS = 2000, JGAP_MS = 1200, JLONG_MS = 20000;
   var active = false, polling = false, timer = null, raf = null;
   var box, ns = "IRISAPP", mapAt = 0;
 
@@ -26,6 +28,8 @@
   // Burst messages are sent from this tab, so they always show; other eval traffic follows the toggle
   function visible(c) { return evalOn() || !c.eval || c.burst; }
   function serverNow() { return Date.now() + (S ? S.skew : 0); }
+  // Header and item names can differ in case; the map's item name is the one that has a position
+  function canon(n) { return (S && S.canon && S.canon[String(n).toUpperCase()]) || n; }
   function stamp(d) { return d.toISOString().replace("T", " ").slice(0, 23); }
 
   function reset() {
@@ -93,7 +97,12 @@
     var to = new Date(Date.now() + S.skew), from = new Date(to.getTime() - PREFILL_S * 1000);
     return get("api/flow/window?ns=" + ns + "&from=" + stamp(from) + "&to=" + stamp(new Date(to.getTime() + 60000)) + evalParam()).then(function (r) {
       mergeSlice(r);
-      if (!S.cursor) return get("api/flow/live?ns=" + ns).then(mergeSlice);
+      // a window without rows leaves a cursor field at 0, and a poll from 0 would read the oldest rows first
+      return get("api/flow/live?ns=" + ns).then(function (h) {
+        var c = S.cursor || { hop: 0, dec: 0, tool: 0, usage: 0 };
+        ["hop", "dec", "tool", "usage"].forEach(function (k) { if (!c[k]) c[k] = h.cursor[k]; });
+        S.cursor = c;
+      });
     });
   }
   var newHops = 0;
@@ -102,7 +111,7 @@
     $("flow-status").textContent = "last update: " + new Date().toLocaleTimeString("en-GB") + " · " + n + " new hops (" + newHops + " since the tab opened) · " + Object.keys(S.hops).length + " hops, " + Object.keys(S.cards).length + " decisions in view";
   }
   function poll() {
-    if (!active || polling || S.mode !== "live" || !S.cursor) return;
+    if (!active || polling || S.paused || S.mode !== "live" || !S.cursor) return;
     polling = true;
     var c = S.cursor;
     get("api/flow/live?ns=" + ns + "&since=" + c.hop + "&dec=" + c.dec + "&tool=" + c.tool + "&usage=" + c.usage).then(function (r) {
@@ -134,6 +143,8 @@
     var a = S.map.items.filter(function (i) { return i.className === "AgenticProd.Operation.Agent"; })[0];
     var t = S.map.items.filter(function (i) { return i.className === "AgenticProd.Process.Triage"; })[0];
     S.agent = a ? a.name : null; S.triage = t ? t.name : null;
+    S.canon = {};
+    S.map.items.forEach(function (it) { S.canon[it.name.toUpperCase()] = it.name; });
     S.geo = {};
   }
   // Curve through the edge ends, the same control point ECharts uses for lines.curveness
@@ -163,12 +174,16 @@
   function counterText(it) {
     return "{c|in " + it.in + " · out " + it.out + "}\n{" + (it.errors ? "e" : "c") + "|err " + it.errors + " · queue " + it.queue + "}";
   }
-  function chipLines(counts) {
-    var keys = Object.keys(counts).filter(function (k) { return counts[k]; }).sort(function (a, b) { return counts[b] - counts[a]; });
-    if (!keys.length) return "{ch|no decisions yet}";
+  // fixed: the states the gate can show, listed even at 0; others (rule names) only when they occurred
+  function chipLines(counts, fixed) {
+    fixed = fixed || [];
+    var extra = Object.keys(counts).filter(function (k) { return counts[k] && fixed.indexOf(k) < 0; }).sort(function (a, b) { return counts[b] - counts[a]; });
+    var keys = fixed.concat(extra);
+    var total = keys.reduce(function (n, k) { return n + (counts[k] || 0); }, 0);
+    if (!total) return "{ch|no decisions yet}";
     var shown = keys.slice(0, 6), lines = [], line = "", len = 0;
     shown.forEach(function (k) {
-      var txt = k + " " + counts[k], kind = CHIP_KIND[k] || "o";
+      var n = counts[k] || 0, txt = k + " " + n, kind = n ? (CHIP_KIND[k] || "o") : "o";
       if (len && len + txt.length > 22) { lines.push(line); line = ""; len = 0; }
       line += (line ? " " : "") + "{ch" + kind + "|" + txt + "}"; len += txt.length + 1;
     });
@@ -197,13 +212,17 @@
     var st = stats(), W = S.W, H = S.H;
     var nodes = m.items.filter(function (it) { return S.pos[it.name]; }).map(function (it) {
       var p = S.pos[it.name];
-      return nodeData(it.name, p, counterText(it), LANE_COLOR[it.lane], it.errors, it.enabled);
+      var n = nodeData(it.name, p, counterText(it), LANE_COLOR[it.lane], it.errors, it.enabled);
+      n.key = it.name;
+      return n;
     });
-    var chips = [];
+    var chips = [], on = S.mode === "journey" && S.J ? S.J.on : null;
     GATES.forEach(function (g) {
       var p = S.pos["@" + g.key], counts = st[g.key], total = Object.keys(counts).reduce(function (n, k) { return n + counts[k]; }, 0);
-      nodes.push(nodeData(g.label, p, "{c|" + total + " decisions in view}", LANE_COLOR.checks, 0));
-      chips.push({ value: [p.x, p.y + p.h / 2 + 4], itemStyle: { color: "rgba(0,0,0,0)" }, label: { show: true, position: "bottom", distance: 2, formatter: chipLines(counts), rich: RICH, align: "center" } });
+      var gn = nodeData(g.label, p, "{c|" + total + " decisions in view}", LANE_COLOR.checks, 0);
+      gn.key = "@" + g.key;
+      nodes.push(gn);
+      chips.push({ value: [p.x, p.y + p.h / 2 + 4], itemStyle: { color: "rgba(0,0,0,0)" }, label: { show: true, position: "bottom", distance: 2, formatter: chipLines(counts, GATE_STATES[g.key]), rich: RICH, align: "center" } });
     });
     var edges = m.edges.map(function (e) { return { from: e.from, to: e.to, count: e.count, avgMs: e.avgMs }; });
     // The way back from the agent through the three gates to Triage has no hop of its own
@@ -215,6 +234,21 @@
       var g = geom(e.from, e.to);
       return g && { coords: [g.p0, g.p1], from: e.from, to: e.to, count: e.count, avgMs: e.avgMs, lineStyle: { width: 1.5 + Math.min(5, Math.log10(1 + e.count) * 1.8), curveness: g.c } };
     }).filter(Boolean);
+    // Message journey: everything dims except the path of that message; the current step is outlined
+    if (on) {
+      var curStep = S.J.steps[S.J.cur] || {};
+      nodes.forEach(function (n) {
+        var inPath = on.nodes[n.key], isCur = canon(curStep.node) === n.key || (curStep.edge && canon(curStep.edge.to) === n.key);
+        n.itemStyle.opacity = inPath ? 1 : 0.18;
+        if (isCur) { n.itemStyle.borderColor = "#2563a8"; n.itemStyle.borderWidth = 4; }
+      });
+      lines.forEach(function (l) {
+        var inPath = on.edges[l.from + ">" + l.to], isCur = curStep.edge && canon(curStep.edge.from) + ">" + canon(curStep.edge.to) === l.from + ">" + l.to;
+        l.lineStyle.opacity = inPath ? 1 : 0.07;
+        if (inPath) l.lineStyle.color = isCur ? "#2563a8" : "#6b7a90";
+      });
+      chips.forEach(function (c) { c.label.opacity = 0.35; });
+    }
     var bands = LANES.map(function (l, i) {
       return [{ name: LANE_LABEL[l], xAxis: i * W / LANES.length, itemStyle: { color: LANE_TINT[l] }, label: { show: true, position: "insideTop", color: LANE_COLOR[l], fontWeight: "bold", fontSize: 13 } }, { xAxis: (i + 1) * W / LANES.length }];
     });
@@ -238,9 +272,9 @@
     if (charts.flow && !charts.flow.flowBound) {
       charts.flow.flowBound = true;
       charts.flow.on("click", function (p) {
-        if (p.seriesId !== "dots") return;
+        if (p.seriesId !== "dots" || S.mode === "journey") return;
         var s = S.sessions[p.data.sid];
-        if (s && s.card) openStory(s.card.id); else $("flow-msg").textContent = "No decision is recorded for this message yet.";
+        if (s && s.card) openJourney(s.card.id); else $("flow-msg").textContent = "No decision is recorded for this message yet.";
       });
     }
   }
@@ -250,10 +284,10 @@
   function segments(s) {
     var segs = [], hs = s.hops.map(function (id) { return S.hops[id]; }).filter(Boolean).sort(function (a, b) { return a.m0 - b.m0; });
     hs.forEach(function (h) {
-      var g = geom(h.from, h.to);
+      var g = geom(canon(h.from), canon(h.to));
       if (!g) return;
       segs.push({ t0: h.m0, t1: h.m1, g: g, err: h.error });
-      if (s.card && S.agent && h.to === S.agent && h.m1 != null) {
+      if (s.card && S.agent && canon(h.to) === S.agent && h.m1 != null) {
         var t1 = Math.max(h.m1 + 1600, s.card.ms), chain = [S.agent, "@injection", "@grounding", "@triage", S.triage], step = (t1 - h.m1) / (chain.length - 1);
         for (var i = 0; i < chain.length - 1; i++) {
           var gg = geom(chain[i], chain[i + 1]);
@@ -299,6 +333,11 @@
     if (!S || !S.map) { raf = setTimeout(frame, 200); return; }
     var now = Date.now(), dt = now - S.wall;
     S.wall = now;
+    if (S.mode === "journey") {
+      journeyFrame(dt);
+      raf = requestAnimationFrame(function () { setTimeout(frame, 40); });
+      return;
+    }
     if (!S.paused) S.vt += dt * S.speed;
     if (S.mode === "live" && !S.paused) {
       S.vt = Math.min(Math.max(S.vt, serverNow() - 12000), serverNow() - 600);
@@ -355,7 +394,7 @@
       var t2 = el("td"); t2.appendChild(chip(g.grounding.status + (g.grounding.check ? ": " + g.grounding.check : ""), gateKind(g.grounding.status))); tr.appendChild(t2);
       tr.appendChild(el("td", g.triage.outcome));
       var t3 = el("td"); t3.appendChild(outChip(c.outcome)); tr.appendChild(t3);
-      tr.addEventListener("click", function () { openStory(c.id); });
+      tr.addEventListener("click", function () { openJourney(c.id); });
       tb.appendChild(tr);
     });
     var ph = $("flow-list"); ph.textContent = "";
@@ -363,7 +402,7 @@
       var h = S.hops[id], s = S.sessions[h.session], li = el("li");
       li.appendChild(el("span", h.t0.slice(11, 19) + " ", "muted"));
       li.appendChild(el("span", h.from + " → " + h.to + " "));
-      if (s && s.card) { li.appendChild(outChip(s.card.outcome)); li.addEventListener("click", function () { openStory(s.card.id); }); }
+      if (s && s.card) { li.appendChild(outChip(s.card.outcome)); li.addEventListener("click", function () { openJourney(s.card.id); }); }
       if (h.error) li.appendChild(chip("error", "bad"));
       ph.appendChild(li);
     });
@@ -371,11 +410,132 @@
   }
   function openStory(id) { showTab("messages"); showStory(id); }
 
+  // ---- message journey ----
+  function fmtMs(ms) { return ms < 1000 ? ms + " ms" : (ms < 60000 ? (ms / 1000).toFixed(1) + " s" : Math.round(ms / 60000) + " min"); }
+  function openJourney(id) {
+    if (!S || !S.map) return;
+    $("flow-msg").textContent = "";
+    get("api/flow/journey/" + id + "?ns=" + ns).then(enterJourney).catch(showFlowError);
+  }
+  // Playback times follow the real durations, but a step never plays shorter than JMIN_MS or longer than
+  // JMAX_MS, and a long pause before a step plays as a short beat labelled with its real length.
+  function enterJourney(j) {
+    var speed = S.J ? S.J.speed : 1, off = 0, prevKey = null, on = { nodes: {}, edges: {} }, steps = j.steps;
+    steps.forEach(function (st) {
+      var pre = st.gapMs > JLONG_MS ? JGAP_MS : 0, run = Math.min(JMAX_MS, Math.max(JMIN_MS, st.durationMs));
+      st.s0 = off; st.p0 = off + pre; st.p1 = st.p0 + run; off = st.p1;
+      st.label = st.waitLabel || (st.durationMs > JMAX_MS ? "took " + fmtMs(st.durationMs) + " (shown shortened)" : "");
+      var to = st.edge ? canon(st.edge.to) : (st.node ? canon(st.node) : null);
+      st.mv = { from: st.edge ? canon(st.edge.from) : prevKey, to: to };
+      if (st.edge) { on.nodes[canon(st.edge.from)] = 1; on.nodes[canon(st.edge.to)] = 1; on.edges[canon(st.edge.from) + ">" + canon(st.edge.to)] = 1; }
+      if (st.node) on.nodes[canon(st.node)] = 1;
+      if (to) prevKey = to;
+    });
+    // the way from the agent through the gates to Triage has no hop of its own
+    if (steps.some(function (st) { return st.kind === "injection"; }) && S.agent && S.triage) {
+      var chain = [S.agent, "@injection", "@grounding", "@triage", S.triage];
+      chain.forEach(function (n) { on.nodes[n] = 1; });
+      for (var i = 0; i < chain.length - 1; i++) on.edges[chain[i] + ">" + chain[i + 1]] = 1;
+    }
+    S.mode = "journey"; S.paused = false;
+    S.J = { data: j, steps: steps, on: on, total: off, vt: 0, playing: true, speed: speed, cur: -1, label: "" };
+    renderSteps();
+    syncControls();
+    drawStatic();
+  }
+  function renderSteps() {
+    var J = S.J, j = J.data, side = $("flow-steps");
+    side.textContent = "";
+    side.appendChild(el("h3", "Message " + j.headerId + ": " + j.decision + ", " + OUT_LABEL[j.outcome]));
+    var more = el("a", "Open the full story", "m");
+    more.href = "#";
+    more.addEventListener("click", function (e) { e.preventDefault(); openStory(j.id); });
+    side.appendChild(more);
+    var ol = el("ol");
+    J.steps.forEach(function (st, i) {
+      var li = el("li", null, "s-" + st.status);
+      li.appendChild(el("div", st.n + ". " + st.title, "t"));
+      li.appendChild(el("div", st.text, "x"));
+      var m = el("div", null, "m");
+      m.appendChild(document.createTextNode(st.at.slice(11, 23) + " UTC · " + (st.open ? "open, " : "") + fmtMs(st.durationMs) + (st.gapMs > 50 ? " · " + fmtMs(st.gapMs) + " after the step before" : "") + " · "));
+      if (st.session) {
+        var a = el("a", "Visual Trace, session " + st.session);
+        a.href = j.traceUrl + st.session; a.target = "_blank"; a.rel = "noopener";
+        a.addEventListener("click", function (e) { e.stopPropagation(); });
+        m.appendChild(a);
+      }
+      li.appendChild(m);
+      if (st.waitLabel) li.appendChild(chip(st.waitLabel, "warn"));
+      li.addEventListener("click", function () { jumpTo(i); });
+      ol.appendChild(li);
+    });
+    side.appendChild(ol);
+  }
+  function jumpTo(i) {
+    var J = S.J;
+    if (!J) return;
+    i = Math.max(0, Math.min(J.steps.length - 1, i));
+    J.vt = J.steps[i].p0; J.playing = false; syncControls();
+  }
+  function stepXY(st, f, prevXY) {
+    var mv = st.mv, g = mv.from && mv.to && mv.from !== mv.to ? geom(mv.from, mv.to) : null;
+    if (g) return bez(g, f);
+    var p = mv.to && S.pos[mv.to];
+    if (!p) return prevXY;
+    var q = mv.from && S.pos[mv.from];
+    return q && mv.from !== mv.to ? [q.x + (p.x - q.x) * f, q.y + (p.y - q.y) * f] : [p.x, p.y];
+  }
+  function journeyFrame(dt) {
+    var J = S.J;
+    if (!J || !S.map) return;
+    if (J.playing) {
+      J.vt += dt * J.speed;
+      if (J.vt >= J.total) { J.vt = J.total; J.playing = false; syncControls(); }
+    }
+    var c = 0;
+    for (var i = 0; i < J.steps.length; i++) if (J.vt >= J.steps[i].s0) c = i;
+    var st = J.steps[c];
+    if (c !== J.cur) {
+      J.cur = c;
+      var items = $("flow-steps").querySelectorAll("li");
+      for (var k = 0; k < items.length; k++) { items[k].classList.toggle("cur", k === c); items[k].classList.toggle("done", k < c); }
+      if (items[c] && items[c].scrollIntoView) items[c].scrollIntoView({ block: "nearest" });
+      drawStatic();
+    }
+    var f = st.p1 > st.p0 ? Math.max(0, Math.min(1, (J.vt - st.p0) / (st.p1 - st.p0))) : 1;
+    var prevXY = c > 0 ? stepXY(J.steps[c - 1], 1, null) : null, xy = stepXY(st, f, prevXY);
+    var reached = J.steps.some(function (x, n) { return n <= c && x.kind === "triage"; });
+    var label = J.vt <= st.p1 && st.label ? st.label : "";
+    if (label !== J.label) { J.label = label; $("flow-jlabel").textContent = label; $("flow-jlabel").classList.toggle("hidden", !label); }
+    var dots = xy ? [{ value: xy, sid: "journey", itemStyle: { color: reached ? OUT_COLOR[J.data.outcome] : INFLIGHT, borderColor: st.status === "bad" ? "#b42318" : "#ffffff", borderWidth: 2 } }] : [];
+    S.dots = dots;
+    if (charts.flow) charts.flow.setOption({ series: [{ id: "dots", data: dots, symbolSize: 12 }] });
+    $("flow-wait").classList.add("hidden");
+    $("flow-clock").textContent = "step " + (c + 1) + " of " + J.steps.length;
+  }
+
   // ---- controls ----
   function syncControls() {
+    var jr = S.mode === "journey";
     $("flow-pause").textContent = S.paused ? "Play" : "Pause";
     $("flow-speed").textContent = S.speed + "x";
     $("flow-live").classList.toggle("hidden", S.mode === "live");
+    $("flow-lbar").classList.toggle("hidden", jr);
+    $("flow-jbar").classList.toggle("hidden", !jr);
+    $("flow-slide-box").classList.toggle("hidden", jr);
+    $("flow-steps").classList.toggle("hidden", !jr);
+    $("flow-jlabel").classList.toggle("hidden", !jr || !S.J || !S.J.label);
+    var wasJr = $("flow-main").classList.contains("journey");
+    $("flow-main").classList.toggle("journey", jr);
+    var md = $("flow-mode");
+    md.textContent = jr ? "Message journey" : (S.mode === "window" ? "Live: history window" : (S.paused ? "Live: paused" : "Live"));
+    md.className = "tag flow-mode t-" + (jr ? "warn" : (S.paused ? "other" : "good"));
+    if (jr) {
+      $("fj-play").textContent = S.J && S.J.playing ? "Pause" : "Play";
+      $("fj-speed").textContent = (S.J ? S.J.speed : 1) + "x";
+    }
+    // the map changes width when the step list opens or closes
+    if (wasJr !== jr && charts.flow) setTimeout(function () { charts.flow.resize(); if (S.map) { layout(); drawStatic(); } }, 0);
   }
   function goLive() {
     $("flow-slider").value = SLIDER_S; $("flow-slider-label").textContent = "now";
@@ -385,6 +545,7 @@
   function restart() {
     reset(); S.vt = serverNow() - LAG_MS;
     newHops = 0;
+    syncControls();
     Promise.all([loadMap(), prefill()]).then(function () { status(0); renderSide(); syncControls(); }).catch(showFlowError);
   }
   function sliderLabel(ago) { return ago < 2 ? "now" : "-" + Math.floor(ago / 60) + ":" + ("0" + (ago % 60)).slice(-2); }
@@ -426,8 +587,23 @@
     box = $("ch-flow");
     buildLegend();
     $("flow-ns").addEventListener("change", function (e) { ns = e.target.value; restart(); });
-    $("flow-pause").addEventListener("click", function () { S.paused = !S.paused; syncControls(); });
+    $("flow-pause").addEventListener("click", function () {
+      S.paused = !S.paused; syncControls();
+      if (S.paused) $("flow-status").textContent = "paused at " + new Date().toLocaleTimeString("en-GB") + ": the view is frozen, new rows are fetched again on Play";
+    });
     $("flow-speed").addEventListener("click", function () { S.speed = S.speed === 1 ? 2 : 1; syncControls(); });
+    $("fj-play").addEventListener("click", function () {
+      var J = S.J;
+      if (!J) return;
+      if (!J.playing && J.vt >= J.total) J.vt = 0;
+      J.playing = !J.playing; syncControls();
+    });
+    $("fj-back").addEventListener("click", function () { if (S.J) jumpTo(S.J.cur - 1); });
+    $("fj-fwd").addEventListener("click", function () { if (S.J) jumpTo(S.J.cur + 1); });
+    $("fj-speed").addEventListener("click", function () {
+      var J = S.J;
+      if (J) { J.speed = J.speed === 1 ? 2 : (J.speed === 2 ? 4 : 1); syncControls(); }
+    });
     $("flow-live").addEventListener("click", goLive);
     $("flow-slider").addEventListener("input", function () { $("flow-slider-label").textContent = sliderLabel(SLIDER_S - $("flow-slider").value); });
     $("flow-slider").addEventListener("change", sliderChanged);
@@ -458,7 +634,7 @@
     // Counters change slowly: one map refresh every 10 s, the rows every second
     timer = setInterval(function () {
       poll();
-      if (S.mode === "live" && Date.now() - mapAt > 10000) { mapAt = Date.now(); loadMap().catch(function () {}); }
+      if (S.mode === "live" && !S.paused && Date.now() - mapAt > 10000) { mapAt = Date.now(); loadMap().catch(function () {}); }
     }, POLL_MS);
   };
   var sel = document.querySelector(".tabs button[aria-selected=true]");

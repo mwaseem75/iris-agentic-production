@@ -117,7 +117,25 @@ summary { cursor: pointer; color: var(--accent); }
 .flow-slide { display: inline-flex; align-items: center; gap: 6px; }
 .flow-slide input { width: 220px; }
 section.flow-map-box { padding: 6px; }
-.flow-canvas { position: relative; }
+.flow-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.flow-main.journey { grid-template-columns: minmax(0, 1fr) 360px; }
+.flow-canvas { position: relative; min-width: 0; }
+.flow-jlabel { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); background: var(--warn-bg); color: var(--warn); border: 1px solid currentColor; border-radius: 12px; padding: 3px 12px; font-size: 13px; font-weight: 600; pointer-events: none; }
+.flow-steps { max-height: 560px; overflow-y: auto; border-left: 1px solid var(--line); padding-left: 8px; }
+.flow-steps h3 { margin: 2px 0 6px; }
+.flow-steps ol { list-style: none; margin: 0; padding: 0; }
+.flow-steps li { padding: 6px 6px 6px 10px; border-left: 4px solid var(--line); margin-bottom: 4px; cursor: pointer; border-radius: 0 4px 4px 0; font-size: 13px; }
+.flow-steps li:hover { background: var(--info-bg); }
+.flow-steps li.cur { background: var(--info-bg); outline: 1px solid var(--accent); }
+.flow-steps li.done { opacity: 0.75; }
+.flow-steps li.s-bad { border-left-color: var(--bad); }
+.flow-steps li.s-warn { border-left-color: var(--warn); }
+.flow-steps li.s-wait { border-left-color: #7b8794; }
+.flow-steps li.s-ok { border-left-color: var(--good); }
+.flow-steps .t { font-weight: 600; }
+.flow-steps .m { color: var(--muted); font-size: 12px; }
+.flow-steps .x { margin: 2px 0; }
+.flow-mode { font-weight: 600; }
 .flow-chart { width: 100%; height: 560px; }
 .flow-wait { position: absolute; left: 0; right: 0; bottom: 14px; text-align: center; color: var(--muted); pointer-events: none; }
 .flow-status { padding: 2px 4px 0; font-size: 12px; }
@@ -287,19 +305,32 @@ section.flow-map-box { padding: 6px; }
   <div class="tabpanel hidden" id="tab-flow" role="tabpanel">
     <div class="flow-bar">
       <label>Production <select id="flow-ns"><option value="IRISAPP">IRISAPP</option><option value="LEGACY">LEGACY</option></select></label>
-      <button type="button" id="flow-pause">Pause</button>
-      <button type="button" id="flow-speed">1x</button>
+      <span class="tag t-good flow-mode" id="flow-mode">Live</span>
+      <span id="flow-lbar">
+        <button type="button" id="flow-pause">Pause</button>
+        <button type="button" id="flow-speed">1x</button>
+      </span>
+      <span id="flow-jbar" class="hidden">
+        <button type="button" id="fj-back" title="Previous step">&laquo; Step</button>
+        <button type="button" id="fj-play">Play</button>
+        <button type="button" id="fj-fwd" title="Next step">Step &raquo;</button>
+        <button type="button" id="fj-speed">1x</button>
+      </span>
       <button type="button" id="flow-live" class="hidden">Back to live</button>
       <span class="muted" id="flow-clock"></span>
       <span class="spacer"></span>
-      <label class="flow-slide">Last 60 min <input type="range" id="flow-slider" min="0" max="3600" value="3600" step="5"> <span id="flow-slider-label" class="muted">now</span></label>
+      <label class="flow-slide" id="flow-slide-box">Last 60 min <input type="range" id="flow-slider" min="0" max="3600" value="3600" step="5"> <span id="flow-slider-label" class="muted">now</span></label>
     </div>
-    <p class="muted opt">Items of the selected production in lanes; node counters cover the last 60 minutes (eval and burst traffic follow the toggle above). Dots are messages moving along their real hops. Outcome counts cover the last 10 minutes plus what arrives while this tab is open. Click a dot or a row for the story.</p>
+    <p class="muted opt">Items of the selected production in lanes; node counters cover the last 60 minutes (eval and burst traffic follow the toggle above). Dots are messages moving along their real hops. Outcome counts cover the last 10 minutes plus what arrives while this tab is open. Click a dot or a row to follow that one message step by step.</p>
     <p class="err" id="flow-msg"></p>
     <section class="panel flow-map-box">
-      <div class="flow-canvas">
-        <div class="flow-chart" id="ch-flow"></div>
-        <div class="flow-wait" id="flow-wait">Waiting for messages… press Send a burst</div>
+      <div class="flow-main" id="flow-main">
+        <div class="flow-canvas">
+          <div class="flow-chart" id="ch-flow"></div>
+          <div class="flow-wait" id="flow-wait">Waiting for messages… press Send a burst</div>
+          <div class="flow-jlabel hidden" id="flow-jlabel"></div>
+        </div>
+        <aside class="flow-steps hidden" id="flow-steps"></aside>
       </div>
       <div class="flow-legend" id="flow-legend"></div>
       <div class="flow-status muted" id="flow-status">last update: waiting for the first poll</div>

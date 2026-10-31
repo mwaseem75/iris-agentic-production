@@ -26,6 +26,15 @@ Method TestLaneAndOutcomeMapping()
 	Do $$$AssertEquals(##class(AgenticProd.UI.Flow).CheckNs("%SYS"), "", "only the two production namespaces")
 }
 
+/// The head cursor must be the newest header, not 0: a poll from 0 reads the oldest rows first.
+Method TestHeadCursorIsNewest()
+{
+	Set tHead = ##class(AgenticProd.UI.Flow).Head("IRISAPP")
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT MAX(ID) AS M FROM Ens.MessageHeader")
+	Do tRS.%Next()
+	Do $$$AssertEquals(tHead.cursor.hop, +tRS.M, "hop cursor is the newest header")
+}
+
 Method TestGrounding()
 {
 	Do $$$AssertEquals(##class(AgenticProd.UI.Flow).GroundingGate("", 0, "").status, "none", "gate did not run")
@@ -194,6 +203,16 @@ Method TestHttp()
 	Do $$$AssertEquals(tReq.HttpResponse.StatusCode, 200, "window")
 	Do $$$AssertTrue(##class(%DynamicObject).%FromJSON(tReq.HttpResponse.Data).%IsDefined("map"), "window carries the map")
 	Do $$$AssertEquals(..Get("api/flow/window?ns=IRISAPP&from=x%27y", tUser, tPass).HttpResponse.StatusCode, 400, "timestamps only")
+	Do $$$AssertEquals(..Get("api/flow/journey/0?ns=IRISAPP", tUser, tPass).HttpResponse.StatusCode, 404, "unknown decision")
+	Do $$$AssertEquals(..Get("api/flow/journey/1?ns=%25SYS", tUser, tPass).HttpResponse.StatusCode, 400, "other namespace refused")
+	Set tLast = ##class(AgenticProd.UI.Flow).MaxId("AgenticProd_Data.DecisionLog", "IRISAPP")
+	If tLast {
+		Set tReq = ..Get("api/flow/journey/"_tLast_"?ns=IRISAPP", tUser, tPass)
+		Do $$$AssertEquals(tReq.HttpResponse.StatusCode, 200, "journey of the newest decision")
+		Set tJ = ##class(%DynamicObject).%FromJSON(tReq.HttpResponse.Data)
+		Do $$$AssertTrue(tJ.steps.%Size() >= 4, "router, agent, injection and Triage rule at least")
+		Do $$$AssertEquals(tJ.steps.%Get(0).n, 1)
+	}
 
 	Set tPost = ##class(%Net.HttpRequest).%New()
 	Set tPost.Server = "localhost", tPost.Port = 52773, tPost.Username = tUser, tPost.Password = tPass

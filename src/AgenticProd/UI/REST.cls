@@ -34,6 +34,7 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
 <Route Url="/flow/map" Method="GET" Call="FlowMap"/>
 <Route Url="/flow/live" Method="GET" Call="FlowLive"/>
 <Route Url="/flow/window" Method="GET" Call="FlowWindow"/>
+<Route Url="/flow/journey/:decisionId" Method="GET" Call="FlowJourney"/>
 <Route Url="/burst" Method="POST" Call="Burst"/>
 <Route Url="/evalruns" Method="GET" Call="EvalRuns"/>
 <Route Url="/evalruns/:id" Method="GET" Call="EvalResults"/>
@@ -345,6 +346,30 @@ ClassMethod FlowWindow() As %Status
 		Set tOut = ##class(AgenticProd.UI.Flow).Slice(tNs, tFrom, tTo)
 		Set tOut.map = ##class(AgenticProd.UI.Flow).Map(tNs, $SELECT(tFrom'="": tFrom, 1: ##class(AgenticProd.UI.Flow).Ago(60)), tTo, ..FlowEval())
 		Write tOut.%ToJSON()
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// GET /flow/journey/:decisionId?ns=: the ordered steps of one message, including the sessions its
+/// resend started. See UI.Journey.
+ClassMethod FlowJourney(pDecisionId As %String) As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		Set tNs = ##class(AgenticProd.UI.Flow).CheckNs(%request.Get("ns"))
+		If tNs = "" {
+			Do ..FlowBadNs()
+			Quit
+		}
+		Set tJourney = ##class(AgenticProd.UI.Journey).Get(tNs, pDecisionId)
+		If '$IsObject(tJourney) {
+			Set %response.Status = ..#HTTP404NOTFOUND
+			Write {"error":"No such decision"}.%ToJSON()
+			Quit
+		}
+		Write tJourney.%ToJSON()
 	} Catch ex {
 		Set tSC = ex.AsStatus()
 	}
