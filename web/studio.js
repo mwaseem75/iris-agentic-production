@@ -25,7 +25,7 @@
     propose: "Propose: a person approves every change.",
     act: "Fix safe cases: whitelisted fixes are applied, the rest go to a person."
   };
-  var SCENE_H = 740;
+  var SCENE_H = 800;
 
   var started = false, catalog = null, canEdit = false, rootEl = null;
   var prods = [], cur = null;              // cur = { ns, name }
@@ -52,7 +52,7 @@
     rootEl.innerHTML =
       '<div class="st-top" id="st-top"></div>' +
       '<div class="st-grid"><div class="st-canvas" id="st-canvas"><div class="st-pan"><div class="st-scene" id="st-scene"></div></div>' +
-      '<div class="st-hint" id="st-hint"><i class="ti ti-hand-click me-1"></i>Click a block to change it · click <b>+</b> to add a tool, skill or knowledge</div>' +
+      '<div class="st-hint" id="st-hint"><i class="ti ti-hand-click me-1"></i>Click any block to change it · use <b>+ Add</b> to give the agent more abilities</div>' +
       '<div class="st-legend"><span><i class="ti ti-minus"></i> message path</span><span><i class="ti ti-line-dashed"></i> what the agent can use</span></div>' +
       '<div class="st-tools" id="st-tools"></div></div>' +
       '<div class="st-side" id="st-side"></div></div>';
@@ -74,7 +74,7 @@
     var ag = el("select", null, "form-select"); ag.id = "st-agent"; ag.style.width = "240px"; ag.style.fontWeight = "600";
     ag.addEventListener("change", function () { pickAgent(ag.value); });
     top.appendChild(ag);
-    top.appendChild(el("span", "in", "text-secondary fw-medium"));
+    top.appendChild(el("span", "runs in", "text-secondary fw-medium"));
     var pick = el("select", null, "form-select"); pick.id = "st-pick"; pick.style.width = "300px";
     pick.addEventListener("change", function () { var v = pick.value.split("|"); openProduction(v[0], v.slice(1).join("|")); });
     top.appendChild(pick);
@@ -136,7 +136,7 @@
     var s = $("st-agent");
     s.textContent = "";
     var have = {};
-    catalog.agents.forEach(function (a) {
+    here().forEach(function (a) {
       var o = el("option", a.name); o.value = "c:" + a.class; s.appendChild(o); have["c:" + a.class] = 1;
     });
     if (draft.agent.isNew) { var n = el("option", draft.agent.name + " (new)"); n.value = "n:" + draft.agent.id; s.appendChild(n); have["n:" + draft.agent.id] = 1; }
@@ -147,19 +147,24 @@
   // The template carries the triage agent's setup; an existing agent starts from it too, because
   // the live class is not read back yet
   function freshAgent(cls, name, isNew) {
-    var t = JSON.parse(JSON.stringify(catalog.template));
+    var t = JSON.parse(JSON.stringify(catalog.template)), c = agentOf(cls);
     t.id = "a" + Date.now().toString(36) + (++seq);
     t.cls = cls; t.name = name; t.isNew = !!isNew;
-    t.provider = catalog.providers.length ? catalog.providers[0].name : "";
-    t.model = catalog.providers.length ? catalog.providers[0].model || "" : "";
+    if (c) { t.provider = c.provider; t.model = c.model; }
     return t;
   }
+  function agentOf(cls) {
+    for (var i = 0; i < catalog.agents.length; i++) if (catalog.agents[i].class === cls) return catalog.agents[i];
+    return null;
+  }
+  // The triage agent belongs to its own namespace; other productions only get agents made here
+  function here() { return catalog.agents.filter(function (a) { return a.namespace === cur.ns; }); }
+  function todayOf(a) { var c = agentOf(a.cls); return (c && c.today[cur.ns]) || { runs: 0, cost: 0, toolCalls: 0 }; }
   function defaultWatches() {
-    return prod.items.filter(function (i) { return !i.ai && i.type !== "other"; }).map(function (i) { return i.name; });
+    return prod.items.filter(function (i) { return !i.ai && (i.errors24h || i.suspended); }).map(function (i) { return i.name; });
   }
   function emptyDraft() {
-    var a = catalog.agents.length ? catalog.agents[0] : null;
-    for (var i = 0; i < catalog.agents.length; i++) if (catalog.agents[i].name === "TriageAgent") a = catalog.agents[i];
+    var a = here()[0] || null;
     return { version: 2, ns: cur.ns, production: cur.name, agent: freshAgent(a ? a.class : "", a ? a.name : "TriageAgent", !a), watches: defaultWatches(), role: catalog.roles[0] || "IntegrationSupport" };
   }
   function baseline() { return { agent: freshAgent(draft.agent.cls, draft.agent.name, draft.agent.isNew), watches: defaultWatches(), role: catalog.roles[0] || "IntegrationSupport" }; }
@@ -183,12 +188,11 @@
   function pickAgent(v) {
     if (v === "new") {
       var base = "TriageAgent", n = base, i = 1, taken = {};
-      catalog.agents.forEach(function (a) { taken[a.name] = 1; });
+      here().forEach(function (a) { taken[a.name] = 1; });
       while (taken[n]) n = base + (++i);
       draft.agent = freshAgent("", n, true);
     } else if (v.indexOf("c:") === 0) {
-      var c = null;
-      catalog.agents.forEach(function (a) { if (a.class === v.substr(2)) c = a; });
+      var c = agentOf(v.substr(2));
       if (c && c.class !== draft.agent.cls) draft.agent = freshAgent(c.class, c.name, false);
     }
     sel = { t: "agent" };
@@ -242,7 +246,7 @@
   }
   function itemsOf(port) {
     var a = draft.agent;
-    if (port === "model") return [a.provider ? (a.model || a.provider) : "none"];
+    if (port === "model") return [a.model || a.provider || "not set"];
     return a[port] || [];
   }
   function itemSub(port, key) {
@@ -271,15 +275,11 @@
   function scene() {
     var sc = $("st-scene"), a = draft.agent, svg = "", H = [];
     sc.textContent = "";
-    // Width follows the sub-nodes: each gets a 125 px slot under its port
-    var slots = 0;
-    PORTS.forEach(function (p) { slots += Math.max(1, itemsOf(p.id).length); });
-    var W = Math.max(1500, 200 + slots * 125 + 160);
-    sc.style.width = W + "px"; sc.style.height = SCENE_H + "px";
-    var runs = (function () { var r = 0; catalog.agents.forEach(function (x) { if (x.class === a.cls) r = x.runsToday; }); return r; })();
+    sc.style.width = "1500px"; sc.style.height = SCENE_H + "px";
+    var runs = todayOf(a).runs;
 
     var T = { x: 50, y: 250, w: 210, h: 96 }, A = { x: 340, y: 235, w: 500, h: 126 }, D = { x: 930, y: 223, w: 130, h: 150 };
-    var watched = draft.watches.length ? draft.watches.join(", ") : "nothing yet";
+    var watched = draft.watches.length + (draft.watches.length === 1 ? " item watched" : " items watched");
     sc.appendChild(node("n-trig", "trig" + (isSel("trigger") ? " sel" : ""), T.x, T.y, T.w, T.h,
       '<i class="ic ti ti-alert-triangle" style="color:#fb923c"></i><div><div class="t">When a message fails</div><div class="s">' + esc(watched) + "</div></div>", function () { pick({ t: "trigger" }); }));
     sc.appendChild(node("n-agent", "agent" + (isSel("agent") ? " sel" : ""), A.x, A.y, A.w, A.h,
@@ -305,35 +305,37 @@
         '<i class="ic ti ti-' + o.icon + '" style="color:' + o.col + ';font-size:24px"></i><div><div class="t" style="font-size:14px">' + o.title + '</div><div class="s">' + esc(sub) + "</div></div>", function () { pick({ t: "out", id: o.id }); }));
     });
 
-    // Ports on the agent's bottom edge, sub-nodes in a row below, + under each port
-    var x0 = 200, px = [];
-    PORTS.forEach(function (p, i) {
-      var n = Math.max(1, itemsOf(p.id).length), cx = A.x + 40 + i * (A.w - 80) / (PORTS.length - 1), by = A.y + A.h;
-      H.push('<span class="dia" style="left:' + (cx - 6) + "px;top:" + (by - 6) + 'px"></span><span class="plab" style="left:' + cx + "px;top:" + (by + 10) + 'px">' + p.label + (p.req ? "<b>*</b>" : "") + "</span>");
-      itemsOf(p.id).forEach(function (key, j) {
-        var sx = x0 + j * 125 + 39 + 0, sy = 560, label = p.id === "model" ? (a.provider || "none") : lookup(p.id, key).name, sub = p.id === "model" ? (a.model || "") : itemSub(p.id, key);
-        svg += '<path d="M' + cx + "," + (by + 30) + " C" + cx + "," + (by + 110) + " " + sx + "," + (sy - 90) + " " + sx + "," + sy + '" fill="none" stroke="#7b8291" stroke-width="1.6" stroke-dasharray="6 6"/>';
-        H.push('<span class="dia" style="left:' + (sx - 6) + "px;top:" + (sy - 6) + 'px"></span>');
-        var c = node("n-s-" + p.id + "-" + j, "sub " + p.col + (isSel("sub", p.id, key) ? " sel" : ""), sx - 39, sy, 78, 78, '<i class="ti ti-' + p.icon + '"></i>', function () { pick({ t: "sub", id: p.id, key: key }); });
-        sc.appendChild(c);
-        var l = el("div", null, "slab"); l.style.left = sx + "px"; l.style.top = (sy + 88) + "px";
-        l.innerHTML = esc(label) + "<span>" + esc(sub) + "</span>";
-        sc.appendChild(l);
+    // One dashed box under the agent with a card per kind of ability
+    var K = { x: 150, y: 470, w: 1060 }, kit = el("div", null, "kit");
+    kit.style.left = K.x + "px"; kit.style.top = K.y + "px"; kit.style.width = K.w + "px";
+    PORTS.forEach(function (p) {
+      var items = itemsOf(p.id), c = el("div", null, "kcard");
+      c.innerHTML = '<div class="kh"><i class="ti ti-' + p.icon + ' ' + p.col + '"></i>' + p.label + (p.req ? "<b>*</b>" : "") + (p.id !== "model" ? '<span class="kn">' + items.length + "</span>" : "") + "</div>";
+      var body = el("div", null, "kb");
+      items.forEach(function (key) {
+        var r = el("span", p.id === "model" ? (a.model || a.provider || "not set") : lookup(p.id, key).name, "kc" + (isSel("sub", p.id, key) ? " on" : ""));
+        r.addEventListener("click", function (e) { e.stopPropagation(); pick({ t: "sub", id: p.id, key: key }); });
+        body.appendChild(r);
       });
-      if (p.id !== "model") {
-        var hot = isSel("add", p.id), b = el("span", null, "plus" + (hot ? " hot" : "")); b.style.left = (cx - 13) + "px"; b.style.top = (by + 38) + "px";
-        b.innerHTML = '<i class="ti ti-plus"></i>'; b.title = p.title;
-        b.addEventListener("click", function (e) { e.stopPropagation(); pick({ t: "add", id: p.id }); });
-        px.push(b);
-      }
-      x0 += n * 125;
+      if (p.id === "model" && a.provider) body.appendChild(el("span", a.provider + " · key in IRIS Wallet", "kc off"));
+      c.appendChild(body);
+      var b = el("button", null, "kadd" + (isSel("add", p.id) ? " hot" : ""));
+      b.type = "button"; b.innerHTML = '<i class="ti ti-plus"></i> ' + (p.id === "model" ? "Change" : "Add");
+      b.addEventListener("click", function (e) { e.stopPropagation(); pick(p.id === "model" ? { t: "sub", id: "model" } : { t: "add", id: p.id }); });
+      c.appendChild(b);
+      kit.appendChild(c);
+    });
+    sc.appendChild(kit);
+    path("M" + (A.x + A.w / 2) + "," + (A.y + A.h) + " L" + (A.x + A.w / 2) + "," + K.y, true, "#7b8291");
+    H.push('<span class="plab" style="left:' + (A.x + A.w / 2 + 30) + "px;top:" + (A.y + A.h + 40) + 'px">uses</span>');
+    [[T.x, 190, 1, "Starts when"], [A.x, 190, 2, "The AI Hub agent and what it can use"], [1240, 30, 3, "What happens next"]].forEach(function (h) {
+      H.push('<div class="stephead" style="left:' + h[0] + "px;top:" + h[1] + 'px"><span>' + h[2] + "</span>" + h[3] + "</div>");
     });
     var s = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     s.innerHTML = svg;
     sc.insertBefore(s, sc.firstChild);
     var holder = el("div"); holder.innerHTML = H.join("");
     while (holder.firstChild) sc.appendChild(holder.firstChild);
-    px.forEach(function (b) { sc.appendChild(b); });
     applyScale();
   }
 
@@ -383,8 +385,7 @@
   }
 
   function agentPanel(s) {
-    var a = draft.agent, cat = null;
-    catalog.agents.forEach(function (x) { if (x.class === a.cls) cat = x; });
+    var a = draft.agent, cat = agentOf(a.cls) ? todayOf(a) : null;
     head(s, "robot", "#f3e8ff", "#7c3aed", a.name, "AI Hub agent · " + (a.cls || "new, created on Apply"));
     s.appendChild(el("h5", "What it does"));
     s.appendChild(text(a.instructions, function (v) { edit(function () { a.instructions = v; }); }, "textarea"));
@@ -404,8 +405,8 @@
     row.appendChild(c1); row.appendChild(c2); s.appendChild(row);
     s.appendChild(el("h5", "Today"));
     var t = el("div", null, "d-flex justify-content-between");
-    t.appendChild(el("span", cat ? cat.runsToday + " runs · " + cat.toolCallsToday + " tool calls" : "not created yet"));
-    t.appendChild(el("span", cat ? usd(cat.costToday) : "", "fw-semibold"));
+    t.appendChild(el("span", cat ? cat.runs + " runs · " + cat.toolCalls + " tool calls" : "not created yet"));
+    t.appendChild(el("span", cat ? usd(cat.cost) : "", "fw-semibold"));
     s.appendChild(t);
     if (a.isNew) {
       s.appendChild(el("h5", "Name"));
@@ -488,6 +489,7 @@
     if (p.id === "model") {
       head(s, p.icon, "#f3e8ff", "#7c3aed", "Model", "Required. The AI the agent thinks with.", true);
       var provs = catalog.providers.map(function (x) { return [x.name, x.name + (x.model ? " · " + x.model : "")]; });
+      if (a.provider && !catalog.providers.some(function (x) { return x.name === a.provider; })) provs.unshift([a.provider, a.provider]);
       if (!provs.length) provs = [["", "No provider configured"]];
       s.appendChild(field("Provider", select(provs, a.provider, function (v) {
         edit(function () { a.provider = v; catalog.providers.forEach(function (x) { if (x.name === v) a.model = x.model || ""; }); });

@@ -56,10 +56,12 @@ Method TestAgentsListed()
 	Set tIter = ##class(AgenticProd.UI.Studio).Agents().%GetIterator(), tNames = ""
 	While tIter.%GetNext(, .tA) {
 		Set tNames = tNames_","_tA.name
-		Do $$$AssertTrue(tA.%IsDefined("runsToday") && tA.%IsDefined("costToday"), tA.name_" has today's numbers")
+		Do $$$AssertEquals(tA.namespace, $NAMESPACE, tA.name_" belongs to its namespace")
+		Do $$$AssertTrue(tA.provider '= "" && (tA.model '= ""), tA.name_" has its real model")
+		Do $$$AssertTrue($IsObject(tA.today), tA.name_" has usage per namespace")
 	}
-	Do $$$AssertTrue(tNames [ ",TriageAgent", "triage agent is listed")
-	Do $$$AssertTrue(tNames '[ ",Base", "the abstract base is not an agent to pick")
+	Do $$$AssertEquals(tNames, ",TriageAgent", "only the triage agent; Ping and the base are not offered")
+	Do $$$AssertTrue(##class(AgenticProd.UI.Studio).Catalog().template.model '= "", "template carries the model")
 }
 
 Method TestDraftRoundTrip()

@@ -141,7 +141,7 @@ ClassMethod Catalog() As %DynamicObject
 	}
 	Set tOut.memory = [{"id":"session", "name":"Session memory", "description":"keeps the conversation for one message"}, {"id":"learned", "name":"Learned decisions", "description":"approved decisions the agent can look up"}]
 	Set tOut.agents = ..Agents()
-	Set tOut.template = {"name":"TriageAgent", "mode":"propose", "budget":"0.50", "toolCalls":10, "tokensPerDay":200000,
+	Set tOut.template = {"name":"TriageAgent", "provider":($PARAMETER("AgenticProd.Agent.TriageAgent", "PROVIDER")), "model":($PARAMETER("AgenticProd.Agent.TriageAgent", "MODEL")), "mode":"propose", "budget":"0.50", "toolCalls":10, "tokensPerDay":200000,
 		"instructions":"You triage failed HL7 lab messages. Use only the tools. Never change patient identity. Return one decision as JSON.",
 		"tools":["AgenticProd.Tools.Base", "AgenticProd.Tools.HL7", "AgenticProd.Tools.Mapping"], "skills":["AgenticProd.Skill.HL7Repair"],
 		"knowledge":["search_loinc"], "guardrails":["AgenticProd.Policy.ReadOnly", "AgenticProd.Policy.Audit", "AgenticProd.Policy.InjectionGuard"], "memory":["session"]}
@@ -152,25 +152,21 @@ ClassMethod Catalog() As %DynamicObject
 	Quit tOut
 }
 
-/// Agent classes in this namespace with today's runs and cost. Usage rows carry no agent
-/// name, so they are shown on the triage agent, the only one the production runs.
+/// The triage agent with today's usage per namespace (Usage rows carry the namespace, not an
+/// agent name). Agents made in AI Studio live in their draft, not here.
 ClassMethod Agents() As %DynamicArray
 {
 	Set tOut = []
-	Set tRuns = 0, tCost = 0, tCalls = 0
+	Set tClass = "AgenticProd.Agent.TriageAgent"
+	Set tToday = {}
 	Try {
 		Set tDay = $PIECE($ZDATETIME($ZTIMESTAMP, 3), " ", 1)_" 00:00:00"
-		Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT COUNT(*), SUM(CostUsd), SUM(ToolCalls) FROM AgenticProd_Data.Usage WHERE Replay = 0 AND CreatedAt >= ?", tDay)
-		If tRS.%Next() Set tRuns = +tRS.%GetData(1), tCost = +tRS.%GetData(2), tCalls = +tRS.%GetData(3)
+		Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT Namespace, COUNT(*), SUM(CostUsd), SUM(ToolCalls) FROM AgenticProd_Data.Usage WHERE Replay = 0 AND CreatedAt >= ? GROUP BY Namespace", tDay)
+		While tRS.%Next() { Do tToday.%Set(tRS.%GetData(1), {"runs":(+tRS.%GetData(2)), "cost":(+tRS.%GetData(3)), "toolCalls":(+tRS.%GetData(4))}) }
 	} Catch {}
-	// The web user cannot read the class dictionary through SQL, so look the known agents up by name
-	Set tList = $LISTBUILD("AgenticProd.Agent.PingAgent", "AgenticProd.Agent.TriageAgent")
-	For i = 1:1:$LISTLENGTH(tList) {
-		Set tName = $LISTGET(tList, i)
-		Continue:'##class(%Dictionary.CompiledClass).%ExistsId(tName)
-		Set tHome = (tName = "AgenticProd.Agent.TriageAgent")
-		Do tOut.%Push({"class":(tName), "name":($PIECE(tName, ".", *)), "runsToday":(tHome*tRuns), "costToday":(tHome*tCost), "toolCallsToday":(tHome*tCalls)})
-	}
+	Quit:'##class(%Dictionary.CompiledClass).%ExistsId(tClass) tOut
+	Do tOut.%Push({"class":(tClass), "name":($PIECE(tClass, ".", *)), "namespace":($NAMESPACE), "today":(tToday),
+		"provider":($PARAMETER(tClass, "PROVIDER")), "model":($PARAMETER(tClass, "MODEL"))})
 	Quit tOut
 }
 
