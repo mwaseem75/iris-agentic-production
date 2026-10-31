@@ -36,6 +36,11 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
 <Route Url="/flow/window" Method="GET" Call="FlowWindow"/>
 <Route Url="/flow/journey/:decisionId" Method="GET" Call="FlowJourney"/>
 <Route Url="/flow/messages" Method="GET" Call="FlowMessages"/>
+<Route Url="/studio/productions" Method="GET" Call="StudioProductions"/>
+<Route Url="/studio/production" Method="GET" Call="StudioProduction"/>
+<Route Url="/studio/catalog" Method="GET" Call="StudioCatalog"/>
+<Route Url="/studio/draft" Method="GET" Call="StudioDraftGet"/>
+<Route Url="/studio/draft" Method="PUT" Call="StudioDraftPut"/>
 <Route Url="/burst" Method="POST" Call="Burst"/>
 <Route Url="/evalruns" Method="GET" Call="EvalRuns"/>
 <Route Url="/evalruns/:id" Method="GET" Call="EvalResults"/>
@@ -404,6 +409,107 @@ ClassMethod FlowBadNs() [ Internal ]
 {
 	Set %response.Status = ..#HTTP400BADREQUEST
 	Write {"error":("ns must be one of "_##class(AgenticProd.UI.Flow).#NAMESPACES)}.%ToJSON()
+}
+
+/// GET /studio/productions: namespaces with Interoperability, their productions, running state.
+ClassMethod StudioProductions() As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		Set tOut = {"productions":(##class(AgenticProd.UI.Studio).Productions())}
+		Do tOut.%Set("canEdit", ..CanEditSettings(), "boolean")
+		Write tOut.%ToJSON()
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// GET /studio/production?ns=&name=: items with 24 h health and the connections between them.
+ClassMethod StudioProduction() As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		Set tNs = %request.Get("ns"), tName = %request.Get("name")
+		If '..StudioTarget(tNs, tName) Quit
+		Set tOut = ##class(AgenticProd.UI.Studio).Production(tNs, tName)
+		If '$IsObject(tOut) {
+			Set %response.Status = ..#HTTP404NOTFOUND
+			Write {"error":"no such production"}.%ToJSON()
+			Quit
+		}
+		Write tOut.%ToJSON()
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// GET /studio/catalog: recipes and the blocks they are made of.
+ClassMethod StudioCatalog() As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		Write ##class(AgenticProd.UI.Studio).Catalog().%ToJSON()
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// GET /studio/draft?ns=&name=
+ClassMethod StudioDraftGet() As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		Set tNs = %request.Get("ns"), tName = %request.Get("name")
+		If '..StudioTarget(tNs, tName) Quit
+		Write ##class(AgenticProd.UI.Studio).Draft(tNs, tName).%ToJSON()
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// PUT /studio/draft?ns=&name= with the draft JSON as body. Admin only.
+ClassMethod StudioDraftPut() As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		If '..CanEditSettings() {
+			Set %response.Status = ..#HTTP403FORBIDDEN
+			Write {"error":"Saving a draft needs the AgenticProd_Admin role"}.%ToJSON()
+			Quit
+		}
+		Set tNs = %request.Get("ns"), tName = %request.Get("name")
+		If '..StudioTarget(tNs, tName) Quit
+		Try {
+			Set tBody = {}.%FromJSON(%request.Content)
+		} Catch {
+			Set tBody = ""
+		}
+		If '$IsObject(tBody) {
+			Set %response.Status = ..#HTTP400BADREQUEST
+			Write {"error":"body must be a JSON object"}.%ToJSON()
+			Quit
+		}
+		$$$ThrowOnError(##class(AgenticProd.Data.StudioDraft).Put(tNs, tName, tBody.%ToJSON()))
+		Write ##class(AgenticProd.UI.Studio).Draft(tNs, tName).%ToJSON()
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// 400 unless ns/name are given and ns is a namespace the Studio lists.
+ClassMethod StudioTarget(pNs As %String, pName As %String) As %Boolean [ Internal ]
+{
+	If (pNs = "") || (pName = "") || '##class(AgenticProd.UI.Studio).KnownNs(pNs) {
+		Set %response.Status = ..#HTTP400BADREQUEST
+		Write {"error":"ns and name must name a production in an Interoperability namespace"}.%ToJSON()
+		Quit 0
+	}
+	Quit 1
 }
 
 /// POST /burst {"n":8,"mode":"replay|live","confirm":false}: admin only. See UI.Flow.Burst.
