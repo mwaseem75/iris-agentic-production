@@ -31,6 +31,9 @@ Parameter BURSTLIVEMAX = 10;
 /// live Messages list.
 Parameter BURSTRUN = 900000;
 
+/// Eval run ids from BURSTRUN up to here are bursts; test stubs use 9999xx.
+Parameter BURSTEND = 999000;
+
 Parameter FALLBACKCOSTUSD = 0.0015;
 
 /// pNs when the tab may show it, the current namespace for "", else "".
@@ -98,7 +101,7 @@ ClassMethod InjectionFlags(pDecisionJSON As %String) As %DynamicArray
 /// Map for pNs over pFrom..pTo (UTC timestamps; "" = the last MAPMINUTES to now): the production's
 /// items in lanes with in/out/error counts and queue depth, and the hops between them with their
 /// average time. Only items of the production are shown, not Ens.* system hosts. Unless
-/// pIncludeEval, sessions that have an eval/burst DecisionLog row are left out of the counts (a
+/// pIncludeEval, sessions that have an eval DecisionLog row (bursts excepted) are left out of the counts (a
 /// message that passed the router has no such row, so clean eval traffic is still counted).
 ClassMethod Map(pNs As %String, pFrom As %String = "", pTo As %String = "", pIncludeEval As %Boolean = 1) As %DynamicObject
 {
@@ -113,7 +116,7 @@ ClassMethod Map(pNs As %String, pFrom As %String = "", pTo As %String = "", pInc
 	Set tProd = ##class(Ens.Config.Production).%OpenId(tName)
 	Quit:'$IsObject(tProd) tOut
 
-	Set tWhere = " WHERE Type = 1 AND TimeCreated >= ? AND TimeCreated <= ?"_$SELECT(pIncludeEval: "", 1: " AND SessionId NOT IN (SELECT SessionId FROM AgenticProd_Data.DecisionLog WHERE EvalRunId IS NOT NULL AND SessionId IS NOT NULL AND Namespace = '"_pNs_"')")
+	Set tWhere = " WHERE Type = 1 AND TimeCreated >= ? AND TimeCreated <= ?"_$SELECT(pIncludeEval: "", 1: " AND SessionId NOT IN (SELECT SessionId FROM AgenticProd_Data.DecisionLog WHERE EvalRunId IS NOT NULL AND NOT (EvalRunId >= "_..#BURSTRUN_" AND EvalRunId < "_..#BURSTEND_") AND SessionId IS NOT NULL AND Namespace = '"_pNs_"')")
 	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT TargetConfigName AS N, COUNT(*) AS C, SUM(IsError) AS E FROM Ens.MessageHeader"_tWhere_" GROUP BY TargetConfigName", pFrom, pTo)
 	While tRS.%Next() {
 		Set tIn($ZCONVERT(tRS.N, "U")) = tRS.C, tErr($ZCONVERT(tRS.N, "U")) = +tRS.E
@@ -230,7 +233,7 @@ ClassMethod Card(pId As %String) As %DynamicObject
 	Set tUsage = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 1 PromptTokens + CompletionTokens AS Tokens, CostUsd, Replay FROM AgenticProd_Data.Usage WHERE HeaderId = ? AND Namespace = ? ORDER BY ID DESC", tLog.HeaderId, tLog.Namespace)
 	Set tHasUsage = tUsage.%Next()
 	Quit {"id":(+pId), "headerId":(tLog.HeaderId), "session":(tLog.SessionId), "decision":(tLog.Decision), "errorClass":(tLog.ErrorClass), "confidence":(+tLog.Confidence),
-		"at":(tLog.CreatedAt), "eval":(tLog.EvalRunId '= ""),
+		"at":(tLog.CreatedAt), "eval":(tLog.EvalRunId '= ""), "burst":((tLog.EvalRunId '= "") && (tLog.EvalRunId >= ..#BURSTRUN) && (tLog.EvalRunId < ..#BURSTEND)),
 		"gates":{"injection":{"status":($SELECT(tFlags.%Size(): "flagged", 1: "clean")), "flagged":(tFlags)},
 			"grounding":(..GroundingGate(tLog.GroundingJSON, tLog.Grounded, tLog.GroundingFailed)),
 			"triage":{"outcome":(tRule)}},

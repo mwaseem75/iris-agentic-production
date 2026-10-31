@@ -56,14 +56,14 @@ Method TestMapHasProductionItems()
 	}
 }
 
-/// Stub request headers LabRouter -> Triage: one clean session, one error, one in an eval session.
+/// Stub request headers LabRouter -> Triage: one clean session, one error, one in an eval session, one in a burst.
 /// The counters count source and target per item, and the eval toggle drops the eval session.
 Method TestMapCountsHeaders()
 {
 	Set tIn = ..Count(1, "Triage", "in"), tInLive = ..Count(0, "Triage", "in")
 	Set tOut = ..Count(1, "LabRouter", "out"), tErr = ..Count(1, "Triage", "errors")
 	Set tIds = ""
-	For tSession = ..#HEADER, ..#HEADER - 1, ..#HEADER - 2 {
+	For tSession = ..#HEADER, ..#HEADER - 1, ..#HEADER - 2, ..#HEADER - 3 {
 		Set tH = ##class(Ens.MessageHeader).%New()
 		Set tH.TimeCreated = $ZDATETIME($ZTIMESTAMP, 3, 1, 3), tH.Type = 1, tH.SourceConfigName = "LabRouter", tH.TargetConfigName = "Triage", tH.SessionId = tSession
 		Set tH.IsError = (tSession = (..#HEADER - 1))
@@ -73,14 +73,17 @@ Method TestMapCountsHeaders()
 	Set tLog = ##class(AgenticProd.Data.DecisionLog).%New()
 	Set tLog.HeaderId = ..#HEADER, tLog.SessionId = ..#HEADER - 2, tLog.Decision = "ESCALATE", tLog.ErrorClass = "OTHER", tLog.EvalRunId = 999904
 	Do $$$AssertStatusOK(tLog.%Save())
+	Set tBurst = ##class(AgenticProd.Data.DecisionLog).%New()
+	Set tBurst.HeaderId = ..#HEADER, tBurst.SessionId = ..#HEADER - 3, tBurst.Decision = "ESCALATE", tBurst.ErrorClass = "OTHER", tBurst.EvalRunId = 900099
+	Do $$$AssertStatusOK(tBurst.%Save())
 	Set tInAfter = ..Count(1, "Triage", "in"), tInLiveAfter = ..Count(0, "Triage", "in")
 	Set tOutAfter = ..Count(1, "LabRouter", "out"), tErrAfter = ..Count(1, "Triage", "errors")
 	For i = 1:1:$LISTLENGTH(tIds) Do ##class(Ens.MessageHeader).%DeleteId($LIST(tIds, i))
 	Do ..Cleanup()
-	Do $$$AssertEquals(tInAfter - tIn, 3, "target counted")
-	Do $$$AssertEquals(tOutAfter - tOut, 3, "source counted")
+	Do $$$AssertEquals(tInAfter - tIn, 4, "target counted")
+	Do $$$AssertEquals(tOutAfter - tOut, 4, "source counted")
 	Do $$$AssertEquals(tErrAfter - tErr, 1, "error counted")
-	Do $$$AssertEquals(tInLiveAfter - tInLive, 2, "eval session left out")
+	Do $$$AssertEquals(tInLiveAfter - tInLive, 3, "eval session left out, burst session counted")
 }
 
 /// One counter (in, out, errors) of one item in a Map of the last hour.
@@ -121,6 +124,7 @@ Method TestSliceFromStubRows()
 	Do $$$AssertEquals(tCard.gates.grounding.status, "ambiguous")
 	Do $$$AssertEquals(tCard.gates.triage.outcome, "SENT_FOR_APPROVAL")
 	Do $$$AssertEquals(tCard.outcome, "person")
+	Do $$$AssertEquals(tCard.burst, 0, "not a burst")
 	Do $$$AssertEquals(tCard.tokens, 120)
 	Do $$$AssertEquals(tCard.replay, 1)
 	Do $$$AssertEquals(tSlice.tools.%Size(), 1)

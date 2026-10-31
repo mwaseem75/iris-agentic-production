@@ -14,6 +14,7 @@
   var CHIP_KIND = { clean: "g", passed: "g", applied: "g", flagged: "b", ungrounded: "b", ambiguous: "w" };
   var INFLIGHT = "#7b8794";
   var POLL_MS = 1000, HOLD_MS = 2500, LAG_MS = 3000, WINDOW_S = 120, SLIDER_S = 3600, PREFILL_S = 600, TABLE_ROWS = 12, MAX_DOTS = 60;
+  var MIN_SEG_MS = 700;
   var NODE_H = 60, NODE_W = 176, HEAD_H = 34, DOT = 8, CURVE = 0.2;
 
   var S = null;
@@ -22,7 +23,8 @@
 
   function $(id) { return document.getElementById(id); }
   function evalOn() { return typeof includeEval !== "undefined" && includeEval; }
-  function visible(c) { return evalOn() || !c.eval; }
+  // Burst messages are sent from this tab, so they always show; other eval traffic follows the toggle
+  function visible(c) { return evalOn() || !c.eval || c.burst; }
   function serverNow() { return Date.now() + (S ? S.skew : 0); }
   function stamp(d) { return d.toISOString().replace("T", " ").slice(0, 23); }
 
@@ -94,12 +96,18 @@
       if (!S.cursor) return get("api/flow/live?ns=" + ns).then(mergeSlice);
     });
   }
+  var newHops = 0;
+  function status(n) {
+    newHops += n;
+    $("flow-status").textContent = "last update: " + new Date().toLocaleTimeString("en-GB") + " · " + n + " new hops (" + newHops + " since the tab opened) · " + Object.keys(S.hops).length + " hops, " + Object.keys(S.cards).length + " decisions in view";
+  }
   function poll() {
     if (!active || polling || S.mode !== "live" || !S.cursor) return;
     polling = true;
     var c = S.cursor;
     get("api/flow/live?ns=" + ns + "&since=" + c.hop + "&dec=" + c.dec + "&tool=" + c.tool + "&usage=" + c.usage).then(function (r) {
       mergeSlice(r);
+      status(r.hops.length);
       renderSide();
     }).catch(function (e) { $("flow-msg").textContent = "Live feed: " + e.message; }).then(function () { polling = false; });
   }
@@ -194,8 +202,8 @@
     var chips = [];
     GATES.forEach(function (g) {
       var p = S.pos["@" + g.key], counts = st[g.key], total = Object.keys(counts).reduce(function (n, k) { return n + counts[k]; }, 0);
-      nodes.push(nodeData(g.label, p, "{c|" + total + " decisions}\n{c|checked}", LANE_COLOR.checks, 0));
-      chips.push({ value: [p.x, p.y], symbolSize: [p.w, p.h], itemStyle: { opacity: 0 }, label: { show: true, position: "bottom", distance: 4, formatter: chipLines(counts), rich: RICH, align: "center" } });
+      nodes.push(nodeData(g.label, p, "{c|" + total + " decisions in view}", LANE_COLOR.checks, 0));
+      chips.push({ value: [p.x, p.y + p.h / 2 + 4], itemStyle: { color: "rgba(0,0,0,0)" }, label: { show: true, position: "bottom", distance: 2, formatter: chipLines(counts), rich: RICH, align: "center" } });
     });
     var edges = m.edges.map(function (e) { return { from: e.from, to: e.to, count: e.count, avgMs: e.avgMs }; });
     // The way back from the agent through the three gates to Triage has no hop of its own
@@ -223,7 +231,7 @@
         { id: "edges", type: "lines", coordinateSystem: "cartesian2d", data: lines, symbol: ["none", "arrow"], symbolSize: 9,
           lineStyle: { color: "#c5ccd6", opacity: 1 }, emphasis: { lineStyle: { color: "#8a94a3" } }, zlevel: 1 },
         { id: "nodes", type: "scatter", symbol: "roundRect", data: nodes, zlevel: 2, label: { show: true, position: "inside" } },
-        { id: "chips", type: "scatter", symbol: "rect", data: chips, zlevel: 2, silent: true },
+        { id: "chips", type: "scatter", symbol: "circle", symbolSize: 1, data: chips, zlevel: 2, silent: true },
         { id: "dots", type: "scatter", data: S.dots, symbolSize: DOT, zlevel: 4 }
       ]
     });
@@ -253,6 +261,12 @@
         }
       }
     });
+    // Replayed hops last a few ms; stretch each leg to a visible minimum, keeping the order
+    var end = 0;
+    segs.forEach(function (g) {
+      if (g.t1 == null) { g.t0 = Math.max(g.t0, end); return; }
+      g.t0 = Math.max(g.t0, end); g.t1 = Math.max(g.t1, g.t0 + MIN_SEG_MS); end = g.t1;
+    });
     return segs;
   }
   function dotAt(s, vt) {
@@ -281,7 +295,8 @@
 
   function frame() {
     raf = null;
-    if (!active || !S || !S.map) return;
+    if (!active) return;
+    if (!S || !S.map) { raf = setTimeout(frame, 200); return; }
     var now = Date.now(), dt = now - S.wall;
     S.wall = now;
     if (!S.paused) S.vt += dt * S.speed;
@@ -369,7 +384,8 @@
   // Fresh state, then the map and the last minutes; the live poll takes over from there
   function restart() {
     reset(); S.vt = serverNow() - LAG_MS;
-    Promise.all([loadMap(), prefill()]).then(function () { renderSide(); syncControls(); }).catch(showFlowError);
+    newHops = 0;
+    Promise.all([loadMap(), prefill()]).then(function () { status(0); renderSide(); syncControls(); }).catch(showFlowError);
   }
   function sliderLabel(ago) { return ago < 2 ? "now" : "-" + Math.floor(ago / 60) + ":" + ("0" + (ago % 60)).slice(-2); }
   function sliderChanged() {
