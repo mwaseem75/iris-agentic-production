@@ -129,16 +129,48 @@ ClassMethod Catalog() As %DynamicObject
 	Set tOut = {"recipes":(..Recipes()), "toolsets":[], "policies":[], "knowledgeBases":[], "roles":[], "comingSoon":["Classifier agent", "Sub-agent"]}
 	Set tOut.skills = ##class(AgenticProd.Settings.Store).Skills()
 	Set tOut.providers = ##class(AgenticProd.Settings.Store).Providers()
-	For tClass = "AgenticProd.Tools.Base", "AgenticProd.Tools.HL7", "AgenticProd.Tools.Mapping" {
-		Do tOut.toolsets.%Push({"class":(tClass), "name":($PIECE(tClass, ".", *))})
+	Set tTools = $LISTBUILD("AgenticProd.Tools.Base:Message tools:read the failed message, errors, similar decisions", "AgenticProd.Tools.HL7:HL7 tools:read segments and check a fix", "AgenticProd.Tools.Mapping:Mapping tools:search the code table and knowledge")
+	For i = 1:1:$LISTLENGTH(tTools) {
+		Set tRow = $LISTGET(tTools, i)
+		Do tOut.toolsets.%Push({"class":($PIECE(tRow, ":", 1)), "name":($PIECE(tRow, ":", 2)), "description":($PIECE(tRow, ":", 3))})
 	}
-	For tClass = "AgenticProd.Policy.ReadOnly", "AgenticProd.Policy.Audit", "AgenticProd.Policy.InjectionGuard" {
-		Do tOut.policies.%Push({"class":(tClass), "name":($PIECE(tClass, ".", *))})
+	Set tPols = $LISTBUILD("AgenticProd.Policy.ReadOnly:Read-only:tools cannot change data", "AgenticProd.Policy.Audit:Audit:every tool call is logged", "AgenticProd.Policy.InjectionGuard:Injection guard:message text is data, never instructions")
+	For i = 1:1:$LISTLENGTH(tPols) {
+		Set tRow = $LISTGET(tPols, i)
+		Do tOut.policies.%Push({"class":($PIECE(tRow, ":", 1)), "name":($PIECE(tRow, ":", 2)), "description":($PIECE(tRow, ":", 3))})
 	}
+	Set tOut.memory = [{"id":"session", "name":"Session memory", "description":"keeps the conversation for one message"}, {"id":"learned", "name":"Learned decisions", "description":"approved decisions the agent can look up"}]
+	Set tOut.agents = ..Agents()
+	Set tOut.template = {"name":"TriageAgent", "mode":"propose", "budget":"0.50", "toolCalls":10, "tokensPerDay":200000,
+		"instructions":"You triage failed HL7 lab messages. Use only the tools. Never change patient identity. Return one decision as JSON.",
+		"tools":["AgenticProd.Tools.Base", "AgenticProd.Tools.HL7", "AgenticProd.Tools.Mapping"], "skills":["AgenticProd.Skill.HL7Repair"],
+		"knowledge":["search_loinc"], "guardrails":["AgenticProd.Policy.ReadOnly", "AgenticProd.Policy.Audit", "AgenticProd.Policy.InjectionGuard"], "memory":["session"]}
 	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT Name FROM EnsLib_Workflow.RoleDefinition ORDER BY Name")
 	While tRS.%Next() { Do tOut.roles.%Push(tRS.Name) }
 	// Setup builds search_loinc; other knowledge bases are not listed by AI Hub yet
 	Do tOut.knowledgeBases.%Push({"name":"search_loinc", "description":"LOINC subset for lab code mapping"})
+	Quit tOut
+}
+
+/// Agent classes in this namespace with today's runs and cost. Usage rows carry no agent
+/// name, so they are shown on the triage agent, the only one the production runs.
+ClassMethod Agents() As %DynamicArray
+{
+	Set tOut = []
+	Set tRuns = 0, tCost = 0, tCalls = 0
+	Try {
+		Set tDay = $PIECE($ZDATETIME($ZTIMESTAMP, 3), " ", 1)_" 00:00:00"
+		Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT COUNT(*), SUM(CostUsd), SUM(ToolCalls) FROM AgenticProd_Data.Usage WHERE Replay = 0 AND CreatedAt >= ?", tDay)
+		If tRS.%Next() Set tRuns = +tRS.%GetData(1), tCost = +tRS.%GetData(2), tCalls = +tRS.%GetData(3)
+	} Catch {}
+	// The web user cannot read the class dictionary through SQL, so look the known agents up by name
+	Set tList = $LISTBUILD("AgenticProd.Agent.PingAgent", "AgenticProd.Agent.TriageAgent")
+	For i = 1:1:$LISTLENGTH(tList) {
+		Set tName = $LISTGET(tList, i)
+		Continue:'##class(%Dictionary.CompiledClass).%ExistsId(tName)
+		Set tHome = (tName = "AgenticProd.Agent.TriageAgent")
+		Do tOut.%Push({"class":(tName), "name":($PIECE(tName, ".", *)), "runsToday":(tHome*tRuns), "costToday":(tHome*tCost), "toolCallsToday":(tHome*tCalls)})
+	}
 	Quit tOut
 }
 

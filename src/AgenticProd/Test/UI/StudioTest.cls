@@ -44,6 +44,22 @@ Method TestCatalog()
 	Do $$$AssertTrue(tCat.toolsets.%Size() >= 3, "toolsets")
 	Do $$$AssertTrue(tCat.skills.%Size() >= 1, "skills")
 	Do $$$AssertEquals(tCat.comingSoon.%Size(), 2, "classifier and sub-agent are coming soon")
+	Do $$$AssertEquals(tCat.memory.%Size(), 2, "memory options")
+	Do $$$AssertTrue(tCat.template.tools.%Size() >= 3 && (tCat.template.guardrails.%Size() = 3), "triage template")
+	Set tToolsDescribed = 1, tIter = tCat.toolsets.%GetIterator()
+	While tIter.%GetNext(, .tT) { Set:tT.description="" tToolsDescribed = 0 }
+	Do $$$AssertTrue(tToolsDescribed, "every toolset has a description for the picker")
+}
+
+Method TestAgentsListed()
+{
+	Set tIter = ##class(AgenticProd.UI.Studio).Agents().%GetIterator(), tNames = ""
+	While tIter.%GetNext(, .tA) {
+		Set tNames = tNames_","_tA.name
+		Do $$$AssertTrue(tA.%IsDefined("runsToday") && tA.%IsDefined("costToday"), tA.name_" has today's numbers")
+	}
+	Do $$$AssertTrue(tNames [ ",TriageAgent", "triage agent is listed")
+	Do $$$AssertTrue(tNames '[ ",Base", "the abstract base is not an agent to pick")
 }
 
 Method TestDraftRoundTrip()
@@ -80,11 +96,10 @@ Method TestHttp()
 	Do $$$AssertEquals(tReq.HttpResponse.StatusCode, 200, "catalog")
 	Set tJSON = ##class(%DynamicObject).%FromJSON(tReq.HttpResponse.Data)
 	Do $$$AssertEquals(tJSON.recipes.%Size(), 5)
+	Do $$$AssertTrue(tJSON.agents.%Size() > 0, "catalog lists agents")
 	Do $$$AssertEquals(..Get("api/studio/draft?ns="_tNs_"&name=AgenticProd.Production", tUser, tPass).HttpResponse.StatusCode, 200, "draft")
 	Do $$$AssertEquals(..Get("studio.js", tUser, tPass).HttpResponse.StatusCode, 200, "studio script")
 	Do $$$AssertEquals(..Get("studio.css", tUser, tPass).HttpResponse.StatusCode, 200, "studio styles")
-	Do $$$AssertEquals(..Get("vendor/drawflow/drawflow.min.js", tUser, tPass).HttpResponse.StatusCode, 200, "Drawflow served locally")
-	Do $$$AssertEquals(..Get("vendor/drawflow/drawflow.min.css", tUser, tPass).HttpResponse.StatusCode, 200, "Drawflow css served locally")
 	Do $$$AssertEquals(..Get("api/studio/catalog").HttpResponse.StatusCode, 401, "no login")
 	// The reviewer is not an admin: saving a draft is refused
 	Set tPut = ##class(%Net.HttpRequest).%New()
