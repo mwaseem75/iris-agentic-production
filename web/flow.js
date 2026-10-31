@@ -14,7 +14,7 @@
 
   var ns = "IRISAPP", active = false, started = false, timer = null, polling = false, lastTop = "", lastSig = "";
   var msgs = [], selId = null, J = null, jStatus = "", cur = -1, panelOpen = false;
-  var panelNs = "IRISAPP", map = null, mapAt = 0, playTimer = null, speed = 2, loadSeq = 0;
+  var panelNs = "IRISAPP", map = null, mapAt = 0, playTimer = null, speed = 2, loadSeq = 0, opening = false, openSeq = 0;
 
   function $(id) { return document.getElementById(id); }
   function evalOn() { return typeof includeEval !== "undefined" && includeEval; }
@@ -60,7 +60,9 @@
         headStatus();
         var m = byId(selId);
         // the reviewer answered or a resend finished: the journey has new steps
-        if (m && m.status !== jStatus && !playTimer) select(selId, panelNs, true);
+        // jStatus is null until the journey was loaded with this message in the list: just learn it, a reload would stop the autoplay
+        if (m && jStatus === null) jStatus = m.status;
+        else if (m && m.status !== jStatus && !playTimer && !opening) select(selId, panelNs, true);
       }
     }).catch(showError).then(function () { polling = false; });
     if (Date.now() - mapAt > MAP_MS) { mapAt = Date.now(); loadMap(); }
@@ -70,7 +72,7 @@
   }
 
   // ---- journey ----
-  function select(id, jns, keepStep) {
+  function select(id, jns, keepStep, fresh) {
     var seq = ++loadSeq;
     selId = id; panelNs = jns;
     return get("api/flow/journey/" + id + "?ns=" + jns).then(function (j) {
@@ -78,9 +80,9 @@
       var wasLast = cur < 0 || !J || cur >= J.steps.length - 1;
       J = j; selKey = "";
       var m = byId(id);
-      jStatus = m ? m.status : "";
+      jStatus = m ? m.status : null;
       stopPlay();
-      cur = keepStep && !wasLast ? Math.min(cur, j.steps.length - 1) : j.steps.length - 1;
+      cur = fresh ? -1 : keepStep && !wasLast ? Math.min(cur, j.steps.length - 1) : j.steps.length - 1;
       renderSteps(); drawMap(); headStatus(); syncControls();
     }).catch(showError);
   }
@@ -468,6 +470,9 @@
 
   function openPanel(id, jns) {
     jns = jns || listNs();
+    stopPlay();
+    var mine = ++openSeq;
+    opening = true; speed = 2; selKey = "";
     panelOpen = true; selId = id; panelNs = jns; J = null; cur = -1;
     $("msg-panel").classList.remove("hidden"); $("mp-back").classList.remove("hidden");
     $("mp-title").textContent = "Message " + id; $("mp-sub").textContent = ""; $("mp-links").textContent = "";
@@ -477,15 +482,21 @@
     try { history.replaceState(null, "", "#" + h); } catch (e) { location.hash = h; }
     if (!started) start();
     mapAt = Date.now();
-    Promise.all([loadMap(), select(id, jns)]).then(function () {
-      if (panelOpen && selId === id && J) { cur = J.steps.length; play(); }
+    // start from the first step once the data is in and the canvas has been laid out
+    Promise.all([loadMap(), select(id, jns, false, true)]).then(function () {
+      requestAnimationFrame(function () {
+        if (mine !== openSeq) return;
+        opening = false;
+        if (!panelOpen || selId !== id || !J) return;
+        fitCanvas(); stopPlay(); cur = -1; play();
+      });
     });
     showStory(id);
     if (!byId(id)) poll();
   }
   function closePanel() {
     if (!panelOpen) return;
-    panelOpen = false; stopPlay();
+    panelOpen = false; openSeq++; stopPlay();
     $("msg-panel").classList.add("hidden"); $("mp-back").classList.add("hidden");
     try { history.replaceState(null, "", location.pathname + location.search); } catch (e) { location.hash = ""; }
   }
@@ -531,6 +542,8 @@
   }
 
   window.flowOpen = openPanel;
+  // Read-only view of the player for checks from the console
+  window.flowState = function () { return { open: panelOpen, id: selId, cur: cur, speed: speed, playing: !!playTimer, steps: J ? J.steps.length : 0 }; };
   // Called by the dashboard when a tab is shown: poll live status while Messages is on screen
   window.flowShow = function (name) {
     var on = name === "messages";
