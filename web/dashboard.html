@@ -4,140 +4,143 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Agentic Production</title>
+<link rel="stylesheet" href="vendor/tabler/tabler.min.css">
+<link rel="stylesheet" href="vendor/tabler/tabler-icons.min.css">
 <style>
 :root {
-  --bg: #f4f5f7; --panel: #ffffff; --text: #1c2430; --muted: #5f6b7a; --line: #e3e6ea;
-  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; --radius: 16px; --shadow: 0 1px 2px rgba(16,24,40,.05);
-  --s1: 8px; --s2: 16px; --s3: 24px;
-  --accent: #1d6fd1; --good: #1f7a4d; --warn: #9a6400; --bad: #b42318;
-  --good-bg: #e7f4ec; --warn-bg: #fdf3e1; --bad-bg: #fdeceb; --info-bg: #e8f0fa;
-  --bar: #2563a8; --bar-bg: #e2e6eb;
+  --tblr-font-sans-serif: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Tokens used by the flow drawer and the status tags */
+  --bg: #f3f5f8; --panel: #ffffff; --text: #101828; --muted: #667085; --line: #e4e8ee;
+  --accent: #206bc4; --good: #1e7b3a; --warn: #9a5b00; --bad: #b42318;
+  --good-bg: #e7f6ec; --warn-bg: #fff4e0; --bad-bg: #fde8e8; --info-bg: #e8f0fe;
+  --bar: #206bc4; --bar-bg: #e4e8ee;
   /* Outcome groups: same colours in tags, the decision mix and the timeline */
   --c-applied: #2e9e62; --c-approval: #d99a1e; --c-rejected: #c8463d; --c-resent: #3b7dd8; --c-other: #8a94a3;
 }
-* { box-sizing: border-box; }
-html, body { margin: 0; }
-body {
-  background: var(--bg); color: var(--text);
-  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-}
-.wrap { max-width: 1280px; margin: 0 auto; padding: 20px 16px 48px; }
-header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; margin-bottom: 4px; }
-.lede { color: var(--muted); margin: 0 0 18px; max-width: 72ch; }
-.toggle { color: var(--muted); display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
-h1 { font-size: 20px; margin: 0; font-weight: 650; }
-h2 { font-size: 15px; margin: 0 0 10px; font-weight: 650; }
+body { background: var(--bg); font-size: 15px; }
+/* !important: Tabler utility classes set display too */
+.hidden { display: none !important; }
 .muted { color: var(--muted); }
 .spacer { flex: 1; }
-button {
-  font: inherit; color: var(--accent); background: transparent; border: 1px solid var(--line);
-  border-radius: 6px; padding: 4px 12px; cursor: pointer;
-}
-button:hover, a.btn:hover { border-color: var(--accent); }
-a.btn { color: var(--accent); border: 1px solid var(--line); border-radius: 6px; padding: 4px 12px; text-decoration: none; }
-.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 22px; }
-.tiles.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.tiles.five { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-.row-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin: 0 0 6px; }
-.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin: 0 0 18px; }
-.tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 8px 14px; color: var(--muted); }
-.tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
-.tabs button:hover { color: var(--text); }
-td.wrap-cell { white-space: normal; }
-.arrow { color: var(--muted); margin: 0 4px; }
-.more-row { margin-top: 10px; display: flex; gap: 12px; align-items: baseline; }
-details.more { margin-top: 16px; }
-details.more > summary { font-weight: 600; margin-bottom: 12px; }
-.tile.over .sub { color: var(--bad); }
-.tile { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
-.tile .label { color: var(--muted); font-size: 12px; }
-.tile .value { font-size: 24px; font-weight: 650; margin-top: 2px; font-variant-numeric: tabular-nums; }
-.tile .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
-.meter { height: 6px; background: var(--bar-bg); border-radius: 3px; margin-top: 8px; overflow: hidden; }
-.meter > div { height: 100%; background: var(--bar); }
-.meter.over > div { background: var(--bad); }
-section.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; margin-bottom: 22px; }
 .scroll { overflow-x: auto; }
-table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
-th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-th { color: var(--muted); font-weight: 600; font-size: 12px; }
-td.num, th.num { text-align: right; }
-td .tag + .tag { margin-left: 4px; }
-tbody tr:last-child td { border-bottom: 0; }
+
+/* sidebar */
+.navbar-vertical { background: #0f1b2d !important; }
+.navbar-vertical .nav-link { color: #c7d0dd; font-size: 15px; padding: .6rem 1rem; border-radius: 8px; margin: 2px 10px; display: flex; align-items: center; }
+.navbar-vertical .nav-link.active, .navbar-vertical .nav-link:hover { background: #1d2c44; color: #fff; }
+.navbar-vertical .nav-link i { font-size: 20px; margin-right: 10px; }
+.brand { color: #fff; font-weight: 700; font-size: 17px; padding: 18px 20px 6px; }
+.brand small { display: block; color: #8a99ad; font-weight: 400; font-size: 12px; margin-top: 2px; }
+.side-foot { margin-top: auto; padding: 16px 20px; color: #8a99ad; font-size: 13px; border-top: 1px solid #1d2c44; }
+.side-foot b { color: #fff; }
+.side-foot .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; background: #2fb344; margin-right: 6px; }
+.side-foot .dot.off { background: #f59f00; }
+@media (max-width: 991.98px) { .navbar-vertical .navbar-nav { flex-direction: row; flex-wrap: wrap; } .side-foot { margin-top: 0; } }
+
+/* page */
+.page-header { margin: 0; padding: 20px 0 8px; }
+.page-title { font-size: 24px; }
+.card { border-radius: 12px; border: 1px solid var(--line); box-shadow: 0 1px 2px rgba(16,24,40,.04); }
+.card-title { font-size: 17px; font-weight: 600; }
+.card-header { border-bottom: 1px solid #eef1f5; }
+.card-actions { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.card-actions .win { color: var(--muted); }
+.card-actions .info { border: 0; background: transparent; padding: 0; color: var(--accent); font-size: 18px; line-height: 1; cursor: pointer; }
+.kpi .label { color: var(--muted); font-size: 14px; }
+.kpi .value { font-size: 34px; font-weight: 700; line-height: 1.15; color: var(--text); }
+.kpi .value.good { color: #2fb344; }
+.kpi .hint { color: var(--muted); font-size: 13px; }
+.kpi .avatar { width: 48px; height: 48px; border-radius: 12px; font-size: 26px; flex: none; }
+.kpi .progress { margin-top: 8px; }
+.step-num { width: 30px; height: 30px; border-radius: 50%; background: var(--info-bg); color: #1a5fd0; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.check-row { display: flex; align-items: center; padding: 12px 0; border-bottom: 1px solid #eef1f5; }
+.check-row:last-child { border-bottom: 0; }
+.check-row .num { font-size: 22px; font-weight: 700; min-width: 56px; text-align: right; }
+.check-row .num.good { color: #2fb344; }
+.sub-text { color: var(--muted); font-size: 13px; }
+.table thead th { font-size: 12px; text-transform: none; letter-spacing: 0; color: var(--muted); background: #f8fafc; font-weight: 600; }
+.table td { font-size: 14px; vertical-align: middle; white-space: nowrap; }
+.table td.wrap-cell { white-space: normal; }
+.table td.num, .table th.num { text-align: right; }
+.table .mono { font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
 tr.click { cursor: pointer; }
-tr.click:hover td, tr.sel td { background: var(--info-bg); }
-a { color: var(--accent); text-decoration: none; }
-input, select { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; min-width: 0; }
-input:focus, select:focus { outline: 2px solid var(--info-bg); border-color: var(--accent); }
-.form { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px 12px; align-items: end; margin: 10px 0 4px; }
-#f-budgets { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
-.form label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
-.form .actions { display: flex; gap: 8px; align-items: center; }
-td input { width: 100%; min-width: 70px; }
-button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-button:disabled { opacity: .5; cursor: default; }
-.kill { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; margin-top: 12px; }
-.kill.on { border-color: var(--bad); background: var(--bad-bg); }
-button.danger { color: var(--bad); border-color: var(--bad); }
-.kill.on button.danger { background: var(--bad); color: #fff; }
-.msg { font-size: 13px; margin: 6px 0 0; min-height: 1.2em; }
-.filter-row { margin: 0 0 8px; font-size: 13px; }
-.msg.ok { color: var(--good); }
-.msg.bad { color: var(--bad); }
-.readonly-note { background: var(--warn-bg); color: var(--warn); border-radius: 6px; padding: 8px 12px; margin: 0 0 14px; }
-.kill-banner { background: var(--bad); color: #fff; border-radius: 6px; padding: 10px 14px; margin: 0 0 14px; font-weight: 600; }
-.checks { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 6px 0; }
-.checks label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); }
-pre.instr { white-space: pre-wrap; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; font-size: 12px; max-height: 360px; overflow: auto; }
-h3.sub { font-size: 13px; margin: 16px 0 4px; }
-a:hover { text-decoration: underline; }
-.tag { display: inline-block; padding: 0 7px; border-radius: 10px; font-size: 12px; line-height: 19px; }
+tr.click:hover > td, tr.sel > td { background: var(--info-bg); }
+.arrow { color: var(--muted); margin: 0 4px; }
+.eval-big { font-size: 40px; font-weight: 700; }
+.eval-big.good { color: #2fb344; }
+.chart { width: 100%; height: 260px; }
+.chart-card { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; min-width: 0; }
+.chart-card h3 { margin-bottom: 4px; font-size: 13px; color: var(--muted); font-weight: 650; }
+.chart-card .note { color: var(--muted); font-size: 12px; margin: 0 0 4px; }
+.charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.mini { display: flex; flex-wrap: wrap; gap: 16px 0; margin-bottom: 14px; }
+
+/* status tags: soft pills, same names the scripts use */
+.tag { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 500; line-height: 1.4; }
+.tag + .tag { margin-left: 4px; }
 .t-good { background: var(--good-bg); color: var(--good); }
 .t-warn { background: var(--warn-bg); color: var(--warn); }
 .t-bad { background: var(--bad-bg); color: var(--bad); }
-.t-info { background: var(--info-bg); color: var(--accent); }
-.t-other { background: #eef0f3; color: #5f6b7a; }
-.charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-.chart-card { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; min-width: 0; }
-.chart-card h3 { margin-bottom: 4px; }
-.chart-card .note { color: var(--muted); font-size: 12px; margin: 0 0 4px; }
-.chart { width: 100%; height: 240px; }
-.mini { display: flex; flex-wrap: wrap; gap: 16px 0; margin-bottom: 14px; }
+.t-info { background: var(--info-bg); color: #1a5fd0; }
+.t-other { background: #eef1f5; color: #475467; }
+
+/* tiles (compact figures in the metrics row) */
+.tile { padding: 0 20px; min-width: 120px; flex: 1 1 130px; border-left: 1px solid var(--line); }
+.tile:first-child { border-left: 0; padding-left: 0; }
+.tile .label { color: var(--muted); font-size: 13px; }
+.tile .value { font-size: 24px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.tile .sub { color: var(--muted); font-size: 12px; }
+.meter { height: 6px; background: var(--bar-bg); border-radius: 3px; margin-top: 8px; overflow: hidden; }
+.meter > div { height: 100%; background: var(--bar); }
+.meter.over > div { background: var(--bad); }
+
+/* settings */
+.settings-nav .list-group-item { border: 0; border-radius: 8px !important; font-size: 15px; padding: 10px 14px; cursor: pointer; }
+.settings-nav .list-group-item.active { background: var(--info-bg); color: #1a5fd0; font-weight: 600; }
+.fl { font-size: 12px; color: var(--muted); font-weight: 500; }
+.form-label { font-weight: 500; color: #344054; }
+.kill { border: 2px solid var(--bad) !important; border-radius: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 14px; }
+.kill.on { background: var(--bad-bg); }
+.checks { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 6px 0; }
+.checks label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+pre.instr { white-space: pre-wrap; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; font-size: 12px; max-height: 360px; overflow: auto; }
+h3.sub { font-size: 13px; margin: 16px 0 4px; font-weight: 650; color: var(--muted); }
+.msg { font-size: 13px; margin: 6px 0 0; min-height: 1.2em; }
+.msg.ok { color: var(--good); }
+.msg.bad { color: var(--bad); }
 .err { color: var(--bad); margin: 0 0 12px; }
-/* !important: .form .actions and other display rules are more specific */
-.hidden { display: none !important; }
+.readonly-note { background: var(--warn-bg); color: var(--warn); border-radius: 8px; padding: 8px 12px; margin: 0 0 14px; }
+.kill-banner { background: var(--bad); color: #fff; border-radius: 8px; padding: 10px 14px; margin: 0 0 14px; font-weight: 600; }
+
+/* controls the scripts build without Tabler classes */
+button:not([class*="btn"]):not(.linkbtn):not(.value):not(.info) { display: inline-block; padding: .25rem .7rem; font: inherit; font-size: 13px; border: 1px solid var(--tblr-border-color, #dce1e7); border-radius: 8px; background: #fff; color: var(--text); cursor: pointer; }
+button:not([class*="btn"]):hover { border-color: var(--accent); }
+button.primary { background: var(--accent) !important; border-color: var(--accent) !important; color: #fff !important; }
+button.danger { color: var(--bad); border-color: var(--bad); }
+button:disabled { opacity: .5; cursor: default; }
+.linkbtn { background: none; border: 0; padding: 0; color: var(--accent); font-size: 13px; cursor: pointer; }
+.linkbtn:hover { text-decoration: underline; }
+.card input:not([type=checkbox]):not([type=radio]):not(.form-control), .card select:not(.form-select) { font: inherit; font-size: 14px; padding: .3rem .6rem; border: 1px solid var(--tblr-border-color, #dce1e7); border-radius: 8px; background: #fff; color: var(--text); min-width: 0; }
+td input { width: 100%; min-width: 70px; }
+details > summary { cursor: pointer; color: var(--accent); }
+details pre { font: 12px/1.4 ui-monospace, Consolas, monospace; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; overflow-x: auto; margin: 8px 0 0; }
+#burst-box label { display: inline-block; margin: 0 10px 8px 0; }
+#burst-box input[type=number] { width: 64px; }
+#help-back { position: fixed; inset: 0; background: rgba(0,0,0,.25); z-index: 1100; }
+#help-panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(380px, 100vw); background: #fff; border-left: 1px solid var(--line); box-shadow: -4px 0 18px rgba(0,0,0,.15); z-index: 1101; padding: 24px; overflow-y: auto; }
+#help-panel h2 { font-size: 18px; }
+#help-panel p { margin: 0 0 12px; }
+
+/* message drawer and flow canvas */
 .story-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin-bottom: 10px; }
-.story-head h2 { margin: 0; }
 ol.steps { margin: 0 0 16px; padding-left: 22px; }
 ol.steps > li { margin: 0 0 10px; }
 ol.steps .st { font-weight: 600; margin-right: 6px; }
 ol.steps ol { margin: 4px 0 0; padding-left: 20px; color: var(--muted); }
 h3 { font-size: 13px; margin: 0 0 8px; font-weight: 650; color: var(--muted); }
 .wf { width: 100%; margin-bottom: 14px; }
-details pre { font: 12px/1.4 ui-monospace, Consolas, monospace; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; overflow-x: auto; margin: 8px 0 0; }
-summary { cursor: pointer; color: var(--accent); }
-.flow-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 8px; }
-.fl-grid { display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 12px; align-items: start; }
-.fl-left, .fl-right { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.fl-left section.panel, .fl-right section.panel { margin-bottom: 0; }
-.fl-list-head { display: flex; align-items: center; gap: 8px; }
-.fl-list-head h2 { margin: 0; }
-.fl-list { list-style: none; margin: 8px 0 0; padding: 0; max-height: 520px; overflow-y: auto; }
-.fl-list li { padding: 6px 8px; border-left: 4px solid var(--line); border-bottom: 1px solid var(--line); cursor: pointer; font-size: 13px; }
-.fl-list li:hover { background: var(--info-bg); }
-.fl-list li.sel { background: var(--info-bg); outline: 1px solid var(--accent); }
-.fl-list .r1 { display: flex; justify-content: space-between; gap: 6px; }
-.fl-list .r2 { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fl-list .id { font-weight: 600; }
+section.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; margin-bottom: 22px; }
 .fl-map { width: 100%; display: block; }
-.fl-map text { font: 11px system-ui, sans-serif; fill: var(--text); }
-.fl-map .lane-h { font-weight: 700; font-size: 12px; }
-.fl-map .sub { fill: var(--muted); font-size: 10px; }
-.fl-map rect.node { fill: var(--panel, #fff); stroke: var(--line); stroke-width: 1.5; }
-.fl-map rect.node.on { stroke: var(--accent); stroke-width: 2; }
-.fl-map rect.node.cur { stroke: var(--accent); stroke-width: 4; }
-.fl-map rect.node.err { stroke: var(--bad); }
-.fl-path { fill: none; stroke: var(--accent); stroke-width: 4; stroke-linejoin: round; stroke-linecap: round; opacity: .85; }
 .fl-canvas-wrap { background: #0f1722; border-radius: 8px; overflow: hidden; position: relative; }
 .fl-canvas { position: relative; width: 1000px; height: 456px; transform-origin: 0 0; background-image: radial-gradient(#2a3647 1px, transparent 1px); background-size: 18px 18px; color: #dbe4ef; font: 12px system-ui, sans-serif; }
 .fl-canvas svg.wires { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
@@ -213,7 +216,7 @@ summary { cursor: pointer; color: var(--accent); }
 @keyframes flpulse { from { box-shadow: 0 0 0 0 rgba(242,184,75,.8); } to { box-shadow: 0 0 0 10px rgba(242,184,75,0); } }
 @media (prefers-reduced-motion: reduce) { .fl-nd .st.spin, .fl-nd .pulse, .fl-nd.agent.run, .fl-nd.agent.glow { animation: none; } }
 .fl-steps-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
-.fl-steps-head h2 { margin: 0 8px 0 0; }
+.fl-steps-head h3 { margin: 0 8px 0 0; }
 .fl-steps { list-style: none; margin: 8px 0 0; padding: 0; flex: 1 1 260px; min-height: 120px; overflow-y: auto; position: relative; }
 .fl-steps li { padding: 6px 6px 6px 10px; border-left: 4px solid var(--line); margin-bottom: 4px; cursor: pointer; border-radius: 0 4px 4px 0; font-size: 13px; }
 .fl-steps li:hover { background: var(--info-bg); }
@@ -226,12 +229,10 @@ summary { cursor: pointer; color: var(--accent); }
 .fl-steps .t { font-weight: 600; }
 .fl-steps .m { color: var(--muted); font-size: 12px; }
 .fl-steps .x { margin: 2px 0; }
-#burst-box label { display: inline-block; margin: 0 10px 8px 0; }
-#burst-box input[type=number] { width: 64px; }
-#mp-back { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 50; }
-#msg-panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(980px, 96vw); background: var(--bg); border-left: 1px solid var(--line); box-shadow: -4px 0 18px rgba(0,0,0,.25); z-index: 51; overflow-y: auto; padding: 14px 16px; }
+#mp-back { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 1050; }
+#msg-panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(980px, 96vw); background: var(--bg); border-left: 1px solid var(--line); box-shadow: -4px 0 18px rgba(0,0,0,.25); z-index: 1051; overflow-y: auto; padding: 14px 16px; }
 .mp-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-bottom: 8px; }
-.mp-head h2 { margin: 0; }
+.mp-head h2 { margin: 0; font-size: 18px; }
 .mp-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
 .mp-tabs button[aria-selected=true] { border-color: var(--accent); font-weight: 650; }
 td.go { white-space: nowrap; }
@@ -239,376 +240,422 @@ td.go { white-space: nowrap; }
 #mp-journey:not(.hidden) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 #mp-details:not(.hidden) { flex: 1; min-height: 0; overflow-y: auto; }
 #mp-journey .fl-mapbox { margin: 0 0 8px; padding: 0; }
+@media (max-width: 1100px) { .charts { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 600px) {
-  .fl-grid { grid-template-columns: minmax(0, 1fr); }
-  #burst-box { display: none; }
+  #burst-wrap { display: none; }
   #msg-panel { width: 100vw; }
   .fl-list { max-height: 260px; }
   .fl-canvas-wrap { display: none; }
-  .tiles, .tiles.three, .tiles.five { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-  .tabs button { padding: 8px 10px; }
-  .tile .value { font-size: 20px; }
   .opt { display: none; }
-  .charts { grid-template-columns: minmax(0, 1fr); }
-  .mini { gap: 12px 0; }
+  .kpi .value { font-size: 26px; }
   .chart { height: 220px; }
-}
-
-/* ---- console style: cards, grid, header bar, help panel (tokens are in :root) ---- */
-body { font: 14px/1.5 var(--font); }
-.wrap { max-width: 1280px; padding: 0 24px 48px; }
-.appbar { background: var(--panel); border-bottom: 1px solid var(--line); margin: 0 calc(50% - 50vw) 24px; padding: 14px calc(50vw - 50%) 0; }
-.appbar-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
-.appbar h1 { font-size: 20px; font-weight: 600; }
-.appbar .lede { margin: 2px 0 0; flex-basis: 100%; font-size: 13px; }
-.appbar .tabs { border-bottom: 0; margin: 12px 0 0; }
-.chip { display: inline-block; border: 1px solid var(--line); border-radius: 12px; padding: 0 10px; line-height: 22px; font-size: 12px; color: var(--muted); background: var(--bg); }
-.tabs button { padding: 10px 16px; font-size: 14px; }
-.tabs button[aria-selected="true"] { border-bottom-width: 3px; }
-h2 { font-size: 18px; font-weight: 600; margin: 0 0 12px; }
-section.panel, .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px; margin-bottom: 24px; min-width: 0; }
-.card-h { display: flex; align-items: center; gap: 8px 12px; margin: 0 0 12px; }
-.card-h h2 { margin: 0; flex: 1; min-width: 0; }
-.card-h h2 .muted { font-size: 13px; font-weight: 400; }
-.card-h .info { border: 0; background: transparent; padding: 0; font-size: 13px; color: var(--accent); }
-.card-h .info:hover { text-decoration: underline; }
-.card-f { border-top: 1px solid var(--line); margin: 16px -20px -4px; padding: 12px 20px 0; font-size: 13px; }
-.card-desc { margin: -6px 0 12px; color: var(--muted); font-size: 13px; }
-.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; margin-bottom: 24px; align-items: stretch; }
-.grid > .card { margin-bottom: 0; }
-.grid > .span2 { grid-column: span 2; }
-.tiles, .tiles.two, .tiles.three, .tiles.five { display: flex; flex-wrap: wrap; gap: 16px 0; margin-bottom: 0; }
-.tile, .tile.over { background: none; border: 0; border-left: 1px solid var(--line); border-radius: 0; padding: 0 20px; min-width: 120px; flex: 1 1 130px; }
-.tile:first-child { border-left: 0; padding-left: 0; }
-.tile .label { font-size: 13px; }
-.tile .value { font-size: 30px; font-weight: 600; line-height: 1.2; }
-.tile .value.link { color: var(--accent); cursor: pointer; background: none; border: 0; padding: 0; text-align: left; font-family: inherit; }
-.tile .value.link:hover { text-decoration: underline; }
-.tile .value.zero-ok { color: var(--good); }
-.tile .sub { font-size: 12px; }
-.card-h .win { color: var(--muted); font-size: 13px; }
-.linkbtn { background: none; border: 0; padding: 0; color: var(--accent); font-size: 13px; cursor: pointer; }
-.linkbtn:hover { text-decoration: underline; }
-.steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; }
-.step { padding: 0 20px; border-left: 1px solid var(--line); }
-.step:first-child { border-left: 0; padding-left: 0; }
-.step .n { width: 26px; height: 26px; border-radius: 50%; background: var(--info-bg); color: var(--accent); font-weight: 600; display: flex; align-items: center; justify-content: center; margin-bottom: 6px; }
-.step b { display: block; font-weight: 600; }
-.step p { margin: 2px 0 8px; color: var(--muted); font-size: 13px; }
-.grid > .span3 { grid-column: 1 / -1; }
-button { border-radius: 8px; padding: 6px 14px; }
-a.btn { border-radius: 8px; padding: 6px 14px; }
-button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-button.primary:hover { filter: brightness(1.08); }
-input, select { border-radius: 8px; padding: 6px 10px; }
-.chart-card { border-radius: 12px; }
-.rlist { list-style: none; margin: 0; padding: 0; }
-.rlist li { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
-.rlist li:last-child { border-bottom: 0; }
-.rlist .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; background: var(--c-other); }
-.rlist .txt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rlist .txt small { display: block; color: var(--muted); font-size: 12px; }
-.gs { list-style: none; margin: 0; padding: 0; counter-reset: gs; }
-.gs li { counter-increment: gs; display: flex; align-items: center; gap: 12px; padding: 8px 0; }
-.gs li::before { content: counter(gs); width: 26px; height: 26px; border-radius: 50%; background: var(--info-bg); color: var(--accent); font-weight: 600; display: flex; align-items: center; justify-content: center; flex: none; }
-.gs li > * { flex: 1; text-align: left; }
-.kill { border: 2px solid var(--bad); border-radius: 12px; }
-#help-back { position: fixed; inset: 0; background: rgba(0,0,0,.25); z-index: 60; }
-#help-panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(380px, 100vw); background: var(--panel); border-left: 1px solid var(--line); box-shadow: -4px 0 18px rgba(0,0,0,.15); z-index: 61; padding: 24px; overflow-y: auto; }
-#help-panel h2 { font-size: 18px; }
-#help-panel p { margin: 0 0 12px; }
-@media (max-width: 1100px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .grid > .span2 { grid-column: span 2; } .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 0; } .step:nth-child(3) { border-left: 0; padding-left: 0; } }
-@media (max-width: 700px) {
-  .wrap { padding: 0 16px 32px; }
-  .appbar { margin: 0 calc(50% - 50vw) 16px; padding: 12px calc(50vw - 50%) 0; }
-  .grid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
-  .grid > .span2 { grid-column: auto; }
-  .steps { grid-template-columns: minmax(0, 1fr); } .step { border-left: 0; padding: 0; }
-  section.panel, .card { padding: 16px; margin-bottom: 16px; }
-  .card-f { margin: 16px -16px -4px; padding: 12px 16px 0; }
-  .tabs { overflow-x: auto; }
+  .mini { gap: 12px 0; }
 }
 </style>
 </head>
 <body>
 <div id="help-back" class="hidden"></div>
 <aside id="help-panel" class="hidden" role="dialog" aria-label="About this card"><button type="button" id="help-close" style="float:right">Close</button><h2 id="help-title"></h2><div id="help-body"></div></aside>
-<div class="wrap">
-  <div class="appbar">
-    <div class="appbar-top">
-      <h1>Agentic Production</h1>
-      <span class="chip hidden" id="hdr-ns"></span>
-      <span class="chip hidden" id="hdr-user"></span>
-      <span class="spacer"></span>
-      <label class="toggle"><input type="checkbox" id="incl-eval"> Include eval runs</label>
-      <span class="muted" id="updated"></span>
-      <a class="btn hidden" id="prod-link" target="_blank" rel="noopener">Production</a>
-      <a class="btn hidden" id="inbox-link" target="_blank" rel="noopener">Workflow inbox</a>
-      <button id="refresh" type="button">Refresh</button>
-      <p class="lede">An AI agent triages failed HL7 messages. A deterministic Triage step decides what is applied; a person approves the rest.</p>
+<div class="page">
+  <aside class="navbar navbar-vertical navbar-expand-lg" data-bs-theme="dark">
+    <div class="container-fluid d-flex flex-column h-100 p-0">
+      <div class="brand"><i class="ti ti-topology-star-3 me-2"></i>Agentic Production<small>AI control plane for IRIS Interoperability</small></div>
+      <ul class="navbar-nav pt-3 w-100" id="nav">
+        <li class="nav-item"><a class="nav-link active" data-tab="overview" href="#overview"><i class="ti ti-layout-dashboard"></i>Overview</a></li>
+        <li class="nav-item"><a class="nav-link" data-tab="messages" href="#messages"><i class="ti ti-messages"></i>Messages<span class="badge bg-orange text-white ms-auto hidden" id="nav-waiting"></span></a></li>
+        <li class="nav-item"><a class="nav-link" data-tab="trust" href="#trust"><i class="ti ti-shield-check"></i>Trust &amp; evaluation</a></li>
+        <li class="nav-item"><a class="nav-link" data-tab="cost" href="#cost"><i class="ti ti-coin"></i>Cost</a></li>
+        <li class="nav-item"><a class="nav-link" data-tab="settings" href="#settings"><i class="ti ti-settings"></i>Settings</a></li>
+        <li class="nav-item mt-3"><a class="nav-link hidden" id="inbox-link" target="_blank" rel="noopener"><i class="ti ti-inbox"></i>Workflow inbox <i class="ti ti-external-link ms-auto" style="font-size:14px;margin:0"></i></a></li>
+        <li class="nav-item"><a class="nav-link hidden" id="prod-link" target="_blank" rel="noopener"><i class="ti ti-route"></i>Production <i class="ti ti-external-link ms-auto" style="font-size:14px;margin:0"></i></a></li>
+      </ul>
+      <div class="side-foot w-100">
+        <div><span class="dot" id="sf-dot"></span><span id="sf-prod">Production</span></div>
+        <div class="mt-1 hidden" id="hdr-ns"></div>
+        <div class="hidden" id="hdr-user"></div>
+        <div class="mt-1">AI: <b id="sf-mode">&mdash;</b> &middot; kill switch <b id="sf-kill">&mdash;</b></div>
+      </div>
     </div>
-    <nav class="tabs" role="tablist">
-      <button type="button" role="tab" data-tab="overview" aria-selected="true">Overview</button>
-      <button type="button" role="tab" data-tab="messages" aria-selected="false">Messages</button>
-      <button type="button" role="tab" data-tab="evaluation" aria-selected="false">Evaluation</button>
-      <button type="button" role="tab" data-tab="cost" aria-selected="false">Cost</button>
-      <button type="button" role="tab" data-tab="settings" aria-selected="false">Settings</button>
-    </nav>
-  </div>
-  <p class="kill-banner hidden" id="kill-banner" role="alert">AI kill switch is ON: every failed message goes to a person, no LLM call. Turn it off on the Settings tab.</p>
-  <p class="err hidden" id="error"></p>
+  </aside>
 
-  <div class="tabpanel" id="tab-overview" role="tabpanel">
-    <div class="grid">
-      <section class="card span3" data-info="start"><h2>Getting started</h2>
-        <div class="steps">
-          <div class="step"><div class="n">1</div><b>Send a sample</b><p>Sends eval case 01 as a replay message. It costs nothing.</p><button type="button" class="primary" id="gs-1">Send case 01</button></div>
-          <div class="step"><div class="n">2</div><b>Watch it flow</b><p>See the path of the latest message, step by step.</p><button type="button" class="linkbtn" id="gs-2">View flow &rarr;</button></div>
-          <div class="step"><div class="n">3</div><b>Review the queue</b><p>Open the tasks waiting for a person.</p><a id="gs-3" target="_blank" rel="noopener" style="font-size:13px">Workflow inbox &rarr;</a></div>
-          <div class="step"><div class="n">4</div><b>Try a burst</b><p>Send several random cases at once.</p><button type="button" class="linkbtn" id="gs-4">Send a burst &rarr;</button></div>
+  <div class="page-wrapper">
+    <div class="container-fluid px-4">
+      <div class="page-header d-print-none">
+        <div class="row align-items-center g-2">
+          <div class="col">
+            <div class="text-secondary" style="font-size:13px" id="crumb">Agentic Production</div>
+            <h2 class="page-title" id="ptitle">Overview</h2>
+          </div>
+          <div class="col-auto d-flex flex-wrap align-items-center gap-3">
+            <label class="form-check form-switch m-0"><input class="form-check-input" type="checkbox" id="incl-eval"><span class="form-check-label">Include eval runs</span></label>
+            <span class="text-secondary" style="font-size:13px" id="updated"></span>
+            <button class="btn" type="button" id="refresh"><i class="ti ti-refresh me-1"></i>Refresh</button>
+            <button class="btn btn-primary" type="button" id="hdr-burst"><i class="ti ti-send me-1"></i>Send a burst</button>
+          </div>
         </div>
-        <p class="msg" id="gs-msg"></p></section>
-      <section class="card" data-info="health"><h2>Production health</h2>
-        <div class="tiles" id="tiles-what"></div></section>
-      <section class="card" data-info="trust"><h2>Trust &amp; safety</h2>
-        <div class="tiles" id="tiles-trust"></div></section>
-      <section class="card" data-info="aicost" data-foot="Go to Cost" data-foot-tab="cost"><h2>AI cost</h2>
-        <div class="tiles" id="tiles-cost"></div></section>
-      <section class="card span2" data-info="recent" data-foot="All messages" data-foot-tab="messages"><h2>Recent decisions</h2>
-        <ul class="rlist" id="ov-recent"></ul></section>
-      <section class="card" data-info="mix"><h2>Outcome mix</h2>
-        <div class="chart" id="ch-outcomes"></div></section>
+      </div>
+      <p class="kill-banner hidden" id="kill-banner" role="alert">AI kill switch is ON: every failed message goes to a person, no LLM call. Turn it off on the Settings tab.</p>
+      <p class="err hidden" id="error"></p>
+
+      <!-- Overview -->
+      <div class="tabpanel" id="tab-overview" role="tabpanel">
+        <div class="card mb-3" data-info="start">
+          <div class="card-body py-3">
+            <div class="row g-3 align-items-center">
+              <div class="col-12 col-xl-2"><div class="fw-bold" style="font-size:16px">Getting started</div><div class="sub-text">See the agent work in 4 steps</div></div>
+              <div class="col-6 col-xl"><div class="d-flex gap-2"><span class="step-num">1</span><div><div class="fw-semibold">Send a broken lab result</div><button type="button" class="btn btn-sm btn-primary mt-1" id="gs-1">Send case 01</button></div></div></div>
+              <div class="col-6 col-xl"><div class="d-flex gap-2"><span class="step-num">2</span><div><div class="fw-semibold">Watch the agent</div><button type="button" class="linkbtn" id="gs-2">View flow &rarr;</button></div></div></div>
+              <div class="col-6 col-xl"><div class="d-flex gap-2"><span class="step-num">3</span><div><div class="fw-semibold">Approve as a reviewer</div><a id="gs-3" target="_blank" rel="noopener" style="font-size:13px">Workflow inbox &rarr;</a></div></div></div>
+              <div class="col-6 col-xl"><div class="d-flex gap-2"><span class="step-num">4</span><div><div class="fw-semibold">Send a burst</div><button type="button" class="linkbtn" id="gs-4">8 random cases &rarr;</button></div></div></div>
+            </div>
+            <p class="msg mb-0" id="gs-msg"></p>
+          </div>
+        </div>
+
+        <div class="row row-cards mb-3">
+          <div class="col-sm-6 col-xl-3" data-info="health"><div class="card kpi"><div class="card-body d-flex gap-3">
+            <span class="avatar bg-blue-lt"><i class="ti ti-messages"></i></span>
+            <div><div class="label">Messages triaged</div><div class="value" id="k-triaged">&mdash;</div><div class="hint" id="k-triaged-h"></div></div></div></div></div>
+          <div class="col-sm-6 col-xl-3"><div class="card kpi"><div class="card-body d-flex gap-3">
+            <span class="avatar bg-green-lt"><i class="ti ti-wand"></i></span>
+            <div><div class="label">Fixed automatically</div><div class="value" id="k-fixed">&mdash;</div><div class="hint">whitelisted fixes only</div></div></div></div></div>
+          <div class="col-sm-6 col-xl-3"><div class="card kpi"><div class="card-body d-flex gap-3">
+            <span class="avatar bg-orange-lt"><i class="ti ti-user-check"></i></span>
+            <div><div class="label">Waiting for a person</div><div class="value" id="k-waiting">&mdash;</div><div class="hint" id="k-waiting-h"></div></div></div></div></div>
+          <div class="col-sm-6 col-xl-3" data-info="trust"><div class="card kpi" id="k-unsafe-card"><div class="card-body d-flex gap-3">
+            <span class="avatar bg-green text-white"><i class="ti ti-shield-check"></i></span>
+            <div><div class="label">Unsafe actions</div><div class="value" id="k-unsafe">&mdash;</div><div class="hint">nothing applied against the rules</div></div></div></div></div>
+        </div>
+
+        <div class="row row-cards">
+          <div class="col-xl-8">
+            <div class="card" data-info="recent">
+              <div class="card-header"><h3 class="card-title">Recent decisions</h3><div class="card-actions"><a href="#messages" data-goto="messages">All messages &rarr;</a></div></div>
+              <div class="table-responsive">
+                <table class="table table-vcenter card-table">
+                  <thead><tr><th>Time (UTC)</th><th>Message</th><th>Problem</th><th>Agent proposed</th><th>Outcome</th><th class="text-end">Cost</th><th></th></tr></thead>
+                  <tbody id="ov-recent"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <div class="col-xl-4">
+            <div class="card mb-3" data-info="mix">
+              <div class="card-header"><h3 class="card-title">Outcome mix</h3><div class="card-actions"><span class="win" id="mix-win">all time</span></div></div>
+              <div class="card-body"><div class="chart" id="ch-outcomes" style="height:220px"></div></div>
+            </div>
+            <div class="card" data-info="aicost">
+              <div class="card-header"><h3 class="card-title">AI cost today</h3><div class="card-actions"><a href="#cost" data-goto="cost">Go to Cost &rarr;</a></div></div>
+              <div class="card-body">
+                <div class="d-flex align-items-baseline gap-2"><span class="kpi"><span class="value" id="ai-today">&mdash;</span></span><span class="text-secondary" id="ai-per"></span></div>
+                <div class="d-flex justify-content-between mt-3 mb-1" style="font-size:13px"><span>Daily token budget</span><span class="fw-semibold" id="ai-budget-t">&mdash;</span></div>
+                <div class="progress progress-sm"><div class="progress-bar bg-primary" id="ai-budget-bar" style="width:0"></div></div>
+                <div class="sub-text mt-2" id="ai-foot"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Messages -->
+      <div class="tabpanel hidden" id="tab-messages" role="tabpanel">
+        <div class="hidden mb-3" id="burst-wrap">
+          <div class="card" id="burst-box" data-info="Send a burst"><div class="card-body">
+            <h3 class="card-title mb-1">Send a burst</h3>
+            <p class="muted mb-2">Sends random eval cases as new messages. Replay costs nothing; live needs the agent in live mode and a confirm. New rows appear below as they arrive.</p>
+            <label>Cases <input type="number" id="burst-n" min="1" max="30" value="8"></label>
+            <label>Mode <select id="burst-mode"><option value="replay">Replay ($0)</option><option value="live">Live (LLM, max 10)</option></select></label>
+            <button type="button" id="burst-go" class="btn btn-primary btn-sm">Send a burst</button>
+            <button type="button" id="burst-confirm" class="btn btn-sm hidden">Confirm and send</button>
+            <p class="msg" id="burst-msg"></p>
+          </div></div>
+        </div>
+        <div class="card" data-info="Recent decisions">
+          <div class="card-header gap-2 flex-wrap">
+            <h3 class="card-title me-auto">Messages <span class="text-secondary fw-normal" style="font-size:14px" id="dec-count"></span> <span class="text-secondary fw-normal" style="font-size:14px">&middot; click a row to see its flow</span></h3>
+            <div class="input-icon" style="width:260px"><span class="input-icon-addon"><i class="ti ti-search"></i></span><input class="form-control" id="dec-q" placeholder="Control id or message"></div>
+            <select class="form-select" style="width:auto" id="dec-ns"><option value="">All productions</option></select>
+            <select class="form-select" style="width:auto" id="dec-outcome">
+              <option value="">Any outcome</option><option value="applied">Applied</option><option value="approval">To a person</option>
+              <option value="rejected">Rejected</option><option value="resent">Resent</option><option value="other">Other</option>
+            </select>
+          </div>
+          <p class="muted m-3 hidden" id="dec-note">No live traffic yet. Switch on "Include eval runs" to see eval messages.</p>
+          <div class="table-responsive">
+            <table class="table table-vcenter table-hover card-table">
+              <thead><tr><th>Time (UTC)</th><th>Message</th><th>Production</th><th>Problem</th><th>Agent proposed</th><th class="num">Confidence</th><th>Outcome</th><th>Now</th><th class="num opt">Cost</th><th class="opt">Model</th><th></th></tr></thead>
+              <tbody id="decisions"></tbody>
+            </table>
+          </div>
+          <div class="card-footer d-flex align-items-center flex-wrap gap-2">
+            <span class="text-secondary" id="dec-range"></span>
+            <select class="form-select form-select-sm" style="width:auto" id="dec-size"><option value="10">10 per page</option><option value="25">25 per page</option><option value="50">50 per page</option></select>
+            <ul class="pagination m-0 ms-auto" id="dec-pages"></ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Trust & evaluation -->
+      <div class="tabpanel hidden" id="tab-trust" role="tabpanel">
+        <div class="row row-cards">
+          <div class="col-xl-4">
+            <div class="card h-100" data-info="trust">
+              <div class="card-header"><h3 class="card-title">Safety checks (live)</h3><div class="card-actions"><span class="win" id="trust-win"></span></div></div>
+              <div class="card-body pt-1" id="safety-list"></div>
+            </div>
+          </div>
+          <div class="col-xl-8">
+            <div class="card h-100">
+              <div class="card-header"><h3 class="card-title" id="eval-title">Evaluation</h3><div class="card-actions" id="eval-badge"></div></div>
+              <div class="card-body d-flex flex-column justify-content-center">
+                <div class="row text-center g-3" id="eval-head"><div class="col text-secondary">No finished live eval run yet.</div></div>
+                <div class="text-secondary mt-4 text-center" style="font-size:13px">Agent = what the model proposed. System = what Triage finally did after the grounding gate and action rules. Acceptable = in the accepted decisions (system: and nothing unsafe was carried out); exact = the expected decision.</div>
+              </div>
+            </div>
+          </div>
+          <div class="col-12">
+            <div class="card" data-info="Eval runs">
+              <div class="card-header"><h3 class="card-title">Eval runs <span class="text-secondary fw-normal" style="font-size:14px">&middot; select a run to see each case</span></h3><div class="card-actions"><button id="runs-test" type="button" class="linkbtn hidden"></button></div></div>
+              <div class="table-responsive">
+                <table class="table table-vcenter table-hover card-table">
+                  <thead><tr>
+                    <th>Run</th><th>Label</th><th>Model</th><th class="num">Cases</th><th class="num">Accept. agent</th><th class="num">Accept. system</th>
+                    <th class="num opt">Exact agent</th><th class="num opt">Exact system</th><th class="num opt">Mapping</th><th class="num">Unsafe agent</th><th class="num">Unsafe final</th>
+                    <th class="num opt">Cost / msg</th><th class="num opt">p95 s</th><th>Status</th>
+                  </tr></thead>
+                  <tbody id="runs"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <div class="col-12 hidden" id="detail">
+            <div class="card">
+              <div class="card-header"><h3 class="card-title" id="detail-title"></h3></div>
+              <div class="table-responsive">
+                <table class="table table-vcenter card-table">
+                  <thead><tr>
+                    <th>Case</th><th class="opt">Slug</th><th>Expected</th><th>Agent</th><th class="opt">Agent LOINC</th>
+                    <th>Final outcome</th><th>Result</th><th class="num opt">Seconds</th><th class="num opt">Cost</th>
+                  </tr></thead>
+                  <tbody id="results"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <div class="col-12">
+            <div class="card" data-info="Agent metrics">
+              <div class="card-header"><h3 class="card-title">Agent metrics <span class="text-secondary fw-normal" style="font-size:14px" id="met-scope"></span></h3></div>
+              <div class="card-body">
+                <div class="charts">
+                  <div class="chart-card"><h3>Agent proposed vs Triage did</h3><p class="note">Bar: the agent's decision. Colour: what finally happened.</p><div class="chart" id="ch-agentfinal"></div></div>
+                  <div class="chart-card"><h3>Tokens by type per model</h3><p class="note">Live runs, replays left out. Parts add up to the total.</p><div class="chart" id="ch-tokens"></div></div>
+                  <div class="chart-card"><h3>Agent latency per model (s)</h3><div class="chart" id="ch-latency"></div></div>
+                </div>
+                <details class="mt-3" id="more">
+                  <summary>More metrics</summary>
+                  <div class="mini mt-3" id="met-tiles"></div>
+                  <div class="charts">
+                    <div class="chart-card"><h3>Decision mix per hour (last 24 h, UTC)</h3><div class="chart" id="ch-mix"></div></div>
+                    <div class="chart-card"><h3>Tool calls per tool</h3><p class="note">Label: average ms per call.</p><div class="chart" id="ch-tools"></div></div>
+                    <div class="chart-card"><h3>validate_fix results</h3><div class="chart" id="ch-validate"></div></div>
+                    <div class="chart-card"><h3>Step durations from spans (ms)</h3><div class="chart" id="ch-steps"></div></div>
+                  </div>
+                </details>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cost -->
+      <div class="tabpanel hidden" id="tab-cost" role="tabpanel">
+        <p class="muted">Last 30 days, UTC (<span id="cost-scope">live</span>). Costs come from the recorded agent runs and the price table; the forecast and ROI are estimates.</p>
+        <div class="row row-cards mb-3" id="cost-kpis"></div>
+        <div class="row row-cards">
+          <div class="col-xl-8"><div class="card"><div class="card-header"><h3 class="card-title">Cost per day by model</h3><div class="card-actions"><span class="win">last 30 days</span></div></div><div class="card-body"><div class="chart" id="ch-costday"></div></div></div></div>
+          <div class="col-xl-4"><div class="card h-100"><div class="card-header"><h3 class="card-title">Return on investment</h3><div class="card-actions"><span class="win">estimate &middot; live traffic</span></div></div><div class="card-body">
+            <div id="roi-list"></div>
+            <p class="sub-text mt-3 mb-0" id="cost-assume"></p>
+          </div></div></div>
+          <div class="col-xl-6"><div class="card"><div class="card-header"><h3 class="card-title">Cost by production</h3></div><div class="card-body"><div class="chart" id="ch-costns" style="height:200px"></div></div></div></div>
+          <div class="col-xl-6"><div class="card"><div class="card-header"><h3 class="card-title">Cost by problem type</h3></div><div class="card-body"><div class="chart" id="ch-costec" style="height:200px"></div></div></div></div>
+        </div>
+      </div>
+
+      <!-- Settings -->
+      <div class="tabpanel hidden" id="tab-settings" role="tabpanel">
+        <p class="readonly-note hidden" id="set-readonly">Read-only: changing settings needs the AgenticProd_Admin role.</p>
+        <div class="row g-3">
+          <div class="col-xl-2 col-lg-3">
+            <div class="card"><div class="list-group list-group-flush settings-nav p-2" id="set-menu">
+              <a class="list-group-item list-group-item-action active" data-sec="providers"><i class="ti ti-key me-2"></i>Providers &amp; keys</a>
+              <a class="list-group-item list-group-item-action" data-sec="agent"><i class="ti ti-robot me-2"></i>Agent</a>
+              <a class="list-group-item list-group-item-action" data-sec="guardrails"><i class="ti ti-shield me-2"></i>Guardrails</a>
+              <a class="list-group-item list-group-item-action" data-sec="budgets"><i class="ti ti-gauge me-2"></i>Budgets &amp; mode</a>
+              <a class="list-group-item list-group-item-action" data-sec="memory"><i class="ti ti-brain me-2"></i>Memory</a>
+              <a class="list-group-item list-group-item-action" data-sec="plugin"><i class="ti ti-plug me-2"></i>Plug-in</a>
+              <a class="list-group-item list-group-item-action" data-sec="changes"><i class="ti ti-history me-2"></i>Change log</a>
+              <a class="list-group-item list-group-item-action text-red" data-sec="kill"><i class="ti ti-power me-2"></i>Kill switch</a>
+            </div></div>
+          </div>
+          <div class="col-xl-10 col-lg-9">
+
+            <div class="set-sec" data-sec="providers">
+              <div class="card" data-info="Providers">
+                <div class="card-header"><div><h3 class="card-title">Providers &amp; keys</h3><div class="sub-text">Configs live in the AI Hub Config Store (<code>AI.LLM.&lt;name&gt;</code>); keys live in the IRIS Wallet and are never shown again.</div></div></div>
+                <div class="table-responsive">
+                  <table class="table table-vcenter card-table">
+                    <thead><tr><th>Name</th><th>Kind</th><th>Model</th><th class="opt">Base URL</th><th>Key</th><th class="edit-only">New key</th></tr></thead>
+                    <tbody id="set-providers"></tbody>
+                  </table>
+                </div>
+                <div class="card-body border-top edit-only">
+                  <form id="f-provider"><div class="row g-3" style="max-width:900px">
+                    <div class="col-md-6"><label class="form-label">Name</label><input class="form-control" name="name" required pattern="[a-z][a-z0-9_]{0,31}" placeholder="openai_main"></div>
+                    <div class="col-md-6"><label class="form-label">Kind</label><select class="form-select" name="kind" id="f-kinds"></select></div>
+                    <div class="col-md-6"><label class="form-label">Model</label><input class="form-control" name="model" required placeholder="gpt-4o-mini"></div>
+                    <div class="col-md-6"><label class="form-label">Base URL <span class="text-secondary fw-normal">(optional)</span></label><input class="form-control" name="base_url" placeholder="required for OpenAI-compatible"></div>
+                    <div class="col-12"><button type="submit" class="btn btn-primary">Save provider</button></div>
+                  </div></form>
+                  <p class="sub-text mt-3 mb-0">Azure OpenAI and Ollama have no provider of their own on this AI Hub build: they run through the OpenAI provider against their OpenAI-compatible URL (Azure: <code>https://&lt;resource&gt;.openai.azure.com/openai/v1/</code>, Ollama: <code>http://host:11434/v1</code>; Ollama ignores the key, set any value).</p>
+                  <p class="msg" id="m-provider"></p>
+                  <form id="f-test"><div class="row g-3 align-items-end" style="max-width:900px">
+                    <div class="col-md-6"><label class="form-label">Test provider</label><select class="form-select" name="name" id="f-test-name"></select></div>
+                    <div class="col-md-6"><label class="form-label">Model <span class="text-secondary fw-normal">(optional)</span></label><input class="form-control" name="model" placeholder="config's model"></div>
+                    <div class="col-12 d-flex gap-2 align-items-center"><button type="submit" class="btn">Test connection</button><span class="sub-text">One short LLM call per click</span></div>
+                  </div></form>
+                  <p class="msg" id="m-test"></p>
+                </div>
+              </div>
+            </div>
+
+            <div class="set-sec hidden" data-sec="agent">
+              <div class="card" data-info="Agents">
+                <div class="card-header"><div><h3 class="card-title">Agent &middot; TriageAgent</h3><div class="sub-text">Model, temperature and limits. Applied as production item settings; the item restarts (about 20 s).</div></div></div>
+                <div class="card-body">
+                  <form id="f-agents"><div class="row g-3" style="max-width:900px">
+                    <div class="col-md-6"><label class="form-label">Provider config</label><select class="form-select" name="ProviderConfig" id="f-agent-provider"></select></div>
+                    <div class="col-md-6"><label class="form-label">Model</label><input class="form-control" name="Model" required></div>
+                    <div class="col-md-3"><label class="form-label">Temperature</label><input class="form-control" name="Temperature" inputmode="decimal" placeholder="model default"></div>
+                    <div class="col-md-3"><label class="form-label">Max iterations</label><input class="form-control" name="MaxIterations" type="number" min="1" max="20" required></div>
+                    <div class="col-md-3"><label class="form-label">Max tool calls</label><input class="form-control" name="MaxToolCalls" type="number" min="0" required></div>
+                    <div class="col-md-3"><label class="form-label">Max tokens / message</label><input class="form-control" name="MaxTokensPerMessage" type="number" min="0" required></div>
+                    <div class="col-12"><label class="form-label">Skills</label><div class="checks" id="set-skills"></div></div>
+                    <div class="col-12 edit-only"><button type="submit" class="btn btn-primary">Apply</button></div>
+                  </div></form>
+                  <p class="msg" id="m-agents"></p>
+                  <details><summary>Instructions (read-only, from <code>AgenticProd.Agent.TriageAgent</code>)</summary><pre class="instr" id="set-instr"></pre></details>
+                </div>
+              </div>
+            </div>
+
+            <div class="set-sec hidden" data-sec="guardrails">
+              <div class="card" data-info="Guardrails">
+                <div class="card-header"><div><h3 class="card-title">Guardrails</h3><div class="sub-text">Every agent tool is readonly today. The authorization policy refuses a write or critical tool unless its tier is enabled; a tool that requires auth is at least write.</div></div></div>
+                <div class="table-responsive">
+                  <table class="table table-vcenter card-table">
+                    <thead><tr><th>Tool</th><th class="opt">Class</th><th class="opt">What it does</th><th>Tier</th></tr></thead>
+                    <tbody id="set-tools"></tbody>
+                  </table>
+                </div>
+                <div class="card-body border-top">
+                  <form id="f-guard"><div class="row g-3" style="max-width:900px">
+                    <div class="col-md-6"><label class="form-label">Tiers the agent may use</label><select class="form-select" name="EnabledTiers"><option value="readonly">readonly only</option><option value="readonly,write">readonly + write</option><option value="readonly,write,critical">readonly + write + critical</option></select></div>
+                    <div class="col-md-6"><label class="form-label">AUTO_FIX confidence threshold</label><input class="form-control" name="AutoFixThreshold" type="number" min="0" max="1" step="0.01" required></div>
+                    <div class="col-md-6"><label class="form-label">Grounding check</label><select class="form-select" name="GroundingStrictness"><option value="enforce">enforce: ungrounded = ESCALATE</option><option value="warn">warn: record and show only</option><option value="off">off</option></select></div>
+                    <div class="col-12"><label class="form-label">AUTO_FIX per problem type</label><div class="checks" id="set-autofix"></div>
+                      <div class="sub-text">Off: Triage sends that class's AUTO_FIX proposals to a person ("auto-fix disabled in Settings"). Identity issue is never auto-fixed.</div></div>
+                    <div class="col-12 edit-only"><button type="submit" class="btn btn-primary">Apply</button></div>
+                  </div></form>
+                  <p class="msg" id="m-guard"></p>
+                </div>
+              </div>
+            </div>
+
+            <div class="set-sec hidden" data-sec="budgets">
+              <div class="card mb-3" data-info="Budgets">
+                <div class="card-header"><h3 class="card-title">Budgets &amp; mode</h3></div>
+                <div class="card-body">
+                  <form id="f-budgets"><div class="row g-3" style="max-width:900px">
+                    <div class="col-md-6"><label class="form-label">Daily token budget <span class="text-secondary fw-normal">(0 = none)</span></label><input class="form-control" name="DailyTokenBudget" type="number" min="0" required></div>
+                    <div class="col-md-6"><label class="form-label">Mode</label><select class="form-select" name="Mode"><option value="live">live (calls the LLM)</option><option value="replay">replay (recorded runs, no LLM)</option></select></div>
+                    <div class="col-md-6"><label class="form-label">Minutes of engineer time per failure</label><input class="form-control" name="MinutesPerFailure" type="number" min="0" step="any" required></div>
+                    <div class="col-md-6"><label class="form-label">Engineer hourly rate (<span id="set-currency">USD</span>)</label><input class="form-control" name="EngineerHourlyRate" type="number" min="0" step="any" required></div>
+                    <div class="col-12 edit-only"><button type="submit" class="btn btn-primary">Apply</button></div>
+                  </div></form>
+                  <p class="sub-text mt-2 mb-0" id="set-used"></p>
+                  <p class="msg" id="m-budgets"></p>
+                </div>
+              </div>
+              <div class="card" data-info="Prices">
+                <div class="card-header"><h3 class="card-title">Prices <span class="text-secondary fw-normal" style="font-size:14px">USD per 1M tokens</span></h3></div>
+                <div class="table-responsive">
+                  <table class="table table-vcenter card-table">
+                    <thead><tr><th>Provider</th><th>Model</th><th class="num">Input</th><th class="num">Output</th><th class="num">Cache read</th><th class="num">Cache write</th><th class="opt">Updated (UTC)</th><th class="edit-only"></th></tr></thead>
+                    <tbody id="set-prices"></tbody>
+                  </table>
+                </div>
+                <div class="card-body pt-0"><p class="msg" id="m-prices"></p></div>
+              </div>
+            </div>
+
+            <div class="set-sec hidden" data-sec="memory">
+              <div class="card" data-info="Memory">
+                <div class="card-header"><div><h3 class="card-title">Memory &middot; learned code mappings</h3><div class="sub-text">Every code table entry a production uses without asking the agent, with where it came from. Revoke removes the entry and sends a review task for each message that went out with it; the same mapping is only learned again with a reviewer's note.</div></div></div>
+                <div class="table-responsive">
+                  <table class="table table-vcenter card-table">
+                    <thead><tr><th>Local code</th><th>LOINC</th><th>Origin</th><th class="opt">Provenance</th><th class="num">Routed</th><th>Status</th><th class="edit-only"></th></tr></thead>
+                    <tbody id="set-memory"></tbody>
+                  </table>
+                </div>
+                <div class="card-body pt-0"><p class="msg" id="m-memory"></p></div>
+              </div>
+            </div>
+
+            <div class="set-sec hidden" data-sec="plugin">
+              <div class="card" data-info="Productions">
+                <div class="card-header"><div><h3 class="card-title">Plug-in &middot; productions</h3><div class="sub-text">The home production and every production the plug-in was added to, with its mode: observe logs what it would do, propose sends every decision to that namespace's review inbox, act fixes whitelisted errors, resends transient ones and returns structure errors. Health and cost are for the last 24 hours.</div></div></div>
+                <div class="table-responsive">
+                  <table class="table table-vcenter card-table">
+                    <thead><tr><th>Production</th><th>Mode</th><th>Health (24 h)</th><th class="num">Decisions</th><th class="num">Agent cost</th><th class="edit-only"></th></tr></thead>
+                    <tbody id="set-productions"></tbody>
+                  </table>
+                </div>
+                <div class="card-body pt-0"><p class="msg" id="m-productions"></p></div>
+              </div>
+            </div>
+
+            <div class="set-sec hidden" data-sec="changes">
+              <div class="card" data-info="Change log">
+                <div class="card-header"><h3 class="card-title">Change log <span class="text-secondary fw-normal" style="font-size:14px">last 50</span></h3></div>
+                <div class="table-responsive">
+                  <table class="table table-vcenter card-table">
+                    <thead><tr><th>When (UTC)</th><th>Who</th><th>Area</th><th>Item</th><th>Field</th><th>Old</th><th>New</th></tr></thead>
+                    <tbody id="set-changes"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div class="set-sec hidden" data-sec="kill">
+              <div class="card">
+                <div class="card-header"><h3 class="card-title">Kill switch</h3></div>
+                <div class="card-body">
+                  <div class="kill" id="kill">
+                    <div><strong>AI kill switch</strong> <span id="kill-state"></span><br><span class="muted">On: every failed message goes to a person, no LLM call.</span></div>
+                    <span class="spacer"></span>
+                    <button type="button" class="danger edit-only" id="kill-btn"></button>
+                  </div>
+                  <p class="msg" id="m-kill"></p>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+      <div style="height:32px"></div>
     </div>
-
-    <section class="panel">
-      <h2>Agent metrics <span class="muted" id="met-scope"></span></h2>
-      <div class="charts">
-        <div class="chart-card"><h3>Agent proposed vs Triage did</h3><p class="note">Bar: the agent's decision. Colour: what finally happened.</p><div class="chart" id="ch-agentfinal"></div></div>
-        <div class="chart-card"><h3>Tokens by type per model</h3><p class="note">Live runs, replays left out. Parts add up to the total.</p><div class="chart" id="ch-tokens"></div></div>
-        <div class="chart-card"><h3>Agent latency per model (s)</h3><div class="chart" id="ch-latency"></div></div>
-      </div>
-      <details class="more" id="more">
-        <summary>More metrics</summary>
-        <div class="mini" id="met-tiles"></div>
-        <div class="charts">
-          <div class="chart-card"><h3>Decision mix per hour (last 24 h, UTC)</h3><div class="chart" id="ch-mix"></div></div>
-          <div class="chart-card"><h3>Tool calls per tool</h3><p class="note">Label: average ms per call.</p><div class="chart" id="ch-tools"></div></div>
-          <div class="chart-card"><h3>validate_fix results</h3><div class="chart" id="ch-validate"></div></div>
-          <div class="chart-card"><h3>Step durations from spans (ms)</h3><div class="chart" id="ch-steps"></div></div>
-        </div>
-      </details>
-    </section>
-  </div>
-
-  <div class="tabpanel hidden" id="tab-messages" role="tabpanel">
-    <section class="panel" id="burst-box">
-      <h2>Send a burst</h2>
-      <p class="muted">Sends random eval cases as new messages. Replay costs nothing; live needs the agent in live mode and a confirm. New rows appear below as they arrive.</p>
-      <label>Cases <input type="number" id="burst-n" min="1" max="30" value="8"></label>
-      <label>Mode <select id="burst-mode"><option value="replay">Replay ($0)</option><option value="live">Live (LLM, max 10)</option></select></label>
-      <button type="button" id="burst-go">Send a burst</button>
-      <button type="button" id="burst-confirm" class="hidden">Confirm and send</button>
-      <p class="msg" id="burst-msg"></p>
-    </section>
-    <section class="panel">
-      <h2>Recent decisions <span class="muted" id="dec-count"></span> <span class="muted">(click a row or "View flow" to see what happened)</span></h2>
-      <p class="filter-row"><label>Production <select id="dec-ns"><option value="">All productions</option></select></label></p>
-      <p class="muted hidden" id="dec-note">No live traffic yet. Tick "Include eval runs" to see eval messages.</p>
-      <div class="scroll">
-        <table>
-          <thead><tr>
-            <th>Time (UTC)</th><th>Control id</th><th>Error class</th><th>Agent &rarr; Final</th>
-            <th class="num">Confidence</th><th class="num opt">Cost</th><th class="opt">Model</th><th>Current status</th><th></th>
-          </tr></thead>
-          <tbody id="decisions"></tbody>
-        </table>
-      </div>
-      <div class="more-row"><button id="dec-more" type="button" class="hidden">Show more</button></div>
-    </section>
-
-  </div>
-
-  <div class="tabpanel hidden" id="tab-evaluation" role="tabpanel">
-    <section class="panel">
-      <h2>Eval runs <span class="muted">(select a run to see each case)</span></h2>
-      <p class="muted">Headline: the newest finished live run over all cases. Agent = what the model proposed; system = what Triage finally decided after the grounding gate and the action matrix. Acceptable = in the accepted decisions (system: and nothing unsafe was carried out); exact = the expected decision.</p>
-      <div class="scroll">
-        <table>
-          <thead><tr>
-            <th>Run</th><th>Label</th><th>Model</th><th class="num">Cases</th><th class="num">Acceptable agent</th><th class="num">Acceptable system</th>
-            <th class="num opt">Exact agent</th><th class="num opt">Exact system</th><th class="num opt">Mapping acc.</th><th class="num">unsafe_agent</th><th class="num">unsafe_final</th>
-            <th class="num opt">Cost / msg</th><th class="num opt">p95 s</th><th>Status</th>
-          </tr></thead>
-          <tbody id="runs"></tbody>
-        </table>
-      </div>
-      <div class="more-row"><button id="runs-test" type="button" class="hidden"></button></div>
-    </section>
-
-    <section class="panel hidden" id="detail">
-      <h2 id="detail-title"></h2>
-      <div class="scroll">
-        <table>
-          <thead><tr>
-            <th>Case</th><th class="opt">Slug</th><th>Expected</th><th>Agent</th><th class="opt">Agent LOINC</th>
-            <th>Final outcome</th><th>Result</th><th class="num opt">Seconds</th><th class="num opt">Cost</th>
-          </tr></thead>
-          <tbody id="results"></tbody>
-        </table>
-      </div>
-    </section>
-  </div>
-
-  <div class="tabpanel hidden" id="tab-cost" role="tabpanel">
-    <p class="muted">Last 30 days, UTC (<span id="cost-scope">live</span>). Costs come from the recorded agent runs and the price table; the forecast and ROI are estimates.</p>
-    <section class="card"><h2>Spend</h2>
-      <div class="tiles five" id="tiles-cost-spend"></div></section>
-    <section class="card"><h2>Savings</h2>
-      <div class="tiles three" id="tiles-cost-save"></div></section>
-    <section class="card"><h2>Return on investment</h2>
-      <div class="tiles three" id="tiles-cost-roi"></div></section>
-    <p class="note" id="cost-assume"></p>
-    <section class="panel"><h2>Where the money goes</h2>
-      <div class="charts">
-        <div class="chart-card"><h3>Cost per day by model (USD)</h3><div class="chart" id="ch-costday"></div></div>
-        <div class="chart-card"><h3>Cost by production (USD)</h3><div class="chart" id="ch-costns"></div></div>
-        <div class="chart-card"><h3>Cost by error class (USD)</h3><div class="chart" id="ch-costec"></div></div>
-      </div>
-    </section>
-  </div>
-
-  <div class="tabpanel hidden" id="tab-settings" role="tabpanel">
-    <p class="readonly-note hidden" id="set-readonly">Read-only: changing settings needs the AgenticProd_Admin role.</p>
-
-    <section class="panel">
-      <h2>Providers &amp; keys</h2>
-      <p class="muted">Provider configs live in the AI Hub Config Store (<code>AI.LLM.&lt;name&gt;</code>); their API keys live in the IRIS Wallet and are never shown again once saved.</p>
-      <div class="scroll">
-        <table>
-          <thead><tr><th>Name</th><th>Kind</th><th>Model</th><th class="opt">Base URL</th><th>Key</th><th class="edit-only">New key</th></tr></thead>
-          <tbody id="set-providers"></tbody>
-        </table>
-      </div>
-      <form class="form edit-only" id="f-provider">
-        <label>Name <input name="name" required pattern="[a-z][a-z0-9_]{0,31}" placeholder="openai_main"></label>
-        <label>Kind <select name="kind" id="f-kinds"></select></label>
-        <label>Model <input name="model" required placeholder="gpt-4o-mini"></label>
-        <label>Base URL <input name="base_url" placeholder="optional; required for OpenAI-compatible"></label>
-        <div class="actions"><button type="submit" class="primary">Save provider</button></div>
-      </form>
-      <p class="muted edit-only">Azure OpenAI and Ollama have no provider of their own on this AI Hub build: they run through the OpenAI provider against their OpenAI-compatible URL (Azure: <code>https://&lt;resource&gt;.openai.azure.com/openai/v1/</code>, Ollama: <code>http://host:11434/v1</code>; Ollama ignores the key, set any value).</p>
-      <p class="msg" id="m-provider"></p>
-      <form class="form edit-only" id="f-test">
-        <label>Test provider <select name="name" id="f-test-name"></select></label>
-        <label>Model (optional) <input name="model" placeholder="config's model"></label>
-        <div class="actions"><button type="submit">Test connection</button><span class="muted">One short LLM call per click</span></div>
-      </form>
-      <p class="msg" id="m-test"></p>
-    </section>
-
-    <section class="panel">
-      <h2>Agents <span class="muted">TriageAgent</span></h2>
-      <form class="form" id="f-agents">
-        <label>Provider config <select name="ProviderConfig" id="f-agent-provider"></select></label>
-        <label>Model <input name="Model" required></label>
-        <label>Temperature (empty = model default) <input name="Temperature" inputmode="decimal"></label>
-        <label>Max iterations <input name="MaxIterations" type="number" min="1" max="20" required></label>
-        <label>Max tool calls / message <input name="MaxToolCalls" type="number" min="0" required></label>
-        <label>Max tokens / message <input name="MaxTokensPerMessage" type="number" min="0" required></label>
-        <div class="actions edit-only"><button type="submit" class="primary">Apply</button></div>
-      </form>
-      <h3 class="sub">Skills</h3>
-      <div class="checks" id="set-skills"></div>
-      <p class="muted">Applied as production item settings; the TriageAgent item restarts (about 20 s).</p>
-      <p class="msg" id="m-agents"></p>
-      <details><summary>Instructions (read-only, from <code>AgenticProd.Agent.TriageAgent</code>)</summary><pre class="instr" id="set-instr"></pre></details>
-    </section>
-
-    <section class="panel">
-      <h2>Guardrails</h2>
-      <h3 class="sub">Tools and tiers</h3>
-      <p class="muted">Every agent tool is readonly today. The authorization policy refuses a write or critical tool unless its tier is enabled; a tool that requires auth is at least write.</p>
-      <div class="scroll">
-        <table>
-          <thead><tr><th>Tool</th><th class="opt">Class</th><th class="opt">What it does</th><th>Tier</th></tr></thead>
-          <tbody id="set-tools"></tbody>
-        </table>
-      </div>
-      <form class="form" id="f-guard">
-        <label>Tiers the agent may use <select name="EnabledTiers"><option value="readonly">readonly only</option><option value="readonly,write">readonly + write</option><option value="readonly,write,critical">readonly + write + critical</option></select></label>
-        <label>AUTO_FIX confidence threshold <input name="AutoFixThreshold" type="number" min="0" max="1" step="0.01" required></label>
-        <label>Grounding check <select name="GroundingStrictness"><option value="enforce">enforce: ungrounded = ESCALATE</option><option value="warn">warn: record and show only</option><option value="off">off</option></select></label>
-        <div class="actions edit-only"><button type="submit" class="primary">Apply</button></div>
-      </form>
-      <h3 class="sub">AUTO_FIX per error class</h3>
-      <div class="checks" id="set-autofix"></div>
-      <p class="muted">Off: Triage sends that class's AUTO_FIX proposals to a person ("auto-fix disabled in Settings"). IDENTITY_ISSUE is never auto-fixed.</p>
-      <p class="msg" id="m-guard"></p>
-    </section>
-
-    <section class="panel">
-      <h2>Budgets &amp; mode</h2>
-      <form class="form" id="f-budgets">
-        <label>Daily token budget (0 = none) <input name="DailyTokenBudget" type="number" min="0" required></label>
-        <label>Minutes of engineer time per failure <input name="MinutesPerFailure" type="number" min="0" step="any" required></label>
-        <label>Engineer hourly rate (<span id="set-currency">USD</span>) <input name="EngineerHourlyRate" type="number" min="0" step="any" required></label>
-        <label>Mode <select name="Mode"><option value="live">live (calls the LLM)</option><option value="replay">replay (recorded runs, no LLM)</option></select></label>
-        <div class="actions edit-only"><button type="submit" class="primary">Apply</button></div>
-      </form>
-      <p class="muted" id="set-used"></p>
-      <p class="msg" id="m-budgets"></p>
-      <div class="kill" id="kill">
-        <div><strong>AI kill switch</strong> <span id="kill-state"></span><br><span class="muted">On: every failed message goes to a person, no LLM call.</span></div>
-        <span class="spacer"></span>
-        <button type="button" class="danger edit-only" id="kill-btn"></button>
-      </div>
-      <p class="msg" id="m-kill"></p>
-    </section>
-
-    <section class="panel">
-      <h2>Prices <span class="muted">USD per 1M tokens</span></h2>
-      <div class="scroll">
-        <table>
-          <thead><tr><th>Provider</th><th>Model</th><th class="num">Input</th><th class="num">Output</th><th class="num">Cache read</th><th class="num">Cache write</th><th class="opt">Updated (UTC)</th><th class="edit-only"></th></tr></thead>
-          <tbody id="set-prices"></tbody>
-        </table>
-      </div>
-      <p class="msg" id="m-prices"></p>
-    </section>
-
-    <section class="panel">
-      <h2>Productions <span class="muted">AI plug-in per production</span></h2>
-      <p class="muted">The home production and every production the plug-in was added to, with its mode: observe logs what it would do, propose sends every decision to that namespace's review inbox, act fixes whitelisted errors, resends transient ones and returns structure errors. Health and cost are for the last 24 hours.</p>
-      <div class="scroll">
-        <table>
-          <thead><tr><th>Production</th><th>Mode</th><th>Health (24 h)</th><th class="num">Decisions</th><th class="num">Agent cost</th><th class="edit-only"></th></tr></thead>
-          <tbody id="set-productions"></tbody>
-        </table>
-      </div>
-      <p class="msg" id="m-productions"></p>
-    </section>
-
-    <section class="panel">
-      <h2>Memory <span class="muted">learned code mappings</span></h2>
-      <p class="muted">Every code table entry a production uses without asking the agent, with where it came from. Revoke removes the entry and sends a review task for each message that went out with it; the same mapping is only learned again with a reviewer's note.</p>
-      <div class="scroll">
-        <table>
-          <thead><tr><th>Local code</th><th>LOINC</th><th>Origin</th><th class="opt">Provenance</th><th class="num">Routed</th><th>Status</th><th class="edit-only"></th></tr></thead>
-          <tbody id="set-memory"></tbody>
-        </table>
-      </div>
-      <p class="msg" id="m-memory"></p>
-    </section>
-
-    <section class="panel">
-      <h2>Change log <span class="muted">(last 50)</span></h2>
-      <div class="scroll">
-        <table>
-          <thead><tr><th>When (UTC)</th><th>Who</th><th>Area</th><th>Item</th><th>Field</th><th>Old</th><th>New</th></tr></thead>
-          <tbody id="set-changes"></tbody>
-        </table>
-      </div>
-    </section>
   </div>
 </div>
 
@@ -621,8 +668,9 @@ var charts = {};
 var traceUrl = "";
 var selectedRun = null;
 var selectedDecision = null, lastStory = null;
-var DEC_PAGE = 15;
-var decLimit = DEC_PAGE;
+// One fetch feeds Overview and Messages; filtering and paging happen in the page
+var DEC_FETCH = 100;
+var decRows = [], decPage = 1, decSize = 10;
 // Options for charts whose box was hidden (other tab, closed details): drawn once it is shown
 var pending = {};
 var includeEval = false;
@@ -658,6 +706,18 @@ function outcomeKind(o) {
   return { applied: "good", approval: "warn", rejected: "bad", resent: "info", other: "other" }[outcomeGroup(o)];
 }
 
+// Plain labels for the decision contract; the raw code stays in the title tooltip
+var EC_LABEL = { UNMAPPED_CODE: "Unmapped code", MISSING_FIELD: "Missing field", BAD_FORMAT: "Format error", INVALID_VALUE: "Invalid value",
+  IDENTITY_ISSUE: "Identity issue", STRUCTURE_ERROR: "Structure error", ROUTING: "Routing", TRANSIENT: "Transient (downstream)", OTHER: "Other" };
+var ACT_LABEL = { AUTO_FIX: "Auto-fix", MAP_CODE: "Map code", RESEND: "Resend", REJECT: "Reject", ESCALATE: "Escalate" };
+function labelSpan(map, raw) {
+  var s = el("span", raw ? (map[raw] || raw) : "");
+  if (raw) s.title = raw;
+  return s;
+}
+function ecSpan(raw) { return labelSpan(EC_LABEL, raw); }
+function actSpan(raw) { return labelSpan(ACT_LABEL, raw); }
+
 function get(path) {
   return fetch(path, { credentials: "same-origin", headers: { "Accept": "application/json" } }).then(function (r) {
     // Login expired: reloading the page brings back the IRIS login form
@@ -692,41 +752,64 @@ function renderSummary(s, m) {
     if (p[1]) { a.href = p[1]; a.classList.remove("hidden"); }
   });
   var sv = m.saved;
-  var budgetSub = !s.dailyTokenBudget ? "no daily budget"
-    : s.tokensPercent + "% of " + num(s.dailyTokenBudget) + " daily budget"
-      + (s.overBudget ? " — over budget: new messages go to a person" : "");
-  var fhir = num(s.fhirValid) + " valid / " + num(s.fhirInvalid) + " invalid FHIR out";
-  document.getElementById("tiles-what").replaceChildren(
-    tile("Messages triaged", num(s.triaged), fhir, undefined, "", "messages"),
-    tile("Auto-fixed", num(s.autoFixed), "whitelisted fixes applied"),
-    tile("Sent for approval", num(s.sentForApproval), num(s.waiting) + " waiting"),
-    tile("Rejected", num(s.rejected), "returned to sender")
-  );
-  document.getElementById("tiles-trust").replaceChildren(
-    tile("Unsafe actions", num(s.unsafeActions), "applied against the rules", undefined, "", null, !s.unsafeActions),
-    tile("Grounding caught", num(s.groundingCaught), num(s.groundingPassed) + " passed"),
-    tile("Injection flagged", num(s.injectionFlagged), "instruction-like text in a message"),
-    tile("Changed by Triage", num(s.changedByTriage), "agent proposal not applied as sent")
-  );
-  document.getElementById("tiles-cost").replaceChildren(
-    tile("LLM cost today", money(s.costToday), num(s.agentRunsToday) + " agent runs", undefined, "", "cost"),
-    tile("Cost per message", money(s.costPerMessage), (s.model || "no model") + ", " + num(s.agentRunsModel) + " runs"),
-    // Bar width is capped at 100% in tile(); the text carries the real figure
-    tile("Tokens today", num(s.tokensToday), budgetSub,
-      s.dailyTokenBudget ? s.tokensToday / s.dailyTokenBudget : undefined, s.overBudget ? "over" : ""),
-    tile("LLM calls saved", num(sv.calls), num(s.mappingsLearned) + " mappings learned" + (sv.costUsd == null ? "" : ", ~" + money(sv.costUsd)))
-  );
-  setWindow("health", s.window); setWindow("trust", s.window); setWindow("aicost", s.costWindow);
+  function put(id, text) { document.getElementById(id).textContent = text; }
+  put("k-triaged", num(s.triaged));
+  put("k-triaged-h", (s.window || "all time") + " · " + num(s.fhirValid) + " valid / " + num(s.fhirInvalid) + " invalid FHIR out");
+  put("k-fixed", num(s.autoFixed));
+  put("k-waiting", num(s.waiting));
+  put("k-waiting-h", num(s.sentForApproval) + " sent for approval · " + num(s.rejected) + " rejected");
+  var uv = document.getElementById("k-unsafe");
+  uv.textContent = num(s.unsafeActions);
+  uv.classList.toggle("text-green", !s.unsafeActions);
+  var nw = document.getElementById("nav-waiting");
+  nw.textContent = num(s.waiting);
+  nw.classList.toggle("hidden", !s.waiting);
+
+  put("ai-today", money(s.costToday));
+  put("ai-per", "· " + money(s.costPerMessage) + " per message");
+  var bar = document.getElementById("ai-budget-bar");
+  put("ai-budget-t", !s.dailyTokenBudget ? "no daily budget" : s.tokensPercent + "% of " + num(s.dailyTokenBudget)
+    + (s.overBudget ? " — over budget: new messages go to a person" : ""));
+  // Bar width is capped at 100%; the text carries the real figure
+  bar.style.width = s.dailyTokenBudget ? Math.min(100, s.tokensToday / s.dailyTokenBudget * 100).toFixed(1) + "%" : "0";
+  bar.classList.toggle("bg-red", !!s.overBudget);
+  bar.classList.toggle("bg-primary", !s.overBudget);
+  aiFoot = (s.model || "no model") + " · " + num(s.agentRunsToday) + " agent runs today · " + num(sv.calls) + " LLM calls saved by " + num(s.mappingsLearned) + " learned mappings";
+  put("ai-foot", aiFoot);
+
+  var rows = [
+    ["ti-shield-check", "green", "Unsafe actions", "applied against the rules", s.unsafeActions, !s.unsafeActions],
+    ["ti-target-arrow", "orange", "Ungrounded claims caught", num(s.groundingPassed) + " decisions passed the grounding gate", s.groundingCaught],
+    ["ti-alert-octagon", "red", "Injection flagged", "instruction-like text in a message", s.injectionFlagged],
+    ["ti-arrows-exchange", "blue", "Changed by Triage", "agent proposal not applied as sent", s.changedByTriage],
+    ["ti-brain", "purple", "Mappings learned", "approved by a reviewer · revocable", s.mappingsLearned]
+  ];
+  document.getElementById("safety-list").replaceChildren.apply(document.getElementById("safety-list"), rows.map(function (r) {
+    var d = el("div", null, "check-row");
+    var av = el("span", null, "avatar avatar-sm bg-" + r[1] + "-lt me-3");
+    av.appendChild(el("i", null, "ti " + r[0]));
+    d.appendChild(av);
+    var t = el("div", null, "flex-fill");
+    t.appendChild(el("div", r[2], "fw-semibold"));
+    t.appendChild(el("div", r[3], "sub-text"));
+    d.appendChild(t);
+    d.appendChild(el("span", num(r[4]), "num" + (r[5] ? " good" : "")));
+    return d;
+  }));
+  setWindow("trust", s.window); setWindow("aicost", s.costWindow);
+  document.getElementById("trust-win").textContent = s.window || "";
+  document.getElementById("mix-win").textContent = s.window || "all time";
   if (s.namespace) { var hn = document.getElementById("hdr-ns"); hn.textContent = "Namespace " + s.namespace; hn.classList.remove("hidden"); }
   if (s.user) { var hu = document.getElementById("hdr-user"); hu.textContent = "Signed in as " + s.user; hu.classList.remove("hidden"); }
 }
+var aiFoot = "";
 
-// Period label on the right of a card header, left of Info
+// Period label in a card header, left of the Info icon
 function setWindow(key, text) {
-  var c = document.querySelector('section.card[data-info="' + key + '"] .card-h');
+  var c = document.querySelector('.card[data-info="' + key + '"] .card-actions');
   if (!c || !text) return;
   var w = c.querySelector(".win");
-  if (!w) { w = el("span", null, "win"); c.insertBefore(w, c.querySelector(".info")); }
+  if (!w) { w = el("span", null, "win"); c.insertBefore(w, c.firstChild); }
   w.textContent = text;
 }
 
@@ -770,7 +853,6 @@ var CARD_INFO = {
   "Change log": ["Change log", "Who changed which setting and when.", "The last 50 changes are shown."],
   "Agent metrics": ["Agent metrics", "Charts of outcomes, tokens, latency and tool use for recent agent runs.", "Open More metrics for hourly mix, tool timings and validation results."]
 };
-var SETTING_CARDS = ["Providers", "Agents", "Guardrails", "Budgets", "Prices", "Productions", "Memory", "Change log"];
 
 function openHelp(key) {
   var h = CARD_INFO[key];
@@ -787,65 +869,62 @@ function closeHelp() {
   document.getElementById("help-panel").classList.add("hidden");
 }
 
-// Wraps the first h2 of every card in a header row with an Info link; adds the footer link
+// Adds the Info icon to the header of every card that has a data-info key
 function cardify() {
-  Array.prototype.forEach.call(document.querySelectorAll("section.card, section.panel"), function (c) {
-    if (c.classList.contains("fl-mapbox") || c.dataset.carded) return;
-    var h2 = c.querySelector(":scope > h2");
-    if (!h2) return;
+  Array.prototype.forEach.call(document.querySelectorAll(".card[data-info]"), function (c) {
+    var key = c.dataset.info, head = c.querySelector(":scope > .card-header");
+    if (!CARD_INFO[key] || !head || c.dataset.carded) return;
     c.dataset.carded = "1";
-    var key = c.dataset.info;
-    if (!key) {
-      var t = h2.firstChild ? h2.firstChild.textContent.trim() : "";
-      key = Object.keys(CARD_INFO).filter(function (k) { return t.indexOf(k) === 0; })[0];
-    }
-    var head = el("div", null, "card-h");
-    c.insertBefore(head, h2);
-    head.appendChild(h2);
-    if (key) {
-      var info = el("button", "Info", "info");
-      info.type = "button";
-      info.addEventListener("click", function () { openHelp(key); });
-      head.appendChild(info);
-      if (SETTING_CARDS.indexOf(key) >= 0) {
-        var d = el("p", CARD_INFO[key][1], "card-desc");
-        head.insertAdjacentElement("afterend", d);
-      }
-    }
-    if (c.dataset.foot) {
-      var f = el("div", null, "card-f");
-      var a = el("a", c.dataset.foot + " →");
-      a.href = "#";
-      a.addEventListener("click", function (e) { e.preventDefault(); showTab(c.dataset.footTab); });
-      f.appendChild(a);
-      c.appendChild(f);
-    }
+    var acts = head.querySelector(".card-actions");
+    if (!acts) { acts = el("div", null, "card-actions"); head.appendChild(acts); }
+    var info = el("button", null, "info");
+    info.type = "button";
+    info.title = "About this card";
+    info.appendChild(el("i", null, "ti ti-info-circle"));
+    info.addEventListener("click", function () { openHelp(key); });
+    acts.appendChild(info);
   });
 }
 
-// Overview list: the newest decisions as icon, message, status chip and View flow
+function msgName(d) { return d.ControlId || (d.EvalRunId ? "EV" + d.EvalRunId + "-" + d.CaseId : "hdr " + d.HeaderId); }
+function agentSpan(d) {
+  // No agent run: the logged ESCALATE is Triage's, not the agent's
+  var agent = d.AgentDecision || (d.agentCalled ? d.Decision : "");
+  return agent ? actSpan(agent) : el("span", noAgentText(d.noAgentReason), "muted");
+}
+function flowLink(d, rowNs) {
+  var a = el("a");
+  a.href = "#";
+  a.appendChild(el("i", null, "ti ti-route"));
+  a.appendChild(document.createTextNode(" Flow"));
+  a.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); window.flowOpen(d.ID, rowNs); });
+  return a;
+}
+function costText(d) {
+  var replay = !d.agentCalled && d.noAgentReason === "replay";
+  return d.agentCalled ? money(d.CostUsd) : replay ? "replay" : "—";
+}
+
+// Overview table: the newest decisions
 function renderRecent(rows) {
-  var ul = document.getElementById("ov-recent");
-  ul.replaceChildren();
+  var body = document.getElementById("ov-recent");
+  body.replaceChildren();
   rows.forEach(function (d) {
-    var li = el("li");
-    var kind = outcomeKind(d.Outcome);
-    var dot = el("span", null, "dot");
-    dot.style.background = { good: "var(--c-applied)", warn: "var(--c-approval)", bad: "var(--c-rejected)", info: "var(--c-resent)" }[kind] || "var(--c-other)";
-    li.appendChild(dot);
-    var txt = el("span", null, "txt");
-    txt.appendChild(document.createTextNode(d.ControlId || (d.EvalRunId ? "EV" + d.EvalRunId + "-" + d.CaseId : "hdr " + d.HeaderId)));
-    txt.appendChild(el("small", (d.ErrorClass || "") + (d.CreatedAt ? " · " + d.CreatedAt.substring(5, 16) : "")));
-    li.appendChild(txt);
-    li.appendChild(outcomeTag(d.Outcome));
-    var go = el("button", "View flow", "linkbtn");
-    go.type = "button";
+    var tr = el("tr", null, "click");
     var rowNs = d.Namespace || homeNs || "IRISAPP";
-    go.addEventListener("click", function () { window.flowOpen(d.ID, rowNs); });
-    li.appendChild(go);
-    ul.appendChild(li);
+    tr.addEventListener("click", function () { window.flowOpen(d.ID, rowNs); });
+    cell(tr, d.CreatedAt ? d.CreatedAt.substring(5, 16) : "", "text-secondary");
+    cell(tr, msgName(d), "mono");
+    cell(tr, ecSpan(d.ErrorClass));
+    cell(tr, agentSpan(d));
+    var td = cell(tr, outcomeTag(d.Outcome));
+    if (d.flagged && d.flagged.length) td.appendChild(tag("flagged", "bad"));
+    var c = cell(tr, costText(d), "text-end");
+    if (!d.agentCalled) c.classList.add("text-secondary");
+    cell(tr, flowLink(d, rowNs));
+    body.appendChild(tr);
   });
-  if (!rows.length) ul.appendChild(el("li", "No decisions yet.", "muted"));
+  if (!rows.length) { var e = el("tr"); cell(e, "No decisions yet.", "muted").colSpan = 7; body.appendChild(e); }
 }
 
 // Getting started buttons use the existing burst endpoint and the existing View flow
@@ -866,13 +945,18 @@ function startSteps() {
   var gs3 = document.getElementById("gs-3");
   new MutationObserver(function () { gs3.href = inbox.href; }).observe(inbox, { attributes: true });
   document.getElementById("gs-4").addEventListener("click", function () {
-    showTab("messages");
-    var b = document.getElementById("burst-box");
-    if (b) b.scrollIntoView({ behavior: "smooth", block: "start" });
+    openBurst();
   });
   document.getElementById("help-close").addEventListener("click", closeHelp);
   document.getElementById("help-back").addEventListener("click", closeHelp);
   document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeHelp(); });
+}
+// The burst form sits on the Messages tab, folded away until asked for
+function openBurst() {
+  showTab("messages");
+  var w = document.getElementById("burst-wrap");
+  w.classList.remove("hidden");
+  w.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 cardify();
 startSteps();
@@ -884,15 +968,35 @@ function noAgentText(why) {
 }
 
 function renderDecisions(rows) {
+  decRows = rows;
+  document.getElementById("dec-note").classList.toggle("hidden", includeEval || rows.length > 0);
+  renderRecent(rows.slice(0, 8));
+  renderMessages();
+}
+
+// Search and outcome filter run on the fetched rows; the production filter is a server parameter
+function filteredRows() {
+  var q = document.getElementById("dec-q").value.trim().toLowerCase();
+  var og = document.getElementById("dec-outcome").value;
+  return decRows.filter(function (d) {
+    return (!og || outcomeGroup(d.Outcome) === og) && (!q || msgName(d).toLowerCase().indexOf(q) >= 0);
+  });
+}
+
+function renderMessages() {
   var body = document.getElementById("decisions");
   body.replaceChildren();
-  // One extra row is fetched only to know whether "Show more" has anything to show
-  var more = rows.length > decLimit;
-  rows = rows.slice(0, decLimit);
-  document.getElementById("dec-more").classList.toggle("hidden", !more);
-  document.getElementById("dec-count").textContent = "(" + (includeEval ? "live and eval" : "live") + ", last " + rows.length + ")";
-  document.getElementById("dec-note").classList.toggle("hidden", includeEval || rows.length > 0);
-  renderRecent(rows.slice(0, 6));
+  var all = filteredRows();
+  var pages = Math.max(1, Math.ceil(all.length / decSize));
+  if (decPage > pages) decPage = pages;
+  var first = (decPage - 1) * decSize;
+  var rows = all.slice(first, first + decSize);
+  document.getElementById("dec-count").textContent = "· " + (includeEval ? "live and eval" : "live");
+  document.getElementById("dec-range").textContent = all.length
+    ? "Showing " + (first + 1) + "–" + (first + rows.length) + " of " + num(all.length) + " matching" + (all.length < decRows.length ? " · " + num(decRows.length) + " loaded" : "")
+      + (decRows.length > DEC_FETCH - 1 ? " (newest " + DEC_FETCH + ")" : "")
+    : "No matching messages";
+  renderPages(pages);
   rows.forEach(function (d) {
     var tr = el("tr", null, "click" + (d.ID === selectedDecision ? " sel" : ""));
     tr.tabIndex = 0;
@@ -900,37 +1004,54 @@ function renderDecisions(rows) {
     var rowNs = d.Namespace || homeNs || "IRISAPP";
     tr.addEventListener("click", function () { window.flowOpen(d.ID, rowNs); });
     tr.addEventListener("keydown", function (e) { if (e.key === "Enter") window.flowOpen(d.ID, rowNs); });
-    cell(tr, d.CreatedAt ? d.CreatedAt.substring(5, 16) : "");
-    var cid = el("span", d.ControlId || (d.EvalRunId ? "EV" + d.EvalRunId + "-" + d.CaseId : "hdr " + d.HeaderId));
-    // Header and session IDs repeat across productions: name the other one
-    if (d.Namespace && homeNs && d.Namespace !== homeNs) { cid.appendChild(el("br")); cid.appendChild(el("span", d.Namespace, "muted")); }
-    cell(tr, cid);
-    cell(tr, d.ErrorClass);
-    // No agent run: the logged ESCALATE is Triage's, not the agent's
-    var agent = d.AgentDecision || (d.agentCalled ? d.Decision : "");
-    var td = cell(tr, tag(agent || noAgentText(d.noAgentReason), "other"), "wrap-cell");
-    td.appendChild(el("span", "→", "arrow"));
-    td.appendChild(outcomeTag(d.Outcome));
+    cell(tr, d.CreatedAt ? d.CreatedAt.substring(5, 16) : "", "text-secondary");
+    cell(tr, msgName(d), "mono");
+    cell(tr, d.Namespace ? tag(d.Namespace, "other") : "");
+    cell(tr, ecSpan(d.ErrorClass));
+    cell(tr, agentSpan(d));
+    // Without an agent run the logged confidence and cost are placeholders, not measurements;
+    // a replay logs the recorded run's confidence and costs nothing
+    var replay = !d.agentCalled && d.noAgentReason === "replay";
+    cell(tr, !(d.agentCalled || replay) || d.Confidence == null ? "" : Number(d.Confidence).toFixed(2), "num");
+    var td = cell(tr, outcomeTag(d.Outcome));
     if (d.flagged && d.flagged.length) td.appendChild(tag("flagged", "bad"));
     if (d.fhirOut && d.fhirOut !== "valid") td.appendChild(tag("FHIR " + d.fhirOut, "bad"));
     td.title = [d.triageChanged ? "Triage changed the agent's proposal" : "",
       d.flagged && d.flagged.length ? "InjectionGuard flagged " + d.flagged.join(", ") : "",
       d.fhirOut ? "FHIR out: " + d.fhirOut : ""].filter(Boolean).join("; ");
-    // Without an agent run the logged confidence and cost are placeholders, not measurements;
-    // a replay logs the recorded run's confidence and costs nothing
-    var replay = !d.agentCalled && d.noAgentReason === "replay";
-    cell(tr, !(d.agentCalled || replay) || d.Confidence == null ? "" : Number(d.Confidence).toFixed(2), "num");
-    cell(tr, d.agentCalled ? money(d.CostUsd) : replay ? "$0 (replay)" : "", "num opt");
-    cell(tr, d.agentCalled ? d.Model : replay ? (d.Model || "—") + " (replay)" : "", "opt");
     cell(tr, "", "st");
-    var goBtn = el("button", "View flow");
-    goBtn.type = "button";
-    goBtn.addEventListener("click", function (e) { e.stopPropagation(); window.flowOpen(d.ID, rowNs); });
-    cell(tr, goBtn, "go");
+    cell(tr, costText(d), "num opt");
+    cell(tr, d.agentCalled ? d.Model : replay ? (d.Model || "—") + " (replay)" : "", "opt text-secondary");
+    cell(tr, viewFlow(d, rowNs), "go");
     body.appendChild(tr);
   });
   if (window.flowDecorate) window.flowDecorate();
-  if (!rows.length) { var tr = el("tr"); var td2 = cell(tr, "No decisions yet.", "muted"); td2.colSpan = 9; body.appendChild(tr); }
+  if (!rows.length) { var e = el("tr"); cell(e, "No decisions yet.", "muted").colSpan = 11; body.appendChild(e); }
+}
+
+function viewFlow(d, rowNs) {
+  var a = flowLink(d, rowNs);
+  a.lastChild.textContent = " View flow";
+  return a;
+}
+
+function renderPages(pages) {
+  var ul = document.getElementById("dec-pages");
+  ul.replaceChildren();
+  function item(label, page, active, disabled) {
+    var li = el("li", null, "page-item" + (active ? " active" : "") + (disabled ? " disabled" : ""));
+    var a = el("a", label, "page-link");
+    a.href = "#";
+    a.addEventListener("click", function (e) { e.preventDefault(); if (!disabled) { decPage = page; renderMessages(); } });
+    li.appendChild(a);
+    ul.appendChild(li);
+  }
+  item("‹", decPage - 1, false, decPage <= 1);
+  for (var i = 1; i <= pages; i++) {
+    if (pages > 7 && i !== 1 && i !== pages && Math.abs(i - decPage) > 1) { if (Math.abs(i - decPage) === 2) item("…", i, false, true); continue; }
+    item(String(i), i, i === decPage, false);
+  }
+  item("›", decPage + 1, false, decPage >= pages);
 }
 
 // Runs with fewer cases than this are smoke tests and stay behind "Show test runs"
@@ -949,6 +1070,7 @@ function renderRuns(rows) {
   var btn = document.getElementById("runs-test");
   btn.classList.toggle("hidden", !hidden);
   btn.textContent = showTestRuns ? "Hide test runs" : "Show test runs (" + hidden + ")";
+  renderEvalHead(head[0]);
   head.concat(rest).forEach(function (r) {
     var tr = el("tr", null, "click" + (r.ID === selectedRun ? " sel" : ""));
     tr.tabIndex = 0;
@@ -975,6 +1097,32 @@ function renderRuns(rows) {
   if (!rows.length) { var tr = el("tr"); var td = cell(tr, "No eval runs yet.", "muted"); td.colSpan = 11; body.appendChild(tr); }
 }
 
+// Big figures of the headline run: the newest finished live run over all cases
+function renderEvalHead(r) {
+  var box = document.getElementById("eval-head");
+  if (!r) {
+    box.replaceChildren(el("div", "No finished live eval run yet.", "col text-secondary"));
+    document.getElementById("eval-title").textContent = "Evaluation";
+    document.getElementById("eval-badge").replaceChildren();
+    return;
+  }
+  document.getElementById("eval-title").textContent = "Evaluation · " + num(r.CaseCount) + " synthetic cases";
+  document.getElementById("eval-badge").replaceChildren(tag("headline run " + r.ID, "info"));
+  var figs = [
+    [pct(r.FinalAccuracy), "acceptable (system)", r.FinalAccuracy === 1],
+    [pct(r.Accuracy), "acceptable (agent alone)"],
+    [pct(r.MappingAccuracy), "mapping accuracy"],
+    [num(r.UnsafeFinal), "unsafe after Triage", !r.UnsafeFinal],
+    [money(r.CostPerMessageUsd), "cost per message"]
+  ];
+  box.replaceChildren.apply(box, figs.map(function (f) {
+    var c = el("div", null, "col");
+    c.appendChild(el("div", f[0], "eval-big" + (f[2] ? " good" : "")));
+    c.appendChild(el("div", f[1], "text-secondary"));
+    return c;
+  }));
+}
+
 // A count as a pill: green at 0, kind above 0, grey when the run has no figure
 function countTag(v, kind) { return v == null ? tag("—", "other") : tag(num(v), v ? kind : "good"); }
 
@@ -991,8 +1139,10 @@ function showRun(run) {
       var tr = el("tr");
       cell(tr, c.CaseId);
       cell(tr, c.Slug, "opt");
-      cell(tr, c.ExpectedDecision + (c.ExpectedLoinc ? " " + c.ExpectedLoinc : ""));
-      cell(tr, c.AgentDecision || "—");
+      var ex = actSpan(c.ExpectedDecision);
+      if (c.ExpectedLoinc) ex.appendChild(document.createTextNode(" " + c.ExpectedLoinc));
+      cell(tr, ex);
+      cell(tr, c.AgentDecision ? actSpan(c.AgentDecision) : "—");
       cell(tr, c.AgentLoinc || "", "opt");
       cell(tr, outcomeTag(c.FinalOutcome));
       var res = c.UnsafeFinal ? tag("unsafe final", "bad")
@@ -1024,7 +1174,7 @@ function showStory(id) {
 
 function refreshDecisions() {
   var ev = includeEval ? "eval=1" : "eval=0";
-  return get("api/decisions?limit=" + (decLimit + 1) + "&" + ev + "&ns=" + encodeURIComponent(decNs)).then(renderDecisions).catch(showError);
+  return get("api/decisions?limit=" + DEC_FETCH + "&" + ev + "&ns=" + encodeURIComponent(decNs)).then(renderDecisions).catch(showError);
 }
 
 function renderStory(st) {
@@ -1171,9 +1321,12 @@ function renderMetrics(m) {
   if (!outData.length) empty("outcomes", "No decisions yet");
   else chart("outcomes", document.getElementById("ch-outcomes"), {
     tooltip: { trigger: "item", confine: true, formatter: "{b}: {c} ({d}%)" },
-    legend: Object.assign({}, LEGEND, { top: "auto", bottom: 0 }),
-    series: [{ type: "pie", radius: ["45%", "70%"], center: ["50%", "45%"], data: outData,
-      label: { formatter: "{c}", fontSize: 12 }, labelLine: { length: 6, length2: 6 } }]
+    legend: Object.assign({}, LEGEND, { top: "auto", bottom: 0, icon: "circle" }),
+    series: [{ type: "pie", radius: ["55%", "78%"], center: ["50%", "42%"], data: outData, label: { show: false } }],
+    graphic: [
+      { type: "text", left: "center", top: "32%", style: { text: num(outData.reduce(function (a, o) { return a + o.value; }, 0)), fontSize: 28, fontWeight: 700, fill: "#101828" } },
+      { type: "text", left: "center", top: "46%", style: { text: "messages", fontSize: 13, fill: "#667085" } }
+    ]
   });
 
   if (!m.agentVsFinal.length) empty("agentfinal", "No decisions yet");
@@ -1260,29 +1413,58 @@ function secs(v) {
 }
 function short(v) { return v >= 1e6 ? (v / 1e6).toFixed(1) + "M" : v >= 1e3 ? Math.round(v / 1e3) + "k" : v; }
 
+function kpiCard(label, value, hint, o) {
+  o = o || {};
+  var col = el("div", null, "col-sm-6 col-xl");
+  var card = el("div", null, "card kpi");
+  var body = el("div", null, "card-body");
+  body.appendChild(el("div", label, "label"));
+  body.appendChild(el("div", value, "value" + (o.good ? " good" : "")));
+  if (o.bar !== undefined) {
+    var pg = el("div", null, "progress progress-sm");
+    var pb = el("div", null, "progress-bar" + (o.bar >= 1 ? " bg-red" : ""));
+    pb.style.width = Math.min(100, o.bar * 100).toFixed(1) + "%";
+    pg.appendChild(pb);
+    body.appendChild(pg);
+  }
+  body.appendChild(el("div", hint, "hint" + (o.bar !== undefined ? " mt-1" : "")));
+  card.appendChild(body);
+  col.appendChild(card);
+  return col;
+}
+
+function roiRow(label, value, sub, cls) {
+  var r = el("div", null, "check-row");
+  var t = el("div", label, "flex-fill" + (cls === "net" ? " fw-semibold" : ""));
+  if (sub) t.appendChild(el("div", sub, "sub-text"));
+  r.appendChild(t);
+  r.appendChild(el("span", value, "num" + (cls === "net" ? " good" : "")));
+  return r;
+}
+
 function renderCost(c) {
   GRID.top = window.innerWidth < 600 ? 54 : 34;
   document.getElementById("cost-scope").textContent = c.includeEval ? "live and eval" : "live";
   var cur = c.currency === "USD" ? "$" : c.currency + " ";
   function m(v, d) { return v == null ? "—" : cur + Number(v).toFixed(d == null ? 4 : d); }
   var f = c.failures, b = c.budget, sv = c.savings, r = c.roi;
-  document.getElementById("tiles-cost-spend").replaceChildren(
-    tile("AI cost today", m(c.cost.today), "UTC day"),
-    tile("AI cost this month", m(c.cost.month), "day " + c.cost.dayOfMonth + " of " + c.cost.daysInMonth),
-    tile("Cost per failure triaged", f.costPer == null ? "—" : m(f.costPer, 5), num(f.triaged) + " failures in " + c.days + " days"),
-    tile("Monthly forecast (estimate)", m(c.cost.forecast), "daily average x " + c.cost.daysInMonth + " days"),
-    tile("Budget used today", b.percent == null ? "no budget" : b.percent + "%", num(b.tokensToday) + " of " + (b.dailyTokenBudget ? num(b.dailyTokenBudget) : "—") + " tokens", b.percent == null ? undefined : b.percent / 100)
+  document.getElementById("cost-kpis").replaceChildren(
+    kpiCard("AI cost today", m(c.cost.today), "UTC day"),
+    kpiCard("This month", m(c.cost.month), "forecast " + m(c.cost.forecast, 2) + " · day " + c.cost.dayOfMonth + " of " + c.cost.daysInMonth),
+    kpiCard("Per failure triaged", f.costPer == null ? "—" : m(f.costPer, 5), num(f.triaged) + " failures, " + c.days + " days"),
+    kpiCard("Prompt-cache savings", m(sv.cacheUsd), "cached input tokens", { good: true }),
+    kpiCard("Budget used today", b.percent == null ? "no budget" : b.percent + "%",
+      num(b.tokensToday) + " of " + (b.dailyTokenBudget ? num(b.dailyTokenBudget) : "—") + " tokens", b.percent == null ? {} : { bar: b.percent / 100 })
   );
-  document.getElementById("tiles-cost-save").replaceChildren(
-    tile("Prompt-cache savings", m(sv.cacheUsd), "cached tokens x (input price - cache-read price)"),
-    tile("LLM calls saved by learned mappings", num(sv.savedCalls), sv.savedCallsUsd == null ? "no MAP_CODE run to price it" : "about " + m(sv.savedCallsUsd) + " (estimate, " + num(sv.basedOnRuns) + " runs)")
+  document.getElementById("ai-foot").textContent = aiFoot + (sv.cacheUsd == null ? "" : " · prompt cache saved " + m(sv.cacheUsd, 2));
+  document.getElementById("roi-list").replaceChildren(
+    roiRow("Handled without an engineer", num(r.handled), r.hoursSaved + " engineer hours, live traffic"),
+    roiRow("Engineer time saved", m(r.engineerValue, 2), r.minutesPerFailure + " min at " + cur + r.hourlyRate + "/h"),
+    roiRow("AI cost", m(r.aiCost, 2)),
+    roiRow("Net", m(r.net, 2), null, r.net < 0 ? "" : "net"),
+    roiRow("LLM calls saved by learned mappings", num(sv.savedCalls), sv.savedCallsUsd == null ? "no MAP_CODE run to price it" : "about " + m(sv.savedCallsUsd) + " (estimate, " + num(sv.basedOnRuns) + " runs)")
   );
-  document.getElementById("tiles-cost-roi").replaceChildren(
-    tile("Handled without an engineer (estimate)", num(r.handled), r.hoursSaved + " engineer hours, live traffic"),
-    tile("Engineer time saved (estimate)", m(r.engineerValue, 2), "AI cost " + m(r.aiCost, 2) + " vs about " + m(r.engineerValue, 2) + " of engineer time (estimate)"),
-    tile("Net (estimate)", m(r.net, 2), "engineer time minus AI cost, live traffic", undefined, r.net < 0 ? "over" : "")
-  );
-  document.getElementById("cost-assume").textContent = "Assumes " + r.minutesPerFailure + " min per failure at " + cur + r.hourlyRate + "/h; handled = applied, resent, rejected or approved mappings. Change both in Settings, Budgets.";
+  document.getElementById("cost-assume").textContent = "Handled = applied, resent, rejected or approved mappings. Change the assumptions in Settings, Budgets & mode.";
 
   if (!c.byDay.models.length) empty("costday", "No agent runs in this period");
   else chart("costday", document.getElementById("ch-costday"), {
@@ -1291,12 +1473,12 @@ function renderCost(c) {
     yAxis: { type: "value", axisLabel: { fontSize: 11 } },
     series: c.byDay.models.map(function (mod) { return { name: mod, type: "bar", stack: "c", barMaxWidth: 14, data: c.byDay.series[mod] }; })
   });
-  [["costns", c.byNamespace], ["costec", c.byErrorClass]].forEach(function (p) {
+  [["costns", c.byNamespace, function (x) { return x.name; }], ["costec", c.byErrorClass, function (x) { return EC_LABEL[x.name] || x.name; }]].forEach(function (p) {
     if (!p[1].length) empty(p[0], "No agent runs in this period");
     else chart(p[0], document.getElementById("ch-" + p[0]), {
       grid: GRID, tooltip: { trigger: "axis", axisPointer: { type: "shadow" }, confine: true },
       xAxis: { type: "value", axisLabel: { fontSize: 11 } },
-      yAxis: { type: "category", inverse: true, data: p[1].map(function (x) { return x.name; }), axisLabel: { fontSize: 11 } },
+      yAxis: { type: "category", inverse: true, data: p[1].map(p[2]), axisLabel: { fontSize: 11 } },
       series: [{ type: "bar", barMaxWidth: 18, itemStyle: { color: COLORS.resent }, data: p[1].map(function (x) { return x.cost; }) }]
     });
   });
@@ -1312,7 +1494,7 @@ function load() {
   document.getElementById("error").classList.add("hidden");
   var ev = includeEval ? "eval=1" : "eval=0";
   if (!homeNs) get("api/settings/productions").then(function (r) { fillNsFilter(r.productions); }).catch(function () {});
-  Promise.all([get("api/summary?" + ev), get("api/metrics/summary?" + ev), get("api/decisions?limit=" + (decLimit + 1) + "&" + ev + "&ns=" + encodeURIComponent(decNs)), get("api/evalruns"), get("api/cost/summary?days=30&" + ev)]).then(function (res) {
+  Promise.all([get("api/summary?" + ev), get("api/metrics/summary?" + ev), get("api/decisions?limit=" + DEC_FETCH + "&" + ev + "&ns=" + encodeURIComponent(decNs)), get("api/evalruns"), get("api/cost/summary?days=30&" + ev)]).then(function (res) {
     setKillBanner(res[0].killSwitch);
     renderSummary(res[0], res[1]);
     renderMetrics(res[1]);
@@ -1440,7 +1622,17 @@ function fillNsFilter(list) {
   var sel = document.getElementById("dec-ns");
   var items = [["", "All productions"]];
   list.forEach(function (p) {
-    if (p.native) { homeNs = p.namespace; var hn = document.getElementById("hdr-ns"); hn.textContent = "Namespace " + homeNs; hn.classList.remove("hidden"); }
+    if (p.native) {
+      homeNs = p.namespace;
+      var hn = document.getElementById("hdr-ns");
+      hn.textContent = "Namespace " + homeNs;
+      hn.classList.remove("hidden");
+      document.getElementById("crumb").textContent = p.namespace + " · " + p.production;
+      if (p.health && p.health.state) {
+        document.getElementById("sf-prod").textContent = "Production " + String(p.health.state).toLowerCase();
+        document.getElementById("sf-dot").classList.toggle("off", String(p.health.state).toLowerCase() !== "running");
+      }
+    }
     if (p.enabled) items.push([p.namespace, prodLabel(p)]);
   });
   fillSelect(sel, items, decNs);
@@ -1449,6 +1641,8 @@ function renderSettings(s) {
   settings = s;
   if (s.user) { var hu = document.getElementById("hdr-user"); hu.textContent = "Signed in as " + s.user; hu.classList.remove("hidden"); }
   var edit = s.canEdit;
+  document.getElementById("sf-mode").textContent = s.budgets.Mode;
+  document.getElementById("hdr-burst").classList.toggle("hidden", !edit);
   document.getElementById("set-readonly").classList.toggle("hidden", edit);
   setKillBanner(s.budgets.KillSwitch);
 
@@ -1536,7 +1730,7 @@ function renderSettings(s) {
     c.type = "checkbox"; c.value = ec;
     c.checked = ec !== "IDENTITY_ISSUE" && off.indexOf(ec) < 0;
     if (ec === "IDENTITY_ISSUE") { c.disabled = true; c.dataset.fixed = "1"; }
-    l.appendChild(c); l.appendChild(document.createTextNode(ec));
+    l.appendChild(c); l.appendChild(ecSpan(ec));
     af.appendChild(l);
   });
   var fb = document.getElementById("f-budgets");
@@ -1658,7 +1852,10 @@ function renderSettings(s) {
 
 var compatKinds = [];
 function kindLabel(k) { return compatKinds.indexOf(k) >= 0 ? k + " (OpenAI-compatible)" : k; }
-function setKillBanner(on) { document.getElementById("kill-banner").classList.toggle("hidden", !on); }
+function setKillBanner(on) {
+  document.getElementById("kill-banner").classList.toggle("hidden", !on);
+  document.getElementById("sf-kill").textContent = on ? "ON" : "off";
+}
 function checkedValues(id, want) {
   return Array.prototype.filter.call(document.querySelectorAll("#" + id + " input[type=checkbox]"), function (c) { return c.checked === want && c.dataset.fixed !== "1"; })
     .map(function (c) { return c.value; }).join(",");
@@ -1717,12 +1914,14 @@ document.getElementById("kill-btn").addEventListener("click", function () {
   }).catch(function (e) { say("m-kill", e.message); }).then(function () { btn.disabled = false; });
 });
 
+var TITLES = { overview: "Overview", messages: "Messages", trust: "Trust & evaluation", cost: "Cost", settings: "Settings" };
 function showTab(name) {
   if (!document.getElementById("tab-" + name)) name = "overview";
   if (name === "settings") loadSettings();
-  Array.prototype.forEach.call(document.querySelectorAll(".tabs button"), function (b) {
-    b.setAttribute("aria-selected", b.dataset.tab === name ? "true" : "false");
+  Array.prototype.forEach.call(document.querySelectorAll("#nav .nav-link[data-tab]"), function (a) {
+    a.classList.toggle("active", a.dataset.tab === name);
   });
+  document.getElementById("ptitle").textContent = TITLES[name];
   Array.prototype.forEach.call(document.querySelectorAll(".tabpanel"), function (p) {
     p.classList.toggle("hidden", p.id !== "tab-" + name);
   });
@@ -1731,24 +1930,35 @@ function showTab(name) {
   if (window.flowShow) window.flowShow(name);
 }
 
-Array.prototype.forEach.call(document.querySelectorAll(".tabs button"), function (b) {
-  b.addEventListener("click", function () { showTab(b.dataset.tab); });
+function showSection(name) {
+  Array.prototype.forEach.call(document.querySelectorAll("#set-menu a"), function (a) { a.classList.toggle("active", a.dataset.sec === name); });
+  Array.prototype.forEach.call(document.querySelectorAll(".set-sec"), function (p) { p.classList.toggle("hidden", p.dataset.sec !== name); });
+  try { localStorage.setItem("agenticprod.setsec", name); } catch (e) {}
+}
+Array.prototype.forEach.call(document.querySelectorAll("#set-menu a"), function (a) {
+  a.addEventListener("click", function () { showSection(a.dataset.sec); });
+});
+var lastSec = "providers";
+try { lastSec = localStorage.getItem("agenticprod.setsec") || "providers"; } catch (e) {}
+showSection(lastSec);
+
+Array.prototype.forEach.call(document.querySelectorAll("#nav .nav-link[data-tab], a[data-goto]"), function (a) {
+  a.addEventListener("click", function (e) { e.preventDefault(); showTab(a.dataset.tab || a.dataset.goto); });
 });
 var lastTab = "overview";
 try { lastTab = localStorage.getItem("agenticprod.tab") || "overview"; } catch (e) {}
 showTab(lastTab);
 document.getElementById("more").addEventListener("toggle", drawPending);
-document.getElementById("dec-more").addEventListener("click", function () {
-  decLimit += DEC_PAGE;
-  var ev = includeEval ? "eval=1" : "eval=0";
-  get("api/decisions?limit=" + (decLimit + 1) + "&" + ev + "&ns=" + encodeURIComponent(decNs)).then(renderDecisions).catch(showError);
-});
+function resetPage() { decPage = 1; renderMessages(); }
+document.getElementById("dec-q").addEventListener("input", resetPage);
+document.getElementById("dec-outcome").addEventListener("change", resetPage);
+document.getElementById("dec-size").addEventListener("change", function (ev) { decSize = +ev.target.value; resetPage(); });
 document.getElementById("dec-ns").addEventListener("change", function (ev) {
   decNs = ev.target.value;
-  decLimit = DEC_PAGE;
-  var e = includeEval ? "eval=1" : "eval=0";
-  get("api/decisions?limit=" + (decLimit + 1) + "&" + e + "&ns=" + encodeURIComponent(decNs)).then(renderDecisions).catch(showError);
+  decPage = 1;
+  refreshDecisions();
 });
+document.getElementById("hdr-burst").addEventListener("click", openBurst);
 document.getElementById("runs-test").addEventListener("click", function () {
   showTestRuns = !showTestRuns;
   renderRuns(lastRuns);
@@ -1759,11 +1969,13 @@ var evalBox = document.getElementById("incl-eval");
 evalBox.checked = includeEval;
 evalBox.addEventListener("change", function () {
   includeEval = evalBox.checked;
-  decLimit = DEC_PAGE;
+  decPage = 1;
   try { localStorage.setItem("agenticprod.includeEval", includeEval ? "1" : "0"); } catch (e) {}
   load();
 });
 load();
+// Footer figures (AI mode, kill switch) come with the settings; the tab reloads them when opened
+if (lastTab !== "settings") loadSettings();
 setInterval(load, 30000);
 </script>
 <div id="mp-back" class="hidden"></div>

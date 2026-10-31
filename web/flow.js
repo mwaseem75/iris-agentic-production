@@ -555,7 +555,7 @@
     lastSig = ""; poll();
     timer = setInterval(poll, POLL_MS);
   };
-  var sel = document.querySelector(".tabs button[aria-selected=true]");
+  var sel = document.querySelector("#nav .nav-link.active");
   if (sel) window.flowShow(sel.dataset.tab);
   if (location.hash) fromHash();
 })();
