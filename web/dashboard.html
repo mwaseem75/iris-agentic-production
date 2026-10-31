@@ -137,7 +137,7 @@ summary { cursor: pointer; color: var(--accent); }
 .fl-map rect.node.err { stroke: var(--bad); }
 .fl-path { fill: none; stroke: var(--accent); stroke-width: 4; stroke-linejoin: round; stroke-linecap: round; opacity: .85; }
 .fl-canvas-wrap { background: #0f1722; border-radius: 8px; overflow: hidden; position: relative; }
-.fl-canvas { position: relative; width: 960px; height: 560px; transform-origin: 0 0; background-image: radial-gradient(#2a3647 1px, transparent 1px); background-size: 18px 18px; color: #dbe4ef; font: 12px system-ui, sans-serif; }
+.fl-canvas { position: relative; width: 1000px; height: 456px; transform-origin: 0 0; background-image: radial-gradient(#2a3647 1px, transparent 1px); background-size: 18px 18px; color: #dbe4ef; font: 12px system-ui, sans-serif; }
 .fl-canvas svg.wires { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .fl-canvas path.w { fill: none; stroke: #3b4b60; stroke-width: 2; transition: stroke .3s; }
 .fl-canvas path.w.sub { stroke-dasharray: 5 5; stroke-width: 1.5; }
@@ -147,6 +147,7 @@ summary { cursor: pointer; color: var(--accent); }
 .fl-canvas circle.dot { fill: #4da3ff; }
 .fl-canvas text.wl { fill: #8fb4de; font-size: 10px; }
 .fl-nd { position: absolute; box-sizing: border-box; overflow: hidden; background: #18232f; border: 1.5px solid #34455a; border-radius: 9px; padding: 6px 8px; transition: border-color .25s, box-shadow .25s, opacity .25s, background .25s; opacity: .5; }
+.fl-nd { padding-bottom: 20px; }
 .fl-nd.seen { opacity: 1; }
 .fl-nd.run { border-color: #4da3ff; box-shadow: 0 0 0 3px rgba(77,163,255,.25); }
 .fl-nd.done { border-color: #36a56b; }
@@ -155,8 +156,17 @@ summary { cursor: pointer; color: var(--accent); }
 .fl-nd.lit { border-color: #f2b84b; box-shadow: 0 0 0 3px rgba(242,184,75,.28); opacity: 1; }
 .fl-nd.lit.bad { border-color: #ef6a5b; box-shadow: 0 0 0 3px rgba(239,106,91,.3); }
 .fl-nd .h { display: flex; align-items: center; gap: 6px; font-weight: 650; font-size: 12px; }
+.fl-nd:not(.agent):not(.subn) .h { flex-wrap: wrap; }
+.fl-nd .ttl { overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; white-space: normal; line-height: 1.25; overflow-wrap: anywhere; }
+.fl-nd .ttl small { display: block; font-weight: 500; color: #9db0c6; font-size: 10.5px; }
+.fl-nd.main .h .st { order: 2; margin-left: auto; }
+.fl-nd.main .h .ttl { order: 3; flex-basis: 100%; }
+.fl-nd.subn .st { display: none; }
+.fl-nd .bd { position: absolute; right: 5px; bottom: 4px; display: flex; gap: 3px; }
+.fl-nd .bd span { background: #2c3e55; color: #cfe1f5; font-size: 10px; font-weight: 700; border-radius: 8px; padding: 0 6px; line-height: 15px; }
+.fl-nd .bd span.cur { background: #f2b84b; color: #1b1b1b; box-shadow: 0 0 0 2px rgba(242,184,75,.35); }
 .fl-nd .h { min-width: 0; }
-.fl-nd .h > span:not(.st) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fl-nd .h > span:not(.st):not(.ttl):not(.ico) { min-width: 0; }
 .fl-nd svg.ic { width: 28px; height: 28px; flex: none; stroke: #bcd4ee; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .fl-nd .ico { flex: none; width: 44px; height: 44px; border-radius: 50%; background: #24344a; display: flex; align-items: center; justify-content: center; }
 .fl-nd .ico svg.ic { width: 32px; height: 32px; }
@@ -191,7 +201,7 @@ summary { cursor: pointer; color: var(--accent); }
 @media (prefers-reduced-motion: reduce) { .fl-nd .st.spin, .fl-nd .pulse, .fl-nd.agent.run, .fl-nd.agent.glow { animation: none; } }
 .fl-steps-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
 .fl-steps-head h2 { margin: 0 8px 0 0; }
-.fl-steps { list-style: none; margin: 8px 0 0; padding: 0; max-height: 420px; overflow-y: auto; }
+.fl-steps { list-style: none; margin: 8px 0 0; padding: 0; flex: 1 1 260px; min-height: 120px; max-height: 300px; overflow-y: auto; position: relative; }
 .fl-steps li { padding: 6px 6px 6px 10px; border-left: 4px solid var(--line); margin-bottom: 4px; cursor: pointer; border-radius: 0 4px 4px 0; font-size: 13px; }
 .fl-steps li:hover { background: var(--info-bg); }
 .fl-steps li.cur { background: var(--info-bg); outline: 1px solid var(--accent); }
@@ -212,6 +222,10 @@ summary { cursor: pointer; color: var(--accent); }
 .mp-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
 .mp-tabs button[aria-selected=true] { border-color: var(--accent); font-weight: 650; }
 td.go { white-space: nowrap; }
+#msg-panel:not(.hidden) { display: flex; flex-direction: column; }
+#mp-journey:not(.hidden) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+#mp-details:not(.hidden) { flex: 1; min-height: 0; overflow-y: auto; }
+#mp-journey .fl-mapbox { margin: 0 0 8px; padding: 0; }
 @media (max-width: 600px) {
   .fl-grid { grid-template-columns: minmax(0, 1fr); }
   #burst-box { display: none; }
@@ -1494,9 +1508,6 @@ setInterval(load, 30000);
     <button type="button" role="tab" data-mp="details" aria-selected="false">Details</button>
   </div>
   <div id="mp-journey">
-    <section class="panel fl-mapbox">
-      <div class="fl-canvas-wrap" id="fl-wrap"><div class="fl-canvas" id="fl-canvas" role="img" aria-label="Workflow canvas: path of this message and what the agent used"></div></div>
-    </section>
     <div class="fl-steps-head">
       <h3 id="fl-title">Journey</h3>
       <button type="button" id="fj-back" title="Previous step">&laquo; Step</button>
@@ -1504,6 +1515,9 @@ setInterval(load, 30000);
       <button type="button" id="fj-fwd" title="Next step">Step &raquo;</button>
       <button type="button" id="fj-speed">1x</button>
     </div>
+    <section class="panel fl-mapbox">
+      <div class="fl-canvas-wrap" id="fl-wrap"><div class="fl-canvas" id="fl-canvas" role="img" aria-label="Workflow canvas: path of this message and what the agent used"></div></div>
+    </section>
     <ol class="fl-steps" id="fl-steps"></ol>
   </div>
   <div id="mp-details" class="hidden">

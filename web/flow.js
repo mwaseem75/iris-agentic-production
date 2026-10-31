@@ -14,7 +14,7 @@
 
   var ns = "IRISAPP", active = false, started = false, timer = null, polling = false, lastTop = "", lastSig = "";
   var msgs = [], selId = null, J = null, jStatus = "", cur = -1, panelOpen = false;
-  var panelNs = "IRISAPP", map = null, mapAt = 0, playTimer = null, speed = 1, loadSeq = 0;
+  var panelNs = "IRISAPP", map = null, mapAt = 0, playTimer = null, speed = 2, loadSeq = 0;
 
   function $(id) { return document.getElementById(id); }
   function evalOn() { return typeof includeEval !== "undefined" && includeEval; }
@@ -103,7 +103,7 @@
       }
       li.appendChild(m);
       if (st.waitLabel) li.appendChild(el("span", st.waitLabel, "tag t-warn"));
-      li.addEventListener("click", function () { stopPlay(); goTo(i); });
+      li.addEventListener("click", function () { var was = !!playTimer; stopPlay(); goTo(i); if (was) play(); });
       ol.appendChild(li);
     });
     markCurrent(false);
@@ -114,7 +114,10 @@
       items[k].classList.toggle("cur", k === cur);
       items[k].classList.toggle("future", k > cur);
     }
-    if (scroll && items[cur] && items[cur].scrollIntoView) items[cur].scrollIntoView({ block: "nearest" });
+    var ol = $("fl-steps"), li = items[cur];
+    if (scroll && li) {
+      if (li.offsetTop < ol.scrollTop || li.offsetTop + li.offsetHeight > ol.scrollTop + ol.clientHeight) ol.scrollTop = Math.max(0, li.offsetTop - ol.clientHeight / 2 + li.offsetHeight / 2);
+    }
   }
   function goTo(i) {
     if (!J) return;
@@ -148,7 +151,7 @@
   }
 
   // ---- workflow canvas ----
-  var CW = 960, CH = 560;
+  var CW = 1000, CH = 456;
   var ORDER = ["trigger", "router", "agent", "guard", "triage"];
   var SUBS = ["model", "memory", "tools", "skills", "knowledge", "policies"];
   var ICON = {
@@ -196,7 +199,7 @@
   }
   function outIcon(k) { return k === "out:human" ? "human" : k === "out:Resent" ? "resent" : k === "out:Rejected" ? "rejected" : /fhir/i.test(k) ? "fhir" : "ehr"; }
 
-  function mkNode(key, x, y, w, hh, title, ico, extra) {
+  function mkNode(key, x, y, w, hh, title, ico, extra, small) {
     var n = h("div", "fl-nd" + (extra ? " " + extra : ""));
     if (SUBS.indexOf(ico) >= 0) n.classList.add("subn");
     n.style.left = x + "px"; n.style.top = y + "px"; n.style.width = w + "px"; n.style.height = hh + "px";
@@ -208,21 +211,24 @@
       var tt = h("span", "tt"), b = h("b", null, title);
       tt.appendChild(b); tt.appendChild(sub); head.appendChild(tt); head.appendChild(st); n.appendChild(head);
     } else {
-      var tl = h("span", null, title); tl.title = title;
+      var tl = h("span", "ttl", title); tl.title = title + (small ? " / " + small : "");
+      if (small) tl.appendChild(h("small", null, small));
       head.appendChild(tl); head.appendChild(st); n.appendChild(head); n.appendChild(sub);
     }
     n.appendChild(h("span", "port i")); n.appendChild(h("span", "port o"));
+    var bd = h("div", "bd");
+    n.appendChild(bd);
     cv.root.appendChild(n);
-    cvUi[key] = { el: n, st: st, sub: sub, x: x, y: y, w: w, h: hh };
+    cvUi[key] = { el: n, st: st, sub: sub, bd: bd, groups: [], x: x, y: y, w: w, h: hh };
     return cvUi[key];
   }
-  function wire(a, b, cls) {
+  function wire(a, b, cls, idx, cnt) {
     var A = cvUi[a], B = cvUi[b];
     if (!A || !B) return;
     var x1, y1, x2, y2, d;
     if (cls === "sub") {
-      x1 = A.x + A.w / 2; y1 = A.y + A.h; x2 = B.x + B.w / 2; y2 = B.y;
-      d = "M" + x1 + "," + y1 + " C" + x1 + "," + (y1 + 60) + " " + x2 + "," + (y2 - 60) + " " + x2 + "," + y2;
+      x1 = A.x + A.w * (idx + 1) / (cnt + 1); y1 = A.y + A.h; x2 = B.x + B.w / 2; y2 = B.y;
+      d = "M" + x1 + "," + y1 + " C" + x1 + "," + (y1 + 45) + " " + x2 + "," + (y2 - 45) + " " + x2 + "," + y2;
     } else {
       x1 = A.x + A.w; y1 = A.y + A.h / 2; x2 = B.x; y2 = B.y + B.h / 2;
       var dx = Math.max(24, Math.abs(x2 - x1) / 2);
@@ -245,34 +251,62 @@
     var ag = J.agent || {}, outs = [];
     J.steps.forEach(function (st) { var k = keyOf(st); if (/^out:/.test(k) && outs.indexOf(k) < 0) outs.push(k); });
     if (J.outcome === "rejected" && outs.indexOf("out:Rejected") < 0) outs.push("out:Rejected");
-    mkNode("trigger", 8, 102, 96, 96, "Trigger", "trigger");
-    mkNode("router", 128, 102, 96, 96, "Router", "router");
-    mkNode("agent", 252, 65, 244, 170, "AI Hub Agent", "agent", "agent").sub.textContent = (ag.name || "TriageAgent") + " · " + (ag["class"] || "%AI.Agent");
-    var g = mkNode("guard", 528, 85, 124, 130, "Guardrails", "guard");
+    var names = {};
+    J.steps.forEach(function (s) {
+      if (s.kind === "inbound" && s.edge && !names.trigger) names.trigger = s.edge.from;
+      if (s.kind === "router" && s.node && !names.router) names.router = s.node;
+    });
+    mkNode("trigger", 8, 92, 112, 96, "Trigger", "trigger", "main", names.trigger);
+    mkNode("router", 142, 92, 112, 96, "Router", "router", "main", names.router);
+    mkNode("agent", 280, 55, 250, 170, "AI Hub Agent", "agent", "agent").sub.textContent = (ag.name || "TriageAgent") + " · " + (ag["class"] || "%AI.Agent");
+    var g = mkNode("guard", 562, 75, 130, 130, "Guardrails", "guard");
     GUARDS.forEach(function (r) {
       var row = h("div", "rw"), mark = h("i", null, "·");
       row.appendChild(mark); row.appendChild(h("span", null, r.charAt(0).toUpperCase() + r.slice(1)));
       g.sub.appendChild(row); g[r] = mark;
     });
-    mkNode("triage", 684, 102, 92, 96, "Triage", "triage");
-    var gap = outs.length > 1 ? Math.min(88, 290 / (outs.length - 1)) : 0, y0 = outs.length > 1 ? 10 : 112;
-    outs.forEach(function (k, i) { mkNode(k, 812, y0 + i * gap, 140, 72, nodeTitle(k), outIcon(k)); });
-    SUBS.forEach(function (k, i) { mkNode(k, 8 + i * 158, 390, 148, 150, SUB_TITLE[k], k); });
+    mkNode("triage", 722, 92, 96, 96, "Triage", "triage", "main");
+    var gap = outs.length > 1 ? Math.min(78, 250 / (outs.length - 1)) : 0, y0 = outs.length > 1 ? 8 : 100;
+    outs.forEach(function (k, i) { mkNode(k, 840, y0 + i * gap, 152, 70, nodeTitle(k), outIcon(k)); });
+    SUBS.forEach(function (k, i) { mkNode(k, 8 + i * 166, 312, 156, 136, SUB_TITLE[k], k); });
     (ag.tools || []).forEach(function (t) { if (t !== "search_loinc" && t !== "load_skill") cvUi.tools.sub.appendChild(h("span", "chip", t)); });
     (ag.skills || []).forEach(function (t) { cvUi.skills.sub.appendChild(h("span", "chip", t)); });
     for (var i = 0; i < ORDER.length - 1; i++) wire(ORDER[i], ORDER[i + 1]);
     outs.forEach(function (k) { wire("triage", k); });
-    SUBS.forEach(function (k) { wire("agent", k, "sub"); });
+    SUBS.forEach(function (k, i) { wire("agent", k, "sub", i, SUBS.length); });
+    addBadges();
     cv.dot = svg("circle", { "class": "dot", r: 6, cx: -20, cy: -20 });
     cv.label = svg("text", { "class": "wl", x: -80, y: -50 }, "1 message");
     wires.appendChild(cv.dot); wires.appendChild(cv.label);
+  }
+  // Numbered badges: the journey steps each node took part in, consecutive numbers as a range
+  function addBadges() {
+    var nums = {};
+    function put(k, n) { if (cvUi[k]) (nums[k] = nums[k] || []).push(n); }
+    J.steps.forEach(function (s) {
+      var k = keyOf(s);
+      if (k === "triage" && s.kind !== "triage" && s.kind !== "learning") return;
+      put(k, s.n);
+      if (s.sub && s.sub !== k) put(s.sub, s.n);
+      if (s.kind === "tool") put("policies", s.n);
+    });
+    Object.keys(nums).forEach(function (k) {
+      var list = nums[k].filter(function (n, i, a) { return a.indexOf(n) === i; }), from = list[0], prev = from, u = cvUi[k];
+      function flush(last) {
+        var g = h("span", null, from === last ? String(from) : from + "\u2013" + last);
+        u.bd.appendChild(g); u.groups.push({ from: from, to: last, el: g });
+      }
+      list.slice(1).forEach(function (n) { if (n !== prev + 1) { flush(prev); from = n; } prev = n; });
+      flush(prev);
+    });
   }
   // Sub text of a node; the card's tooltip carries the full text when the card clips it
   function setSub(key, text) { cvUi[key].sub.textContent = text; cvUi[key].el.title = text.replace(/\n/g, " · "); }
   function fitCanvas() {
     var wrap = $("fl-wrap"), root = $("fl-canvas");
     if (!wrap || !root || !wrap.clientWidth) return;
-    var sc = Math.min(1, wrap.clientWidth / CW);
+    var sc = Math.min(1.2, wrap.clientWidth / CW);
+    root.style.width = CW + "px"; root.style.height = CH + "px";
     root.style.transform = "scale(" + sc + ")";
     wrap.style.height = Math.round(CH * sc) + "px";
   }
@@ -281,6 +315,7 @@
   function paintCanvas(prog) {
     if (!cv || !J || !cvUi.agent) return;
     var ag = J.agent || {}, st = {}, i;
+    Object.keys(cvUi).forEach(function (key) { cvUi[key].groups.forEach(function (g) { g.el.classList.toggle("cur", cur + 1 >= g.from && cur + 1 <= g.to); }); });
     Object.keys(cvUi).forEach(function (key) { cvUi[key].el.classList.remove("run", "done", "fail", "wait", "lit", "bad", "seen"); });
     SUBS.forEach(function (key) { cvUi[key].el.classList.add("seen"); });
     var tokens = 0, cost = 0, allowed = 0, denied = 0, searches = 0, called = {}, learned = "", guard = {};
@@ -369,6 +404,7 @@
     var key = J ? J.id + ":" + J.steps.length + ":" + (map ? map.items.length : 0) : "";
     if (key !== cvKey || !cv || !cv.root.firstChild) { cvKey = key; buildCanvas(); }
     fitCanvas();
+    if (anim && key === cvKey) return;
     startAnim();
   }
   window.addEventListener("resize", fitCanvas);
@@ -398,8 +434,10 @@
     var h = "msg=" + id + (jns !== (homeNs || "IRISAPP") ? "&ns=" + jns : "");
     try { history.replaceState(null, "", "#" + h); } catch (e) { location.hash = h; }
     if (!started) start();
-    mapAt = Date.now(); loadMap();
-    select(id, jns);
+    mapAt = Date.now();
+    Promise.all([loadMap(), select(id, jns)]).then(function () {
+      if (panelOpen && selId === id && J) { cur = J.steps.length; play(); }
+    });
     showStory(id);
     if (!byId(id)) poll();
   }
