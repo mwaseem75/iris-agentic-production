@@ -132,7 +132,7 @@ ClassMethod Build(pLog As AgenticProd.Data.DecisionLog, pNs As %String, pItems A
 		Set tText = $SELECT(pUsage.Replay: "Replayed from a recorded run: no LLM call, no tools run.", 1: "Called "_pUsage.Model_".")
 		Set tText = tText_" It proposed "_pUsage.Decision_$SELECT(pUsage.Confidence '= "": " with confidence "_$FNUMBER(pUsage.Confidence, "", 2), 1: "")_"."
 		Set tText = tText_" "_tCalls_" tool call"_$SELECT(tCalls=1: "", 1: "s")_", "_tTokens_" tokens, $"_$FNUMBER(+pUsage.CostUsd, "", 6)_" (tokens and cost are per run, not per tool call)."
-		Do ..Add(tSteps, "agent", "Agent", tText, tPrevEnd, tPrevEnd, {"node":(tAgentName)}, tS0, "ok", .tPrevEnd)
+		Do ..Add(tSteps, "agent", "Agent", tText, tPrevEnd, tPrevEnd, {"node":(tAgentName), "sub":"model", "tokens":(tTokens), "costUsd":(+pUsage.CostUsd)}, tS0, "ok", .tPrevEnd)
 		Set tIter = pTools.%GetIterator()
 		While tIter.%GetNext(, .tCall) {
 			// a replay lists the recorded run's calls; their stamps are from that run, so they follow each other from the agent hop
@@ -141,7 +141,7 @@ ClassMethod Build(pLog As AgenticProd.Data.DecisionLog, pNs As %String, pItems A
 				Set tEnd = tCall.CreatedAt, tBeg = $SELECT(tCall.DurationMs '= "": ..Shift(tEnd, -tCall.DurationMs), 1: tEnd)
 			}
 			Set tResult = $CASE(tCall.Status, "OK": "returned "_+tCall.ResultLength_" characters", "DENIED": "refused by the read-only policy", : "failed"_$SELECT(tCall.ErrorText '= "": ": "_$EXTRACT(##class(AgenticProd.UI.REST).Mask(tCall.ErrorText, .pSecrets), 1, 120), 1: ""))
-			Do ..Add(tSteps, "tool", "Tool: "_tCall.Tool, tCall.Tool_" "_tResult_$SELECT(tCall.DurationMs '= "": " in "_tCall.DurationMs_" ms", 1: "")_$SELECT(pUsage.Replay: " (recorded run)", 1: "")_".", tBeg, tEnd, {"node":(tAgentName)}, tS0, $SELECT(tCall.Status = "OK": "ok", 1: "bad"), .tPrevEnd)
+			Do ..Add(tSteps, "tool", "Tool: "_tCall.Tool, tCall.Tool_" "_tResult_$SELECT(tCall.DurationMs '= "": " in "_tCall.DurationMs_" ms", 1: "")_$SELECT(pUsage.Replay: " (recorded run)", 1: "")_".", tBeg, tEnd, {"node":(tAgentName), "sub":(..SubNode(tCall)), "tool":(tCall.Tool), "denied":(tCall.Status = "DENIED")}, tS0, $SELECT(tCall.Status = "OK": "ok", 1: "bad"), .tPrevEnd)
 		}
 	}
 
@@ -155,7 +155,7 @@ ClassMethod Build(pLog As AgenticProd.Data.DecisionLog, pNs As %String, pItems A
 		While tIter.%GetNext(, .tCheck) {
 			Set:'tCheck.pass tFailed = tFailed_$SELECT(tFailed'="": "; ", 1: "")_tCheck.text
 		}
-		Do ..Add(tSteps, "grounding", "Grounding check", tGround.text_$SELECT(tFailed'="": " Failed: "_tFailed_".", 1: ""), tPrevEnd, tPrevEnd, {"node":"@grounding"}, tS0, $SELECT(tGround.status = "passed": "ok", tGround.status = "warned": "warn", 1: "bad"), .tPrevEnd)
+		Do ..Add(tSteps, "grounding", "Grounding check", tGround.text_$SELECT(tFailed'="": " Failed: "_tFailed_".", 1: ""), tPrevEnd, tPrevEnd, {"node":"@grounding", "checks":(tGround.checks)}, tS0, $SELECT(tGround.status = "passed": "ok", tGround.status = "warned": "warn", 1: "bad"), .tPrevEnd)
 	}
 	Do ..Add(tSteps, "triage", "Triage rule", ##class(AgenticProd.UI.REST).TriageText(pLog, tOutcome, .pSecrets), tPrevEnd, tPrevEnd, {"node":"@triage", "outcome":(tOutcome)}, tS0, $SELECT(##class(AgenticProd.UI.Flow).OutcomeLane(tOutcome) = "rejected": "bad", ##class(AgenticProd.UI.Flow).OutcomeLane(tOutcome) = "person": "warn", 1: "ok"), .tPrevEnd)
 
@@ -181,7 +181,7 @@ ClassMethod Build(pLog As AgenticProd.Data.DecisionLog, pNs As %String, pItems A
 
 	// learning: the approved mapping written to the lookup table
 	If $IsObject(pLearned) {
-		Do ..Add(tSteps, "learning", "Learned mapping", "LearnedMapping #"_pLearned.ID_" written: "_##class(AgenticProd.UI.REST).Mask(pLearned.LocalCode, .pSecrets)_" to LOINC "_pLearned.Loinc_$SELECT(pLearned.Display '= "": " ("_pLearned.Display_")", 1: "")_", approved by "_pLearned.Reviewer_".", $SELECT(pLearned.ApprovedAt '= "": pLearned.ApprovedAt, 1: tPrevEnd), $SELECT(pLearned.ApprovedAt '= "": pLearned.ApprovedAt, 1: tPrevEnd), {"node":"@triage"}, tS0, "ok", .tPrevEnd)
+		Do ..Add(tSteps, "learning", "Learned mapping", "LearnedMapping #"_pLearned.ID_" written: "_##class(AgenticProd.UI.REST).Mask(pLearned.LocalCode, .pSecrets)_" to LOINC "_pLearned.Loinc_$SELECT(pLearned.Display '= "": " ("_pLearned.Display_")", 1: "")_", approved by "_pLearned.Reviewer_".", $SELECT(pLearned.ApprovedAt '= "": pLearned.ApprovedAt, 1: tPrevEnd), $SELECT(pLearned.ApprovedAt '= "": pLearned.ApprovedAt, 1: tPrevEnd), {"node":"@triage", "sub":"memory", "learned":(pLearned.LocalCode)}, tS0, "ok", .tPrevEnd)
 	}
 
 	// resend and outbound hops, also from the sessions a resend started
@@ -199,7 +199,40 @@ ClassMethod Build(pLog As AgenticProd.Data.DecisionLog, pNs As %String, pItems A
 		Set tPrev = $SELECT(tStep.endAt ] tStep.at: tStep.endAt, 1: tStep.at)
 	}
 	Quit {"id":(+pLog.%Id()), "headerId":(pLog.HeaderId), "sessionId":(tS0), "namespace":(pNs), "decision":(pLog.Decision), "outcome":(##class(AgenticProd.UI.Flow).OutcomeLane(tOutcome)),
-		"traceUrl":(##class(AgenticProd.UI.REST).TraceUrl(pNs)), "steps":(tSteps)}
+		"traceUrl":(##class(AgenticProd.UI.REST).TraceUrl(pNs)), "agent":(..AgentInfo(tAgentName, pUsage, pTools, pLearned)), "steps":(tSteps)}
+}
+
+/// The agent sub-node a tool call lights: knowledge, skills or tools. A refused call also shows on policies.
+ClassMethod SubNode(pCall As %DynamicObject) As %String [ Internal ]
+{
+	Quit $CASE(pCall.Tool, "search_loinc": "knowledge", "load_skill": "skills", : "tools")
+}
+
+/// What the agent used for this message, one entry per sub-node of the canvas. Names come from the
+/// agent class parameters, counts from the recorded tool calls.
+ClassMethod AgentInfo(pName As %String, pUsage As %DynamicObject, pTools As %DynamicArray, pLearned As %DynamicObject) As %DynamicObject [ Internal ]
+{
+	Set tCls = "AgenticProd.Agent.TriageAgent", tUsed = $IsObject(pUsage) && (pUsage.Decision '= "")
+	Set tNames = [], tSeen = "", tAllowed = 0, tDenied = 0, tCand = 0, tSkillCalls = 0
+	Set tIter = pTools.%GetIterator()
+	While tIter.%GetNext(, .tCall) {
+		If tCall.Status = "DENIED" { Set tDenied = tDenied + 1 } Else { Set tAllowed = tAllowed + 1 }
+		Set tCand = tCand + (tCall.Tool = "search_loinc"), tSkillCalls = tSkillCalls + (tCall.Tool = "load_skill")
+		Continue:((","_tSeen_",")[(","_tCall.Tool_","))
+		Set tSeen = tSeen_$SELECT(tSeen'="": ",", 1: "")_tCall.Tool
+		Do tNames.%Push(tCall.Tool)
+	}
+	Set tSkills = []
+	For i = 1:1:$LENGTH($PARAMETER(tCls, "SKILLS"), ",") {
+		Set tOne = $PIECE($PIECE($PARAMETER(tCls, "SKILLS"), ",", i), ".", *)
+		Do:tOne'="" tSkills.%Push(tOne)
+	}
+	Quit {"name":(pName), "class":"%AI.Agent", "used":(''tUsed),
+		"model":($SELECT(tUsed: pUsage.Model, 1: "")), "provider":($PARAMETER(tCls, "PROVIDER")), "replay":($SELECT(tUsed: ''pUsage.Replay, 1: 0)),
+		"sessionId":($SELECT(tUsed: pUsage.AgentSessionId, 1: "")),
+		"tokens":($SELECT(tUsed: +pUsage.PromptTokens + pUsage.CompletionTokens, 1: 0)), "costUsd":($SELECT(tUsed: +pUsage.CostUsd, 1: 0)),
+		"tools":(tNames), "skills":(tSkills), "skillCalls":(tSkillCalls), "searches":(tCand),
+		"allowed":(tAllowed), "denied":(tDenied), "learned":($SELECT($IsObject(pLearned): pLearned.LocalCode, 1: ""))}
 }
 
 /// pStep appended; pExtra adds node/edge/outcome. pPrevEnd is moved to the step's end.

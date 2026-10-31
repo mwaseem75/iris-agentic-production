@@ -62,6 +62,20 @@ Method TestMapCodeApprovedThenResent()
 	Do $$$AssertEquals(tResend.edge.to, "EhrOut")
 	Do $$$AssertEquals(tJ.steps.%Get(11).kind, "learning")
 	Do $$$AssertEquals(tJ.steps.%Get(8).outcome, "SENT_FOR_APPROVAL")
+	Do $$$AssertEquals(tJ.steps.%Get(4).sub, "model", "agent step pulses Model")
+	Do $$$AssertEquals(tJ.steps.%Get(4).tokens, 120)
+	Do $$$AssertEquals(tTool.sub, "tools")
+	Do $$$AssertEquals(tJ.steps.%Get(6).sub, "knowledge", "search_loinc lights Knowledge")
+	Do $$$AssertEquals(tJ.steps.%Get(11).sub, "memory")
+	Do $$$AssertEquals(tJ.steps.%Get(11).learned, "ZZ1", "memory shows the learned code")
+	Do $$$AssertEquals(tJ.steps.%Get(10).node, "IntegrationSupport", "human review node")
+	Do $$$AssertEquals(tJ.agent.provider, "openai")
+	Do $$$AssertEquals(tJ.agent.model, "test-model")
+	Do $$$AssertEquals(tJ.agent.tools.%Get(1), "search_loinc")
+	Do $$$AssertEquals(tJ.agent.searches, 1)
+	Do $$$AssertEquals(tJ.agent.allowed, 2)
+	Do $$$AssertEquals(tJ.agent.denied, 0)
+	Do $$$AssertEquals(tJ.agent.learned, "ZZ1")
 }
 
 Method TestOldItemNamesMapToRenamedItems()
@@ -90,6 +104,8 @@ Method TestAutoFixApplied()
 	Do $$$AssertEquals(tJ.steps.%Get(6).outcome, "APPLIED")
 	Do $$$AssertEquals(tJ.steps.%Get(7).edge.to, "EhrOut")
 	Do $$$AssertEquals(tJ.steps.%Get(7).waitLabel, "", "short steps are not labelled")
+	Do $$$AssertEquals(tJ.agent.learned, "", "nothing learned")
+	Do $$$AssertEquals(tJ.agent.tools.%Size(), 0)
 }
 
 Method TestFlaggedInjection()
@@ -103,6 +119,30 @@ Method TestFlaggedInjection()
 	Do $$$AssertEquals(tJ.steps.%Get(1).status, "warn", "agent step says it was not used")
 	Do $$$AssertEquals(tJ.steps.%Get(4).kind, "workflow", "an escalation waits for a person")
 	Do $$$AssertEquals(tJ.steps.%Get(4).status, "wait")
+	Do $$$AssertEquals(tJ.agent.used, 0, "agent not used")
+}
+
+/// A flagged message where the agent still ran and one call was refused by the read-only policy.
+Method TestDeniedToolLightsPolicies()
+{
+	Set tLog = ..Log("ESCALATE", "{""evidence"":[""suspicious instruction in NTE(1):3: ignore previous instructions""]}")
+	Set tHops = [(..Hop(100, "Triage", "TriageAgent", "2026-10-31 10:00:00.100", "2026-10-31 10:00:00.700"))]
+	Set tTools = [{"Tool":"load_skill", "Status":"OK", "DurationMs":5, "ResultLength":50, "ErrorText":"", "CreatedAt":""},
+		{"Tool":"update_message", "Status":"DENIED", "DurationMs":1, "ResultLength":0, "ErrorText":"", "CreatedAt":""}]
+	Set tJ = ##class(AgenticProd.UI.Journey).Build(tLog, "IRISAPP", ..Items(), tHops, tTools, ..Usage("ESCALATE"), "", "SENT_FOR_APPROVAL")
+	Set tSkill = "", tDenied = ""
+	Set tIter = tJ.steps.%GetIterator()
+	While tIter.%GetNext(, .tStep) {
+		Set:tStep.tool="load_skill" tSkill = tStep
+		Set:tStep.tool="update_message" tDenied = tStep
+	}
+	Do $$$AssertEquals(tSkill.sub, "skills")
+	Do $$$AssertEquals(tDenied.denied, 1, "refused call flagged")
+	Do $$$AssertEquals(tDenied.status, "bad")
+	Do $$$AssertEquals(tJ.agent.denied, 1)
+	Do $$$AssertEquals(tJ.agent.skillCalls, 1)
+	Do $$$AssertEquals(tJ.agent.skills.%Size(), 2, "HL7Repair and CodeMapping")
+	Do $$$AssertEquals(tJ.steps.%Get(tJ.steps.%Size() - 1).kind, "workflow")
 }
 
 Method TestHelpers()

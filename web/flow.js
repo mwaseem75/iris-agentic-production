@@ -3,20 +3,13 @@
 // step-by-step journey. Needs el, get, send, money, showTab, showStory, refreshDecisions, renderSpans,
 // homeNs, decNs and includeEval from the dashboard script.
 (function () {
-  var LANES = ["inbound", "router", "ai", "checks", "decision", "outcome"];
-  var LANE_LABEL = { inbound: "Inbound", router: "Router", ai: "AI triage", checks: "Checks", decision: "Decision", outcome: "Outcome" };
-  var LANE_COLOR = { inbound: "#2563a8", router: "#6d4aa8", ai: "#1f7a4d", checks: "#9a6400", decision: "#0f766e", outcome: "#475569" };
-  // The three gates are real steps of every decision, so they are always drawn in the Checks lane
-  var GATES = [{ key: "@injection", label: "Injection check" }, { key: "@grounding", label: "Grounding check" }, { key: "@triage", label: "Triage rule" }];
   var STATUS = {
     APPROVED: ["Approved", "good"], REVIEW_APPLIED: ["Approved, applied", "good"], REVIEW_RESENT: ["Approved, resent", "good"],
     REVIEW_CLOSED: ["Approved, closed", "good"], REVIEW_RETURNED: ["Approved, returned", "good"], REVIEW_REJECTED: ["Review rejected", "bad"],
     REVIEW_BAD_LOINC: ["Bad LOINC", "bad"], REVIEW_FIX_FAILED: ["Fix failed", "bad"], APPLIED: ["Applied", "good"], RESENT: ["Resent", "good"],
     REJECTED: ["Rejected", "bad"], waiting: ["Waiting", "warn"], OBSERVED: ["Observed", "other"], ERROR: ["Send failed", "bad"]
   };
-  var BORDER = { good: "#1f7a4d", bad: "#b42318", warn: "#9a6400", other: "#7b8794" };
   var POLL_MS = 2000, MAP_MS = 10000, STEP_MS = 1100;
-  var MAP_W = 900, LANE_W = MAP_W / LANES.length, NODE_W = 132, NODE_H = 40, ROW_H = 54, HEAD_H = 30;
   var SVGNS = "http://www.w3.org/2000/svg";
 
   var ns = "IRISAPP", active = false, started = false, timer = null, polling = false, lastTop = "", lastSig = "";
@@ -147,76 +140,219 @@
     $("fj-fwd").disabled = !J || cur >= J.steps.length - 1;
   }
 
-  // ---- map ----
-  function canonOf() {
-    var c = {};
-    (map ? map.items : []).forEach(function (it) { c[it.name.toUpperCase()] = it.name; });
-    return function (n) { return n ? (n.charAt(0) === "@" ? n : (c[String(n).toUpperCase()] || n)) : null; };
-  }
-  // Nodes a step touches, in the order the message passed them
-  function stepNodes(st, canon) {
-    if (st.edge) return [canon(st.edge.from), canon(st.edge.to)];
-    return st.node ? [canon(st.node)] : [];
-  }
-  function pathUpTo(last, canon) {
-    var seq = [];
-    if (J) for (var i = 0; i <= last && i < J.steps.length; i++) {
-      stepNodes(J.steps[i], canon).forEach(function (n) { if (n && seq[seq.length - 1] !== n) seq.push(n); });
-    }
-    return seq;
-  }
   function svg(tag, attrs, text) {
     var e = document.createElementNS(SVGNS, tag);
     Object.keys(attrs || {}).forEach(function (k) { e.setAttribute(k, attrs[k]); });
     if (text != null) e.textContent = text;
     return e;
   }
-  function drawMap() {
-    var root = $("fl-map");
-    if (!root || !map) return;
-    var canon = canonOf(), full = {};
-    pathUpTo(J ? J.steps.length - 1 : -1, canon).forEach(function (n) { full[n] = 1; });
-    // Only the nodes this message passed, resend targets (LabRouter, EhrOut, FhirOut) included
-    var lanes = {};
-    LANES.forEach(function (l) { lanes[l] = []; });
-    map.items.forEach(function (it) {
-      if (lanes[it.lane] && full[it.name]) lanes[it.lane].push({ key: it.name, label: it.name, sub: "in " + it.in + " · out " + it.out + (it.errors ? " · err " + it.errors : ""), err: it.errors > 0 });
-    });
-    GATES.forEach(function (g) { if (full[g.key]) lanes.checks.push({ key: g.key, label: g.label, sub: "" }); });
-    var rows = Math.max.apply(null, LANES.map(function (l) { return lanes[l].length; }).concat([3])), H = HEAD_H + rows * ROW_H + 4;
-    root.textContent = "";
-    root.setAttribute("viewBox", "0 0 " + MAP_W + " " + H);
-    var pos = {};
-    LANES.forEach(function (l, i) {
-      var x0 = i * LANE_W;
-      root.appendChild(svg("rect", { x: x0, y: 0, width: LANE_W, height: H, fill: LANE_COLOR[l], opacity: i % 2 ? 0.05 : 0.09 }));
-      root.appendChild(svg("text", { x: x0 + LANE_W / 2, y: 18, "text-anchor": "middle", class: "lane-h", style: "fill:" + LANE_COLOR[l] }, LANE_LABEL[l]));
-      lanes[l].forEach(function (n, k) { pos[n.key] = { x: x0 + LANE_W / 2, y: HEAD_H + k * ROW_H + ROW_H / 2, n: n }; });
-    });
-    var curNodes = J && cur >= 0 ? stepNodes(J.steps[cur], canon) : [];
-    var seq = pathUpTo(cur, canon).filter(function (n) { return pos[n]; }), onPath = {};
-    seq.forEach(function (n) { onPath[n] = 1; });
-    // Path under the nodes, so a node keeps its label readable
-    var pts = [];
-    seq.forEach(function (n, i) {
-      var p = pos[n], prev = i > 0 ? pos[seq[i - 1]] : null, next = i < seq.length - 1 ? pos[seq[i + 1]] : null;
-      function edgePt(o, toward) {
-        if (toward.x > o.x + 1) return [o.x + NODE_W / 2, o.y];
-        if (toward.x < o.x - 1) return [o.x - NODE_W / 2, o.y];
-        return [o.x, o.y + (toward.y > o.y ? NODE_H / 2 : -NODE_H / 2)];
-      }
-      if (prev) pts.push(edgePt(p, prev));
-      else if (!next) pts.push([p.x, p.y]);
-      if (next) pts.push(edgePt(p, next));
-    });
-    if (pts.length > 1) root.appendChild(svg("polyline", { class: "fl-path", points: pts.map(function (q) { return q[0] + "," + q[1]; }).join(" ") }));
-    Object.keys(pos).forEach(function (k) {
-      var p = pos[k], n = p.n, cls = "node" + (onPath[k] ? " on" : "") + (curNodes.indexOf(k) >= 0 ? " cur" : "") + (n.err ? " err" : "");
-      root.appendChild(svg("rect", { class: cls, x: p.x - NODE_W / 2, y: p.y - NODE_H / 2, width: NODE_W, height: NODE_H, rx: 6 }));
-      root.appendChild(svg("text", { x: p.x, y: p.y - (n.sub ? 3 : -4), "text-anchor": "middle" }, n.label.length > 20 ? n.label.slice(0, 19) + "…" : n.label));
-      if (n.sub) root.appendChild(svg("text", { x: p.x, y: p.y + 11, "text-anchor": "middle", class: "sub" }, n.sub));
-    });
+
+  // ---- workflow canvas ----
+  var CW = 960, CH = 460;
+  var ORDER = ["trigger", "router", "agent", "guard", "triage"];
+  var SUBS = ["model", "memory", "tools", "skills", "knowledge", "policies"];
+  var ICON = {
+    trigger: "M4 12h10M10 7l5 5-5 5M18 5v14", router: "M5 6h6v12H5zM13 9h6M13 15h6M11 12h2", agent: "M12 4v3M7 8h10v9H7zM9.5 12h.01M14.5 12h.01M10 15h4",
+    guard: "M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z", triage: "M5 5h14l-5 7v6l-4 2v-8z", ehr: "M4 6h16v10H4zM9 20h6M12 16v4", fhir: "M12 3l8 4.5v9L12 21l-8-4.5v-9zM12 12l8-4.5M12 12v9M12 12L4 7.5",
+    human: "M12 4a3 3 0 100 6 3 3 0 000-6zM5 20c0-4 3-6 7-6s7 2 7 6", rejected: "M6 6l12 12M18 6L6 18", resent: "M4 12a8 8 0 0114-5l2-2v6h-6l2.5-2.5A5 5 0 007 12M20 12a8 8 0 01-14 5l-2 2v-6h6l-2.5 2.5A5 5 0 0017 12",
+    model: "M12 3v4M12 17v4M3 12h4M17 12h4M8 8h8v8H8z", memory: "M5 7c0-2 14-2 14 0v10c0 2-14 2-14 0zM5 12c0 2 14 2 14 0", tools: "M14 6a4 4 0 00-5 5l-5 5 3 3 5-5a4 4 0 005-5l-3 2-2-2z",
+    skills: "M5 5h6v6H5zM13 5h6v6h-6zM5 13h6v6H5zM16 13v6M13 16h6", knowledge: "M11 4a7 7 0 100 14 7 7 0 000-14zM16 16l4 4", policies: "M7 11V8a5 5 0 0110 0v3M6 11h12v9H6z"
+  };
+  var SUB_TITLE = { model: "Model", memory: "Memory", tools: "Tools", skills: "Skills", knowledge: "Knowledge", policies: "Policies" };
+  var GUARDS = ["injection", "grounding", "ambiguity"];
+  var cv = null, cvKey = "", anim = null, raf = 0, cvUi = {};
+
+  function h(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function icon(name) {
+    var s = svg("svg", { "class": "ic", viewBox: "0 0 24 24" });
+    s.appendChild(svg("path", { d: ICON[name] || ICON.router }));
+    return s;
   }
+  function laneOf(name) {
+    var n = (name || "").toUpperCase(), l = "";
+    if (map) map.items.forEach(function (it) { if (it.name.toUpperCase() === n) l = it.lane; });
+    return l;
+  }
+  // Canvas node a step belongs to. A hop to Triage keeps the message at the router: Triage lights when its rule runs.
+  function keyOf(st) {
+    var to = st.edge ? st.edge.to : st.node, lane = laneOf(to);
+    switch (st.kind) {
+      case "inbound": return "trigger";
+      case "router": return "router";
+      case "agent": case "tool": return "agent";
+      case "injection": case "grounding": return "guard";
+      case "triage": case "learning": return "triage";
+      case "workflow": return "out:human";
+      case "hop":
+        if (lane === "ai") return "agent";
+        return lane === "outcome" ? "out:human" : "router";
+      default: // out, resend
+        return lane === "outcome" ? "out:" + to : "out:Resent";
+    }
+  }
+  function nodeTitle(k) {
+    if (k === "out:human") return "Human review";
+    return k.replace(/^out:/, "");
+  }
+  function outIcon(k) { return k === "out:human" ? "human" : k === "out:Resent" ? "resent" : k === "out:Rejected" ? "rejected" : /fhir/i.test(k) ? "fhir" : "ehr"; }
+
+  function mkNode(key, x, y, w, hh, title, ico, extra) {
+    var n = h("div", "fl-nd" + (extra ? " " + extra : ""));
+    n.style.left = x + "px"; n.style.top = y + "px"; n.style.width = w + "px"; n.style.height = hh + "px";
+    var head = h("div", "h"), st = h("span", "st"), sub = h("div", "s");
+    head.appendChild(icon(ico)); head.appendChild(h("span", null, title)); head.appendChild(st);
+    n.appendChild(head); n.appendChild(sub);
+    n.appendChild(h("span", "port i")); n.appendChild(h("span", "port o"));
+    cv.root.appendChild(n);
+    cvUi[key] = { el: n, st: st, sub: sub, x: x, y: y, w: w, h: hh };
+    return cvUi[key];
+  }
+  function wire(a, b, cls) {
+    var A = cvUi[a], B = cvUi[b];
+    if (!A || !B) return;
+    var x1, y1, x2, y2, d;
+    if (cls === "sub") {
+      x1 = A.x + A.w / 2; y1 = A.y + A.h; x2 = B.x + B.w / 2; y2 = B.y;
+      d = "M" + x1 + "," + y1 + " C" + x1 + "," + (y1 + 60) + " " + x2 + "," + (y2 - 60) + " " + x2 + "," + y2;
+    } else {
+      x1 = A.x + A.w; y1 = A.y + A.h / 2; x2 = B.x; y2 = B.y + B.h / 2;
+      var dx = Math.max(24, Math.abs(x2 - x1) / 2);
+      d = "M" + x1 + "," + y1 + " C" + (x1 + dx) + "," + y1 + " " + (x2 - dx) + "," + y2 + " " + x2 + "," + y2;
+    }
+    var p = svg("path", { "class": "w " + (cls || ""), d: d });
+    cv.wires.appendChild(p);
+    cv.paths[a + ">" + b] = p;
+  }
+
+  // Nodes and wires for the whole journey; paintCanvas then lights the part reached at the current step
+  function buildCanvas() {
+    var root = $("fl-canvas");
+    if (!root) return;
+    root.textContent = ""; cvUi = {};
+    var wires = svg("svg", { "class": "wires", viewBox: "0 0 " + CW + " " + CH });
+    root.appendChild(wires);
+    cv = { root: root, wires: wires, paths: {}, dot: null, label: null };
+    if (!J) return;
+    var ag = J.agent || {}, outs = [];
+    J.steps.forEach(function (st) { var k = keyOf(st); if (/^out:/.test(k) && outs.indexOf(k) < 0) outs.push(k); });
+    if (J.outcome === "rejected" && outs.indexOf("out:Rejected") < 0) outs.push("out:Rejected");
+    mkNode("trigger", 10, 82, 108, 76, "Trigger", "trigger");
+    mkNode("router", 148, 82, 108, 76, "Router", "router");
+    mkNode("agent", 286, 62, 212, 116, "AI Hub Agent", "agent", "agent").sub.textContent = (ag.name || "TriageAgent") + " · " + (ag["class"] || "%AI.Agent");
+    var g = mkNode("guard", 528, 62, 132, 116, "Guardrails", "guard");
+    GUARDS.forEach(function (r) {
+      var row = h("div", "rw"), mark = h("i", null, "·");
+      row.appendChild(mark); row.appendChild(h("span", null, r.charAt(0).toUpperCase() + r.slice(1)));
+      g.sub.appendChild(row); g[r] = mark;
+    });
+    mkNode("triage", 690, 82, 96, 76, "Triage", "triage");
+    var gap = outs.length > 1 ? Math.min(60, 280 / (outs.length - 1)) : 0, y0 = outs.length > 1 ? 14 : 100;
+    outs.forEach(function (k, i) { mkNode(k, 816, y0 + i * gap, 134, 50, nodeTitle(k), outIcon(k)); });
+    SUBS.forEach(function (k, i) { mkNode(k, 10 + i * 158, 300, 148, 120, SUB_TITLE[k], k); });
+    (ag.tools || []).forEach(function (t) { if (t !== "search_loinc" && t !== "load_skill") cvUi.tools.sub.appendChild(h("span", "chip", t)); });
+    (ag.skills || []).forEach(function (t) { cvUi.skills.sub.appendChild(h("span", "chip", t)); });
+    for (var i = 0; i < ORDER.length - 1; i++) wire(ORDER[i], ORDER[i + 1]);
+    outs.forEach(function (k) { wire("triage", k); });
+    SUBS.forEach(function (k) { wire("agent", k, "sub"); });
+    cv.dot = svg("circle", { "class": "dot", r: 6, cx: -20, cy: -20 });
+    cv.label = svg("text", { "class": "wl", x: -80, y: -50 }, "1 message");
+    wires.appendChild(cv.dot); wires.appendChild(cv.label);
+  }
+  function fitCanvas() {
+    var wrap = $("fl-wrap"), root = $("fl-canvas");
+    if (!wrap || !root || !wrap.clientWidth) return;
+    var sc = Math.min(1, wrap.clientWidth / CW);
+    root.style.transform = "scale(" + sc + ")";
+    wrap.style.height = Math.round(CH * sc) + "px";
+  }
+
+  // Everything the canvas shows at step cur; prog (0..1) is how far that step has run while playing
+  function paintCanvas(prog) {
+    if (!cv || !J || !cvUi.agent) return;
+    var ag = J.agent || {}, st = {}, i;
+    Object.keys(cvUi).forEach(function (key) { cvUi[key].el.classList.remove("run", "done", "fail", "wait", "lit", "bad", "seen"); });
+    SUBS.forEach(function (key) { cvUi[key].el.classList.add("seen"); });
+    var tokens = 0, cost = 0, allowed = 0, denied = 0, searches = 0, called = {}, learned = "", guard = {};
+    var prevKey = "", curKey = "", lit = "", litBad = false, seq = [];
+    for (i = 0; i <= cur && i < J.steps.length; i++) {
+      var s = J.steps[i], key = keyOf(s), running = i === cur && prog < 1;
+      var state = s.status === "wait" ? "wait" : (s.status === "bad" && !/^(tool|injection|grounding)$/.test(s.kind) ? "fail" : "done");
+      if (cvUi[key]) { st[key] = running && state !== "wait" ? "run" : state; cvUi[key].el.classList.add("seen"); }
+      if (seq[seq.length - 1] !== key) seq.push(key);
+      if (i === cur) { curKey = key; if (seq.length > 1) prevKey = seq[seq.length - 2]; }
+      if (s.kind === "agent") { if (running) { tokens = Math.round(s.tokens * prog); cost = s.costUsd * prog; } else { tokens = s.tokens; cost = s.costUsd; } if (i === cur) lit = "model"; }
+      if (s.kind === "tool") {
+        called[s.tool] = 1;
+        if (s.denied) denied++; else allowed++;
+        if (s.tool === "search_loinc") searches++;
+        if (i === cur) { lit = s.denied ? "policies" : s.sub; litBad = !!s.denied; }
+      }
+      if (s.kind === "learning") { learned = s.learned; if (i === cur) lit = "memory"; }
+      if (s.kind === "injection") guard.injection = s.status === "bad" ? "bad" : "ok";
+      if (s.kind === "grounding") {
+        var bad = false, amb = false;
+        (s.checks || []).forEach(function (c) { if (!c.pass) { if (/ambig/i.test(c.text)) amb = true; else bad = true; } });
+        guard.grounding = bad ? "bad" : "ok"; guard.ambiguity = amb ? "bad" : "ok";
+      }
+      if (s.kind === "triage" && cvUi["out:Rejected"] && J.outcome === "rejected") { st["out:Rejected"] = running ? "run" : "fail"; cvUi["out:Rejected"].el.classList.add("seen"); }
+    }
+    Object.keys(st).forEach(function (key) {
+      var u = cvUi[key], c = st[key];
+      u.el.classList.add(c);
+      u.st.className = "st " + (c === "run" ? "spin" : c === "done" ? "ok" : c === "fail" ? "no" : "hold");
+      u.st.textContent = c === "done" ? "✓" : c === "fail" ? "✕" : c === "wait" ? "…" : "";
+    });
+    GUARDS.forEach(function (r) {
+      var v = guard[r], m = cvUi.guard[r];
+      m.textContent = v === "ok" ? "✓" : v === "bad" ? "✕" : "·";
+      m.style.color = v === "ok" ? "#36a56b" : v === "bad" ? "#ef6a5b" : "#6b7c92";
+    });
+    cvUi.model.sub.textContent = ag.used ? ag.provider + " · " + ag.model + (ag.replay ? " (replay)" : "") + "\n" + tokens + " tokens · $" + cost.toFixed(5) : "agent not used";
+    cvUi.memory.sub.textContent = (ag.sessionId ? "session " + ag.sessionId : "no agent session") + (learned ? "\nlearned " + learned : "");
+    cvUi.knowledge.sub.textContent = "search_loinc on IRIS vector search" + (searches ? "\n" + searches + " search" + (searches > 1 ? "es" : "") + " run" : "");
+    cvUi.policies.sub.textContent = "ReadOnly + Audit\nallowed " + allowed + " · denied " + denied;
+    Array.prototype.forEach.call(cvUi.tools.sub.querySelectorAll(".chip"), function (c) { c.classList.toggle("on", !!called[c.textContent]); });
+    Array.prototype.forEach.call(cvUi.skills.sub.querySelectorAll(".chip"), function (c) { c.classList.toggle("on", !!called.load_skill); });
+    if (!cvUi.tools.sub.firstChild) cvUi.tools.sub.textContent = "no tool called";
+    if (lit && cvUi[lit]) {
+      var le = cvUi[lit].el;
+      le.classList.add("lit"); if (litBad) le.classList.add("bad");
+      if (prog < 1) { le.classList.remove("pulse"); void le.offsetWidth; le.classList.add("pulse"); }
+    }
+    if (denied) cvUi.policies.el.classList.add("bad");
+    var hs = J.steps.filter(function (x) { return x.kind === "workflow"; })[0];
+    if (cvUi["out:human"]) cvUi["out:human"].sub.textContent = hs && J.steps.indexOf(hs) <= cur ? (hs.waitLabel || (hs.status === "wait" ? "waiting for the reviewer" : hs.status === "bad" ? "rejected" : "approved")) : "";
+    Object.keys(cv.paths).forEach(function (p) { cv.paths[p].classList.remove("on", "lit", "bad"); });
+    for (i = 1; i < seq.length; i++) { var w = cv.paths[seq[i - 1] + ">" + seq[i]]; if (w) w.classList.add("on"); }
+    if (lit && cv.paths["agent>" + lit]) { var sw = cv.paths["agent>" + lit]; sw.classList.add("lit"); if (litBad) sw.classList.add("bad"); }
+    var wp = prevKey && prevKey !== curKey ? cv.paths[prevKey + ">" + curKey] : null;
+    if (wp && prog < 1) {
+      var pt = wp.getPointAtLength(wp.getTotalLength() * Math.min(1, prog / 0.6));
+      cv.dot.setAttribute("cx", pt.x); cv.dot.setAttribute("cy", pt.y); cv.label.setAttribute("x", pt.x - 22); cv.label.setAttribute("y", pt.y - 12);
+    } else { cv.dot.setAttribute("cx", -20); cv.label.setAttribute("x", -80); }
+  }
+  function frame(now) {
+    raf = 0;
+    if (!anim) return;
+    var p = (now - anim.t0) / anim.dur;
+    if (p >= 1) { anim = null; paintCanvas(1); return; }
+    paintCanvas(Math.max(0, p));
+    raf = requestAnimationFrame(frame);
+  }
+  // While playing the current step runs as an animation; a plain jump shows the settled state
+  function startAnim() {
+    anim = null;
+    if (raf) { cancelAnimationFrame(raf); raf = 0; }
+    if (playTimer && cur >= 0) { anim = { t0: performance.now(), dur: Math.max(300, STEP_MS / speed - 100) }; raf = requestAnimationFrame(frame); }
+    else paintCanvas(1);
+  }
+  function drawMap() {
+    var key = J ? J.id + ":" + J.steps.length + ":" + (map ? map.items.length : 0) : "";
+    if (key !== cvKey || !cv || !cv.root.firstChild) { cvKey = key; buildCanvas(); }
+    fitCanvas();
+    startAnim();
+  }
+  window.addEventListener("resize", fitCanvas);
 
   // ---- burst ----
   function burst(confirm) {
