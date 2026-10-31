@@ -31,6 +31,10 @@ Parameter BURSTLIVEMAX = 10;
 /// live Messages list.
 Parameter BURSTRUN = 900000;
 
+/// Live bursts count from here. Replay bursts (BURSTRUN up to here) are the only messages the agent
+/// replays while its Mode stays live; see IsReplayBurst.
+Parameter BURSTLIVERUN = 950000;
+
 /// Eval run ids from BURSTRUN up to here are bursts; test stubs use 9999xx.
 Parameter BURSTEND = 999000;
 
@@ -244,7 +248,7 @@ ClassMethod Card(pId As %String) As %DynamicObject
 }
 
 /// Plan, and unless pDryRun send, a burst of pBody.n eval cases as new messages. Nothing here
-/// changes a setting: replay needs the agent item in replay mode, live needs live mode, a live burst
+/// changes a setting: a replay burst works in any mode (the agent replays its control IDs), live needs live mode, a live burst
 /// needs confirm and at most BURSTLIVEMAX cases. pAgent overrides the agent's settings for tests
 /// ({mode, killSwitch, budget, used, model}). Returns {ok, status (HTTP), error, ...}.
 ClassMethod Burst(pBody As %DynamicObject, pCanEdit As %Boolean, pDryRun As %Boolean = 0, pAgent As %DynamicObject = "") As %DynamicObject
@@ -260,7 +264,8 @@ ClassMethod Burst(pBody As %DynamicObject, pCanEdit As %Boolean, pDryRun As %Boo
 	Quit:(tN'?1.N)||(tN<1)||(tN>..#BURSTMAX) ..Refuse(400, "n must be a whole number from 1 to "_..#BURSTMAX)
 	Quit:..CheckNs(pBody.%Get("ns"))'="IRISAPP" ..Refuse(400, "Bursts go to IRISAPP's LabFileIn only")
 	Quit:pAgent.killSwitch ..Refuse(409, "The AI kill switch is on; every failed message would go to a person")
-	Quit:pAgent.mode'=$SELECT(tLive: "live", 1: "replay") ..Refuse(409, "The agent is in "_pAgent.mode_" mode; change it in Settings to send a "_$SELECT(tLive: "live", 1: "replay")_" burst")
+	// a replay burst needs no mode: the agent replays its own control IDs while it stays live
+	Quit:tLive&&(pAgent.mode'="live") ..Refuse(409, "The agent is in "_pAgent.mode_" mode; change it in Settings to send a live burst")
 	If tLive {
 		Quit:tN>..#BURSTLIVEMAX ..Refuse(400, "A live burst is limited to "_..#BURSTLIVEMAX_" cases")
 		Quit:pAgent.budget&&(pAgent.used>=pAgent.budget) ..Refuse(409, "The daily token budget is used up ("_pAgent.used_" of "_pAgent.budget_")")
@@ -273,7 +278,7 @@ ClassMethod Burst(pBody As %DynamicObject, pCanEdit As %Boolean, pDryRun As %Boo
 		Quit {"ok":false, "status":409, "needsConfirm":true, "error":("A live burst of "_tCases.%Size()_" cases on "_pAgent.model_" costs about $"_tEstimate_"; confirm to send"), "estimatedCostUsd":(tEstimate), "n":(tCases.%Size())}
 	}
 	Set tSent = [], tSC = $$$OK
-	Set tRun = ..#BURSTRUN + $INCREMENT(^AgenticProd.Flow("burst"))
+	Set tRun = $SELECT(tLive: ..#BURSTLIVERUN, 1: ..#BURSTRUN) + $INCREMENT(^AgenticProd.Flow("burst"))
 	Set tIter = tCases.%GetIterator()
 	While tIter.%GetNext(, .tCase) {
 		Set tControl = "EV"_tRun_"-"_tCase
@@ -283,6 +288,13 @@ ClassMethod Burst(pBody As %DynamicObject, pCanEdit As %Boolean, pDryRun As %Boo
 	}
 	Quit:$$$ISERR(tSC) ..Refuse(500, $SYSTEM.Status.GetErrorText(tSC))
 	Quit {"ok":true, "status":200, "mode":($SELECT(tLive: "live", 1: "replay")), "sent":(tSent), "estimatedCostUsd":(tEstimate), "dryRun":(''pDryRun)}
+}
+
+/// 1 when eval run id pRunId belongs to a replay burst: the agent answers it from the recorded run
+/// even though its Mode is live.
+ClassMethod IsReplayBurst(pRunId As %String) As %Boolean
+{
+	Quit (pRunId?1.N) && (pRunId >= ..#BURSTRUN) && (pRunId < ..#BURSTLIVERUN)
 }
 
 ClassMethod Refuse(pStatus As %Integer, pMessage As %String) As %DynamicObject [ Internal ]

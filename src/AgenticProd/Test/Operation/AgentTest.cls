@@ -265,6 +265,23 @@ Method TestReplayReturnsRecordedDecision()
 	Do $$$AssertEquals(tRS.Decision, "MAP_CODE")
 }
 
+/// A replay burst from the Flow tab is replayed while Mode stays live; a live burst is not (the stub
+/// agent is blocked from calling a model, so a non-replayed message escalates with "LLM blocked").
+Method TestReplayBurstWhileModeIsLive()
+{
+	Do $$$AssertStatusOK(..AddRecorded("T93", "replay-model", {"decision":"ESCALATE","error_class":"OTHER","confidence":0.5,"reason":"recorded"}, "15", 0))
+	Set tOp = ##class(AgenticProd.Operation.Agent).%New("TestAgentOp")
+	Set tOp.Mode = "live", tOp.Model = "replay-model"
+	Set tRequest = ##class(AgenticProd.Msg.TriageRequest).%New()
+	Set tRequest.HeaderId = -9102
+	Set tRequest.ControlId = "EV900005-T93"
+	Do $$$AssertStatusOK(tOp.Triage(tRequest, .tDecision))
+	Do $$$AssertEquals(tDecision.AgentSessionId, "15", "replay burst answered from the recorded run")
+	Set tRequest.ControlId = "EV950005-T93"
+	Do $$$AssertStatusOK(tOp.Triage(tRequest, .tDecision))
+	Do $$$AssertNotEquals(tDecision.AgentSessionId, "15", "live burst is not replayed")
+}
+
 Method TestReplayWithoutRecordEscalates()
 {
 	Set tOp = ##class(AgenticProd.Operation.Agent).%New("TestAgentOp")

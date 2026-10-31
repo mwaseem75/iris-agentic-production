@@ -155,7 +155,9 @@ Method Triage(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As Age
 			Set pResponse = ..EscalateDecision(pRequest, "AI kill switch is on; agent not called")
 			Quit
 		}
-		If ..Mode = "replay" {
+		// A replay burst from the Flow tab is replayed while the production stays live
+		Do ##class(AgenticProd.Eval.Runner).CaseOf(pRequest.ControlId, .tBurstRun)
+		If (..Mode = "replay") || ##class(AgenticProd.UI.Flow).IsReplayBurst(tBurstRun) {
 			$$$ThrowOnError(..Replay(pRequest, .pResponse))
 			Quit
 		}

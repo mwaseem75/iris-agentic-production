@@ -157,7 +157,6 @@ Method TestBurstRefusals()
 	Do $$$AssertEquals(##class(AgenticProd.UI.Flow).Burst({"n":3, "ns":"LEGACY"}, 1, 1, tReplay).status, 400, "LEGACY has no eval files")
 	Do $$$AssertEquals(##class(AgenticProd.UI.Flow).Burst({"n":3}, 1, 1, {"mode":"replay","killSwitch":1,"model":(..#MODEL)}).status, 409, "kill switch")
 	Do $$$AssertEquals(##class(AgenticProd.UI.Flow).Burst({"n":3, "mode":"live"}, 1, 1, tReplay).status, 409, "live burst while the agent is in replay mode")
-	Do $$$AssertEquals(##class(AgenticProd.UI.Flow).Burst({"n":3}, 1, 1, tLive).status, 409, "replay burst while the agent is live")
 	Do $$$AssertEquals(##class(AgenticProd.UI.Flow).Burst({"n":11, "mode":"live"}, 1, 1, tLive).status, 400, "live burst over 10")
 	Do $$$AssertEquals(##class(AgenticProd.UI.Flow).Burst({"n":3, "mode":"live"}, 1, 1, {"mode":"live","killSwitch":0,"budget":1000,"used":1000,"model":(..#MODEL)}).status, 409, "daily budget used up")
 	Set tAsk = ##class(AgenticProd.UI.Flow).Burst({"n":3, "mode":"live"}, 1, 1, tLive)
@@ -169,7 +168,7 @@ Method TestBurstRefusals()
 Method TestBurstPlansReplayFromRecordedRuns()
 {
 	Do ..Cleanup()
-	Set tAgent = {"mode":"replay","killSwitch":0,"budget":1000,"used":0,"model":(..#MODEL)}
+	Set tAgent = {"mode":"live","killSwitch":0,"budget":1000,"used":0,"model":(..#MODEL)}
 	Do $$$AssertEquals(##class(AgenticProd.UI.Flow).Burst({"n":3}, 1, 1, tAgent).status, 409, "no recorded run for the model yet")
 	Set tUse = ##class(AgenticProd.Data.Usage).%New()
 	Set tUse.HeaderId = ..#HEADER, tUse.Model = ..#MODEL, tUse.CaseId = "01", tUse.DecisionJSON = "{}", tUse.Replay = 0
@@ -179,6 +178,10 @@ Method TestBurstPlansReplayFromRecordedRuns()
 	Do $$$AssertEquals(tPlan.sent.%Size(), 1, "one recorded case, so one message")
 	Do $$$AssertTrue($MATCH(tPlan.sent.%Get(0).controlId, "EV9\d+-01"), "control id replay can read: "_tPlan.sent.%Get(0).controlId)
 	Do $$$AssertEquals(tPlan.estimatedCostUsd, 0, "replay is free")
+	Do $$$AssertTrue(##class(AgenticProd.UI.Flow).IsReplayBurst(900001), "replay burst run id")
+	Do $$$AssertEquals(##class(AgenticProd.UI.Flow).IsReplayBurst(950001), 0, "live burst run id")
+	Do $$$AssertEquals(##class(AgenticProd.UI.Flow).IsReplayBurst(""), 0, "plain message")
+	Do $$$AssertEquals(##class(AgenticProd.UI.Flow).IsReplayBurst(12), 0, "eval run")
 	Do $$$AssertTrue(tPlan.dryRun, "dry run wrote no file")
 	Do ..Cleanup()
 }
