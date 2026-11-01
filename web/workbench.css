@@ -1,9 +1,6 @@
 /* AI Hub Workbench tab. The map is absolutely positioned nodes over one SVG for the lines. */
-#wb-root { --wb-ai: #7c3aed; }
+#wb-lib, #wb-play, #wb-prod { --wb-ai: #7c3aed; }
 .nav-grp { color: #6b7a90; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; margin: 16px 20px 6px; list-style: none; }
-.wb-sub { display: flex; gap: 4px; background: var(--panel); border-bottom: 1px solid var(--line); margin: -4px 0 16px; }
-.wb-subtab { padding: 11px 14px; color: #475467; font-weight: 500; border-bottom: 2px solid transparent; text-decoration: none; }
-.wb-subtab.on { color: var(--accent); border-color: var(--accent); }
 .wb-panel.hidden { display: none; }
 .wb-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
 .wb-search { width: 320px; }
@@ -45,7 +42,11 @@
 .wb-sh { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 
 .wb-mapgrid { display: grid; grid-template-columns: 1fr 360px; gap: 16px; align-items: start; }
-.wb-cv { position: relative; min-height: 520px; border-radius: 14px; background: #16181d; background-image: radial-gradient(#2c313a 1.2px, transparent 1.2px); background-size: 22px 22px; overflow: auto; }
+.wb-cvwrap { position: relative; min-width: 0; }
+.wb-cv { position: relative; min-height: 360px; border-radius: 14px; background: #16181d; background-image: radial-gradient(#2c313a 1.2px, transparent 1.2px); background-size: 22px 22px; overflow: hidden; }
+.wb-stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.wb-zoom { position: absolute; right: 12px; bottom: 34px; display: flex; gap: 6px; }
+.wb-legend { position: absolute; left: 16px; bottom: 10px; font-size: 11.5px; color: #9ca3af; }
 .wb-svg { position: absolute; left: 0; top: 0; pointer-events: none; }
 .wb-n-node { position: absolute; background: #23262d; border: 1.5px solid #3f4451; border-radius: 12px; color: #e5e7eb; padding: 10px 12px; }
 .wb-n-node.wb-plain { opacity: .9; }
@@ -57,9 +58,13 @@
 .wb-nh i { font-size: 22px; color: #9ca3af; }
 .wb-host .wb-nh i { font-size: 28px; color: #c4b5fd; }
 .wb-nt { font-weight: 600; font-size: 14px; line-height: 1.2; }
-.wb-nk { font-size: 11.5px; color: #9ca3af; word-break: break-all; }
+.wb-nx { min-width: 0; flex: 1; }
+.wb-nt, .wb-nk { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wb-nk { font-size: 11.5px; color: #9ca3af; }
+.wb-n-node.wb-small { padding: 6px 10px; border-style: dashed; }
+.wb-small .wb-nh i { font-size: 18px; }
 .wb-host .wb-nk { color: #c4b5fd; }
-.wb-nm { font-size: 11.5px; color: #9ca3af; margin-top: 6px; display: flex; gap: 10px; flex-wrap: wrap; }
+.wb-nm { white-space: nowrap; font-size: 11.5px; color: #9ca3af; margin-top: 6px; display: flex; gap: 10px; flex-wrap: wrap; }
 .wb-nm b { color: #e5e7eb; font-weight: 600; }
 .wb-nm .wb-e, .wb-nm .wb-e b { color: #f87171; }
 .wb-tagpill { position: absolute; top: -9px; right: 10px; font-size: 10px; background: #2a2e37; color: #9ca3af; border: 1px solid #3f4451; border-radius: 6px; padding: 0 6px; }
@@ -69,7 +74,7 @@
 .wb-comp { position: absolute; width: 112px; text-align: center; cursor: pointer; }
 .wb-circle { width: 64px; height: 64px; margin: 0 auto; border-radius: 50%; background: #1e2128; border: 2px solid #4b5160; display: flex; align-items: center; justify-content: center; font-size: 26px; }
 .wb-comp.sel .wb-circle { border-color: #a78bfa; box-shadow: 0 0 0 5px rgba(167, 139, 250, .3); }
-.wb-cl { color: #e5e7eb; font-size: 12.5px; font-weight: 600; margin-top: 6px; line-height: 1.2; word-break: break-word; }
+.wb-cl { color: #e5e7eb; font-size: 12.5px; font-weight: 600; margin-top: 6px; line-height: 1.2; overflow-wrap: normal; word-break: normal; }
 .wb-cs { color: #9ca3af; font-size: 11px; line-height: 1.25; }
 .wb-kind { display: inline-block; font-size: 10px; color: #c4b5fd; background: #2e2546; border-radius: 5px; padding: 0 5px; margin-bottom: 3px; }
 @media (max-width: 1200px) { .wb-mapgrid { grid-template-columns: 1fr; } .wb-search { width: 100%; } }

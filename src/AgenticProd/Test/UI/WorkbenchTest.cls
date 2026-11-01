@@ -77,6 +77,20 @@ Method TestLibrary()
 	Do $$$AssertTrue(tBase.usedBy [ "TriageAgent", "toolset says who uses it")
 }
 
+Method TestOwnProductions()
+{
+	// A package mapped in from another database is not that namespace's production
+	Quit:'##class(%SYS.Namespace).Exists("LEGACY")
+	Set tRow = ##class(AgenticProd.UI.Workbench).NamespaceRow("LEGACY")
+	Set tNames = ",", tIter = tRow.productions.%GetIterator()
+	While tIter.%GetNext(, .tP) { Set tNames = tNames_tP.name_"," }
+	Do $$$AssertTrue(tNames [ ",Legacy.OrdersProduction,", "LEGACY lists its own production")
+	Do $$$AssertEquals(tNames [ ",AgenticProd.Production,", 0, "IRISAPP production is not listed under LEGACY")
+	Set tProd = ##class(AgenticProd.UI.Workbench).Production("LEGACY", "Legacy.OrdersProduction")
+	Do $$$AssertEquals(tProd.name, "Legacy.OrdersProduction", "map reads the production asked for")
+	Do $$$AssertEquals(tProd.namespace, "LEGACY")
+}
+
 Method TestSource()
 {
 	Set tOut = ##class(AgenticProd.UI.Workbench).Source("AgenticProd.Policy.Audit")

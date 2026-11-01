@@ -49,9 +49,14 @@ ClassMethod NamespaceRow(pNs As %String) As %DynamicObject [ Internal ]
 	// Productions are classes extending Ens.Production directly. The dictionary hides classes
 	// from a read-only user in some namespaces, so the current production is always added.
 	Set:tCurrent'="" tNames(tCurrent) = ""
+	Set tHomeDb = ##class(%SYS.Namespace).GetRoutineDest(pNs)
 	Try {
 		Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT Name FROM %Dictionary.CompiledClass WHERE Super [ 'Ens.Production' AND Name NOT LIKE 'Ens%' AND Name NOT LIKE 'HS.%'")
-		While tRS.%Next() { Set tNames(tRS.Name) = "" }
+		While tRS.%Next() {
+			// Packages mapped in from another database (IRISAPP's AgenticProd) are not this namespace's own productions
+			Continue:(##class(%SYS.Namespace).GetPackageDest(pNs, $PIECE(tRS.Name, ".", 1)) '= tHomeDb)
+			Set tNames(tRS.Name) = ""
+		}
 	} Catch {}
 	Set tName = ""
 	For {
@@ -83,6 +88,7 @@ ClassMethod Production(pNs As %String, pName As %String) As %DynamicObject
 	// Plug-in rows are in the home namespace; the other namespace may not map our classes
 	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT ItemName, Mode FROM AgenticProd_Data.PluginItem WHERE Namespace = ? AND Production = ?", pNs, pName)
 	While tRS.%Next() { Set tAI(tRS.ItemName) = tRS.Mode }
+	Set tHome = $NAMESPACE
 	Set tNow = $ZTIMESTAMP, tSince = $ZDATETIME((tNow - 1)_","_$PIECE(tNow, ",", 2), 3)
 	Set tUsage = ..Usage24h(pNs, tSince)
 	New $NAMESPACE
@@ -99,7 +105,8 @@ ClassMethod Production(pNs As %String, pName As %String) As %DynamicObject
 		Set tClass = tItem.ClassName
 		Set tRow = {"name":(tItem.Name), "class":(tClass), "type":(..TypeOf(tClass)), "category":(tItem.Category)}
 		Do tRow.%Set("enabled", ''tItem.Enabled, "boolean")
-		Set tHost = ..IsHost(tClass)
+		// Plug-in namespaces may not map our classes, so the host is also recognised by name
+		Set tHost = (tClass = ..#HOSTCLASS) || ..IsHost(tClass)
 		Set tIsAI = ''(tHost || $DATA(tAI(tItem.Name)))
 		Do tRow.%Set("ai", tIsAI, "boolean")
 		Do tRow.%Set("checks", ''(tClass = "AgenticProd.Process.Triage"), "boolean")
@@ -107,7 +114,7 @@ ClassMethod Production(pNs As %String, pName As %String) As %DynamicObject
 		Set tHealth = ..ItemHealth(tItem.Name, tSince)
 		Set tRow.errors24h = tHealth.errors24h, tRow.suspended = tHealth.suspended, tRow.lastError = tHealth.lastError, tRow.in24h = tHealth.in24h
 		Do tOut.items.%Push(tRow)
-		Do:tHost tOut.hosts.%Push(..Host(tItem, tUsage, tSince))
+		Do:tHost tOut.hosts.%Push(..Host(tItem, tUsage, tSince, tHome, pNs))
 		For j = 1:1:tItem.Settings.Count() {
 			Set tSet = tItem.Settings.GetAt(j)
 			Continue:(tSet.Name '= "TargetConfigName")&&(tSet.Name '= "TargetConfigNames")
@@ -184,8 +191,11 @@ ClassMethod TypeOf(pClass As %String) As %String [ Internal ]
 }
 
 /// The AI Hub card and component circles of one host item.
-ClassMethod Host(pItem As Ens.Config.Item, pUsage As %DynamicObject, pSince As %String) As %DynamicObject [ Internal ]
+ClassMethod Host(pItem As Ens.Config.Item, pUsage As %DynamicObject, pSince As %String, pHome As %String, pNs As %String) As %DynamicObject [ Internal ]
 {
+	// Our classes and tool-call rows live in the home namespace
+	New $NAMESPACE
+	Set $NAMESPACE = pHome
 	Set tAgent = ..#AGENTCLASS
 	Set tProvider = "", tModelSetting = "", tDisabled = ""
 	For j = 1:1:pItem.Settings.Count() {
@@ -198,7 +208,7 @@ ClassMethod Host(pItem As Ens.Config.Item, pUsage As %DynamicObject, pSince As %
 	Set tKey = ..KeySource($PARAMETER(tAgent, "APIKEY"), tProvider)
 	Set tModel = $SELECT(tModelSetting'="": tModelSetting, 1: $PARAMETER(tAgent, "MODEL"))
 	Do tHost.components.%Push({"id":"model", "kind":"model", "title":(tModel), "sub":("key: "_tKey), "class":(tAgent), "detail":("Provider "_$PARAMETER(tAgent, "PROVIDER")_", key from "_tKey), "usedBy":[($PIECE(tAgent, ".", *))], "tools":[], "calls24h":(pUsage.runs)})
-	Set tCalls = ..CallsByTool(pSince)
+	Set tCalls = ..CallsByTool(pSince, pNs)
 	Set tToolsets = $PARAMETER(tAgent, "TOOLSETS")
 	For i = 1:1:$LENGTH(tToolsets, ",") {
 		Set tClass = $ZSTRIP($PIECE(tToolsets, ",", i), "<>W")
@@ -247,11 +257,11 @@ ClassMethod ActiveSkills(pAll As %String, pDisabled As %String) As %String [ Int
 
 /// Tool calls in the last 24 h for the production's namespace, by tool name. load_skill is not
 /// audited by AI Hub, so skills are counted by calls of the tools they add.
-ClassMethod CallsByTool(pSince As %String) As %String [ Internal ]
+ClassMethod CallsByTool(pSince As %String, pNs As %String) As %String [ Internal ]
 {
 	Kill tCalls
 	Try {
-		Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT Tool, COUNT(*) FROM AgenticProd_Data.ToolCall WHERE Namespace = ? AND CreatedAt >= ? GROUP BY Tool", $NAMESPACE, pSince)
+		Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT Tool, COUNT(*) FROM AgenticProd_Data.ToolCall WHERE Namespace = ? AND CreatedAt >= ? GROUP BY Tool", pNs, pSince)
 		While tRS.%Next() { Set tCalls(tRS.%GetData(1)) = +tRS.%GetData(2) }
 	} Catch {}
 	Quit ..Pack(.tCalls)
@@ -367,7 +377,10 @@ ClassMethod FirstLine(pText As %String) As %String [ Internal ]
 {
 	Set tText = $ZSTRIP($TRANSLATE(pText, $CHAR(13,10), "  "), "<>W")
 	Set tEnd = $FIND(tText, ". ")
-	Set:tEnd tText = $EXTRACT(tText, 1, tEnd - 2)_"."
+	Set:tEnd tText = $EXTRACT(tText, 1, tEnd - 2)
+	// One full stop, whether or not the comment already ended with one
+	Set tText = $ZSTRIP(tText, ">", ".")
+	Set:tText'="" tText = tText_"."
 	Quit $EXTRACT(tText, 1, 200)
 }
 
@@ -383,6 +396,11 @@ ClassMethod Library() As %DynamicObject
 	// Skills extend %AI.ToolSet too; they are listed as skills only
 	Set tSets = ..AgentClassesOf("%AI.ToolSet")
 	Set tHostText = ..SourceText(..#HOSTCLASS)
+	Set tHostItem = $PIECE(..#HOSTCLASS, ".", *)
+	Try {
+		Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 1 Name FROM Ens_Config.Item WHERE ClassName = ?", ..#HOSTCLASS)
+		Set:tRS.%Next() tHostItem = tRS.%GetData(1)
+	} Catch {}
 	Set tMapText = ""
 	// usedBy[tClass] lists the agents or skills that name the class
 	Set tIter = tAgents.%GetIterator()
@@ -398,7 +416,7 @@ ClassMethod Library() As %DynamicObject
 		}
 		Set tHosted = ($LENGTH(tHostText) && (tHostText [ tAC))
 		Set tInfo = {"class":(tAC), "name":(tA.name), "description":(tA.description), "provider":($PARAMETER(tAC, "PROVIDER")), "model":($PARAMETER(tAC, "MODEL")), "toolsets":(..CountList(tToolsets)), "skills":(..CountList(tSkills))}
-		Set tInfo.hostedBy = $SELECT(tHosted: $PIECE(..#HOSTCLASS, ".", *), 1: "")
+		Set tInfo.hostedBy = $SELECT(tHosted: tHostItem, 1: "")
 		Do tOut.agents.%Push(tInfo)
 	}
 	Set tIter = tSets.%GetIterator()

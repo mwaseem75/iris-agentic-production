@@ -286,8 +286,10 @@ td.go { white-space: nowrap; }
         <li class="nav-item"><a class="nav-link" data-tab="messages" href="#messages"><i class="ti ti-messages"></i>Messages<span class="badge bg-orange text-white ms-auto hidden" id="nav-waiting"></span></a></li>
         <li class="nav-item"><a class="nav-link" data-tab="trust" href="#trust"><i class="ti ti-shield-check"></i>Trust &amp; evaluation</a></li>
         <li class="nav-item"><a class="nav-link" data-tab="cost" href="#cost"><i class="ti ti-coin"></i>Cost</a></li>
-        <li class="nav-grp">AI Hub</li>
-        <li class="nav-item"><a class="nav-link" data-tab="workbench" href="#workbench"><i class="ti ti-tools"></i>Workbench</a></li>
+        <li class="nav-grp">AI Hub Workbench</li>
+        <li class="nav-item"><a class="nav-link" data-tab="wblib" href="#wblib"><i class="ti ti-books"></i>Library</a></li>
+        <li class="nav-item"><a class="nav-link" data-tab="wbplay" href="#wbplay"><i class="ti ti-player-play"></i>Playground</a></li>
+        <li class="nav-item"><a class="nav-link" data-tab="wbprod" href="#wbprod"><i class="ti ti-route"></i>Production map</a></li>
         <li class="nav-item"><a class="nav-link" data-tab="settings" href="#settings"><i class="ti ti-settings"></i>Settings</a></li>
         <li class="nav-item mt-3"><a class="nav-link hidden" id="inbox-link" target="_blank" rel="noopener"><i class="ti ti-inbox"></i>Workflow inbox <i class="ti ti-external-link ms-auto" style="font-size:14px;margin:0"></i></a></li>
         <li class="nav-item"><a class="nav-link hidden" id="prod-link" target="_blank" rel="noopener"><i class="ti ti-route"></i>Production <i class="ti ti-external-link ms-auto" style="font-size:14px;margin:0"></i></a></li>
@@ -321,7 +323,9 @@ td.go { white-space: nowrap; }
       <p class="err hidden" id="error"></p>
 
       <!-- Workbench -->
-      <div class="tabpanel hidden" id="tab-workbench" role="tabpanel"><div id="wb-root"></div></div>
+      <div class="tabpanel hidden" id="tab-wblib" role="tabpanel"><div id="wb-lib"></div></div>
+      <div class="tabpanel hidden" id="tab-wbplay" role="tabpanel"><div id="wb-play"></div></div>
+      <div class="tabpanel hidden" id="tab-wbprod" role="tabpanel"><div id="wb-prod"></div></div>
 
       <!-- Overview -->
       <div class="tabpanel" id="tab-overview" role="tabpanel">
@@ -1940,7 +1944,7 @@ document.getElementById("kill-btn").addEventListener("click", function () {
   }).catch(function (e) { say("m-kill", e.message); }).then(function () { btn.disabled = false; });
 });
 
-var TITLES = { overview: "Overview", workbench: "Workbench", messages: "Messages", trust: "Trust & evaluation", cost: "Cost", settings: "Settings" };
+var TITLES = { overview: "Overview", wblib: "Library", wbplay: "Playground", wbprod: "Production map", messages: "Messages", trust: "Trust & evaluation", cost: "Cost", settings: "Settings" };
 function showTab(name) {
   if (!document.getElementById("tab-" + name)) name = "overview";
   if (name === "settings") loadSettings();
@@ -1956,6 +1960,7 @@ function showTab(name) {
   if (window.flowShow) window.flowShow(name);
   if (window.workbenchShow) window.workbenchShow(name);
 }
+window.showTab = showTab;
 
 function showSection(name) {
   Array.prototype.forEach.call(document.querySelectorAll("#set-menu a"), function (a) { a.classList.toggle("active", a.dataset.sec === name); });

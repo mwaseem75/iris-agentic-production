@@ -1,10 +1,11 @@
 "use strict";
-// AI Hub Workbench tab: Library of the AI Hub classes, Playground (placeholder) and a read-only
+// AI Hub Workbench: Library of the AI Hub classes, Playground (placeholder) and a read-only
 // map of what a production uses. Nothing here changes IRIS. Needs el, get from the dashboard script.
 (function () {
-  var root = document.getElementById("wb-root");
-  if (!root) return;
-  var started = false, lib = null, libType = "all", libQuery = "", mapData = null, mapSel = "";
+  var panels = { lib: document.getElementById("wb-lib"), play: document.getElementById("wb-play"), prod: document.getElementById("wb-prod") };
+  if (!panels.lib || !panels.play || !panels.prod) return;
+  var TAB = { lib: "wblib", play: "wbplay", prod: "wbprod" };
+  var started = false, lib = null, libType = "all", libQuery = "", mapData = null, mapSel = "", mapRes = null;
 
   // Library groups in page order; key is the field in /workbench/library
   var GROUPS = [
@@ -23,31 +24,16 @@
   function div(cls, text) { return el("div", text, cls); }
   function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
   function num(n) { return Number(n || 0).toLocaleString("en-US"); }
+  // One full stop at the end, none doubled
+  function tidy(t) { return String(t || "").replace(/\s*\.{2}(?!\.)/g, ".").replace(/\.\s*\.(?=\s|$)/g, "."); }
   function usd(n) { return "$" + Number(n || 0).toFixed(4); }
+  function short(n) { var p = String(n || "").split("."); return p[p.length - 1]; }
 
   // ---- shell ---------------------------------------------------------------------------------
-  var subs = {}, panels = {};
-  var head = div("wb-sub");
-  [["lib", "books", "Library"], ["play", "player-play", "Playground"], ["prod", "route", "In productions"]].forEach(function (t) {
-    var a = el("a", null, "wb-subtab"); a.href = "#";
-    a.appendChild(icon(t[1], "me-1")); a.appendChild(document.createTextNode(t[2]));
-    a.addEventListener("click", function (e) { e.preventDefault(); showSub(t[0]); });
-    head.appendChild(a); subs[t[0]] = a;
-  });
-  root.appendChild(head);
-  ["lib", "play", "prod"].forEach(function (k) { panels[k] = div("wb-panel hidden"); root.appendChild(panels[k]); });
-
-  function showSub(name) {
-    Object.keys(subs).forEach(function (k) {
-      subs[k].classList.toggle("on", k === name);
-      panels[k].classList.toggle("hidden", k !== name);
-    });
-    try { localStorage.setItem("agenticprod.wbsub", name); } catch (e) {}
-    if (name === "prod" && !mapData) loadProductions();
-  }
+  // The sidebar owns the three views; showSub only asks the dashboard to switch tab
+  function showSub(name) { if (window.showTab) window.showTab(TAB[name]); }
 
   // ---- library -------------------------------------------------------------------------------
-  panels.lib.innerHTML = "";
   var libBar = div("wb-bar"), libBody = div("wb-body"), libNote = div("wb-note");
   var search = el("input", null, "form-control wb-search");
   search.placeholder = "Search agents, tools, skills, policies"; search.type = "search";
@@ -88,11 +74,11 @@
     var ic = div("wb-ic t-" + g.cls); ic.appendChild(icon(g.icon));
     var t = div(); t.appendChild(div("wb-n", item.name)); t.appendChild(div("wb-c", item["class"]));
     h.appendChild(ic); h.appendChild(t); c.appendChild(h);
-    c.appendChild(div("wb-d", item.description || ""));
+    c.appendChild(div("wb-d", tidy(item.description)));
     if (item.tools && item.tools.length) c.appendChild(div("wb-d wb-tools", item.tools.join(" · ")));
     var u = div("wb-u");
     if (g.type === "tool") u.appendChild(el("span", item.readOnly ? "read-only" : "can change data", "wb-tag " + (item.readOnly ? "ro" : "rw")));
-    if (g.type === "agent") u.appendChild(document.createTextNode(item.model + " · " + item.toolsets + " toolset · " + item.skills + " skills" + (item.hostedBy ? " · run by " + item.hostedBy : "")));
+    if (g.type === "agent") u.appendChild(document.createTextNode(item.model + " · " + item.toolsets + " toolset · " + item.skills + " skills" + (item.hostedBy ? " · used by operation " + item.hostedBy : "")));
     else if (item.usedBy) u.appendChild(document.createTextNode((g.type === "tool" ? " " : "") + item.usedBy));
     if (g.type === "check") u.insertBefore(el("span", "plain IRIS", "wb-tag"), u.firstChild);
     c.appendChild(u);
@@ -142,7 +128,7 @@
     x.appendChild(icon("x")); x.addEventListener("click", closeDrawer);
     top.appendChild(t); top.appendChild(x); drawer.appendChild(top);
     var body = div("wb-drawer-b");
-    if (item.description) body.appendChild(div("wb-d", item.description));
+    if (item.description) body.appendChild(div("wb-d", tidy(item.description)));
     if (item.toolDescriptions) {
       item.tools.forEach(function (name, i) {
         var r = div("wb-tool"); r.appendChild(el("b", name)); r.appendChild(div("wb-d", item.toolDescriptions[i] || ""));
@@ -169,17 +155,28 @@
     panels.play.appendChild(c);
   })();
 
-  // ---- in productions ------------------------------------------------------------------------
+  // ---- production map ------------------------------------------------------------------------
   var prodBar = div("wb-bar"), pick = el("select", null, "form-select wb-pick");
   var runBadge = el("span", null, "badge"), statAi = el("span", null, "wb-stat"), stat24 = el("span", null, "wb-stat");
   var prodNote = div("wb-note"), grid = div("wb-mapgrid"), cv = div("wb-cv"), side = div("wb-side");
   prodBar.appendChild(el("span", "Production", "text-secondary")); prodBar.appendChild(pick); prodBar.appendChild(runBadge);
   prodBar.appendChild(statAi); prodBar.appendChild(stat24);
   prodBar.appendChild(div("wb-hint", "Read-only map · change components in the Library"));
-  grid.appendChild(cv); grid.appendChild(side);
+  var wrap = div("wb-cvwrap"), zoomBar = div("wb-zoom");
+  [["zoom-in", function () { zoom(1.2); }, "Zoom in"], ["zoom-out", function () { zoom(1 / 1.2); }, "Zoom out"], ["arrows-maximize", function () { fit(); }, "Fit to screen"]].forEach(function (z) {
+    var b = el("button", null, "btn btn-sm btn-icon"); b.type = "button"; b.title = z[2]; b.setAttribute("aria-label", z[2]); b.appendChild(icon(z[0]));
+    b.addEventListener("click", z[1]); zoomBar.appendChild(b);
+  });
+  wrap.appendChild(cv); wrap.appendChild(zoomBar);
+  wrap.appendChild(div("wb-legend", "Solid line: message path · dashed: AI Hub part used by the agent · green: back to the router"));
+  grid.appendChild(wrap); grid.appendChild(side);
   panels.prod.appendChild(prodBar); panels.prod.appendChild(prodNote); panels.prod.appendChild(grid);
   pick.addEventListener("change", function () {
     var v = pick.value.split("|"); openProduction(v[0], v.slice(1).join("|"));
+  });
+  window.addEventListener("resize", function () {
+    if (panels.prod.classList.contains("hidden") || mapRes) return;
+    mapRes = setTimeout(function () { mapRes = null; fit(); }, 150);
   });
 
   function loadProductions() {
@@ -190,8 +187,7 @@
       d.productions.forEach(function (ns) {
         ns.productions.forEach(function (p) {
           var o = el("option", ns.namespace + " · " + p.name); o.value = ns.namespace + "|" + p.name;
-          if (!first || p.current && !/\|AgenticProd\./.test(first)) first = o.value;
-          if (p.name === "AgenticProd.Production") first = o.value;
+          if (!first || p.name === "AgenticProd.Production") first = o.value;
           pick.appendChild(o);
         });
       });
@@ -215,36 +211,24 @@
         stat24.appendChild(el("b", num(p[0]))); stat24.appendChild(document.createTextNode(p[1] + " · "));
       });
       stat24.appendChild(el("b", usd(u.costUsd)));
-      drawMap(d); showSide(null);
+      drawMap(d);
     }).catch(function (e) { prodNote.textContent = "Could not load the production: " + e.message; });
   }
 
-  // Layers by distance from the items nothing sends to; cycles stop at the first visit
-  function layers(d) {
-    var layer = {}, out = {}, hasIn = {};
-    d.connections.forEach(function (c) { (out[c.from] = out[c.from] || []).push(c.to); hasIn[c.to] = true; });
-    var queue = [];
-    d.items.forEach(function (i) { if (!hasIn[i.name]) { layer[i.name] = 0; queue.push(i.name); } });
-    d.items.forEach(function (i) { if (layer[i.name] === undefined) { layer[i.name] = 0; queue.push(i.name); } });
-    var seen = {};
-    while (queue.length) {
-      var n = queue.shift(); if (seen[n]) continue; seen[n] = 1;
-      (out[n] || []).forEach(function (t) { if (!seen[t] && layer[t] !== undefined && layer[t] <= layer[n]) { layer[t] = layer[n] + 1; queue.push(t); } });
-    }
-    return layer;
-  }
+  var NW = 210, NH = 92, HW = 340, HH = 100, GAPX = 90, GAPY = 36, CW = 122;
+  var stage = null, scale = 1, stageW = 0, stageH = 0;
 
-  var NW = 210, NH = 92, HW = 340, GAPX = 90, GAPY = 36;
-
-  function nodeBox(it, host) {
-    var n = div("wb-n-node" + (host ? " wb-host" : it.ai ? " wb-ainode" : it.checks ? " wb-chk" : " wb-plain"));
+  function nodeBox(it, host, small) {
+    var n = div("wb-n-node" + (host ? " wb-host" : it.ai ? " wb-ainode" : it.checks ? " wb-chk" : " wb-plain") + (small ? " wb-small" : ""));
     n.dataset.name = it.name;
-    var tagText = host ? "AI HUB" : it.ai ? "AI HUB" : it.checks ? "checks around the agent" : "no AI Hub";
-    n.appendChild(el("span", tagText, "wb-tagpill" + (host || it.ai ? " hub" : "")));
+    n.title = it.name + " · " + it["class"];
+    if (!small) n.appendChild(el("span", host || it.ai ? "AI HUB" : it.checks ? "checks around the agent" : "no AI Hub", "wb-tagpill" + (host || it.ai ? " hub" : "")));
     var h = div("wb-nh"); h.appendChild(icon(host ? "robot" : (it.checks ? "shield-half" : TYPE_ICON[it.type] || "box")));
-    var t = div(); t.appendChild(div("wb-nt", it.name));
-    t.appendChild(div("wb-nk", host ? "Operation " + host.operation + " · agent " + host.agentClass : it.type + " · " + it["class"]));
+    var t = div("wb-nx"); t.appendChild(div("wb-nt", short(it.name)));
+    t.appendChild(div("wb-nk", host ? "Operation " + short(host.operation) + " · agent " + short(host.agentClass) : it.type + " · " + short(it["class"])));
     h.appendChild(t); n.appendChild(h);
+    if (!it.enabled) n.classList.add("wb-off");
+    if (small) return n;
     var m = div("wb-nm");
     if (host) {
       var u = host.usage;
@@ -256,72 +240,153 @@
       if (it.suspended) { var s3 = el("span", null, "wb-e"); s3.appendChild(el("b", num(it.suspended))); s3.appendChild(document.createTextNode(" suspended")); m.appendChild(s3); }
     }
     n.appendChild(m);
-    if (!it.enabled) n.classList.add("wb-off");
     return n;
   }
 
-  function path(x1, y1, x2, y2, col, dash) {
-    var m = (x1 + x2) / 2;
+  function curve(dd, col, dash) {
     var p = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    p.setAttribute("d", "M" + x1 + "," + y1 + " C" + m + "," + y1 + " " + m + "," + y2 + " " + x2 + "," + y2);
-    p.setAttribute("fill", "none"); p.setAttribute("stroke", col); p.setAttribute("stroke-width", dash ? 1.6 : 2);
+    p.setAttribute("d", dd); p.setAttribute("fill", "none"); p.setAttribute("stroke", col); p.setAttribute("stroke-width", dash ? 1.6 : 2);
     if (dash) p.setAttribute("stroke-dasharray", "6 6");
     return p;
   }
+  function hpath(x1, y1, x2, y2, col) {
+    var m = (x1 + x2) / 2;
+    return curve("M" + x1 + "," + y1 + " C" + m + "," + y1 + " " + m + "," + y2 + " " + x2 + "," + y2, col);
+  }
+  function vpath(x1, y1, x2, y2, col, dash) {
+    var m = (y1 + y2) / 2;
+    return curve("M" + x1 + "," + y1 + " C" + x1 + "," + m + " " + x2 + "," + m + " " + x2 + "," + y2, col, dash);
+  }
+
+  // Main path: items reachable from the sources without entering Triage or an agent host.
+  // Branch: Triage first, then the hosts, then what they send to. Items with no links go to a strip.
+  function plan(d) {
+    var byName = {}, hostOf = {}, out = {}, hasIn = {}, linked = {};
+    d.items.forEach(function (i) { byName[i.name] = i; });
+    d.hosts.forEach(function (h) { hostOf[h.item] = h; });
+    d.connections.forEach(function (c) {
+      if (!byName[c.from] || !byName[c.to]) return;
+      (out[c.from] = out[c.from] || []).push(c.to); hasIn[c.to] = true; linked[c.from] = linked[c.to] = true;
+    });
+    var special = function (i) { return !!(hostOf[i.name] || i.checks); };
+    var depth = {}, queue = [];
+    d.items.forEach(function (i) { if (linked[i.name] && !special(i) && !hasIn[i.name]) { depth[i.name] = 0; queue.push(i.name); } });
+    if (!queue.length) d.items.forEach(function (i) { if (!queue.length && linked[i.name] && !special(i)) { depth[i.name] = 0; queue.push(i.name); } });
+    queue.forEach(function (n) {
+      (out[n] || []).forEach(function (t) {
+        if (depth[t] === undefined && !special(byName[t])) { depth[t] = depth[n] + 1; queue.push(t); }
+      });
+    });
+    var seen = {}, order = [];
+    var bq = d.items.filter(special).map(function (i) { return i.name; });
+    bq.forEach(function (n) {
+      if (seen[n]) return; seen[n] = 1; order.push(byName[n]);
+      (out[n] || []).forEach(function (t) { if (depth[t] === undefined && !seen[t]) bq.push(t); });
+    });
+    var rank = function (i) { return i.checks ? 0 : hostOf[i.name] ? 1 : 2; };
+    var branch = order.map(function (i, n) { return { i: i, n: n }; }).sort(function (a, b) { return rank(a.i) - rank(b.i) || a.n - b.n; }).map(function (e) { return e.i; });
+    var other = d.items.filter(function (i) { return depth[i.name] === undefined && !seen[i.name]; });
+    return { depth: depth, branch: branch, other: other, hostOf: hostOf, byName: byName };
+  }
 
   function drawMap(d) {
-    clear(cv);
-    var layer = layers(d), cols = {}, pos = {}, maxLayer = 0;
-    var hostOf = {}; d.hosts.forEach(function (h) { hostOf[h.item] = h; });
-    d.items.forEach(function (i) { var l = layer[i.name] || 0; (cols[l] = cols[l] || []).push(i); maxLayer = Math.max(maxLayer, l); });
-    var x = 30, bottom = 0, colW = {};
-    for (var l = 0; l <= maxLayer; l++) {
-      var list = cols[l] || [], w = NW;
-      list.forEach(function (i) { if (hostOf[i.name]) w = Math.max(w, HW); });
-      colW[l] = w; var y = 40;
-      list.forEach(function (i) { pos[i.name] = { x: x, y: y, w: hostOf[i.name] ? HW : NW, h: NH }; y += NH + GAPY; });
-      bottom = Math.max(bottom, y); x += w + GAPX;
-    }
-    var width = Math.max(x, 900);
+    clear(cv); showSide(null);
+    var pl = plan(d), pos = {}, hostOf = pl.hostOf;
+    stage = div("wb-stage"); cv.appendChild(stage);
     var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"); svg.setAttribute("class", "wb-svg");
-    cv.appendChild(svg);
-    d.items.forEach(function (i) {
-      var p = pos[i.name], n = nodeBox(i, hostOf[i.name]);
-      n.style.left = p.x + "px"; n.style.top = p.y + "px"; n.style.width = p.w + "px";
-      cv.appendChild(n);
+    stage.appendChild(svg);
+    var widthOf = function (i) { return hostOf[i.name] ? HW : NW; }, heightOf = function (i) { return hostOf[i.name] ? HH : NH; };
+
+    // Row 1: the main path by layer
+    var cols = {}, maxL = -1;
+    Object.keys(pl.depth).forEach(function (n) { var l = pl.depth[n]; (cols[l] = cols[l] || []).push(pl.byName[n]); maxL = Math.max(maxL, l); });
+    var x = 30, mainBottom = 0, W = 0;
+    for (var l = 0; l <= maxL; l++) {
+      var y = 40, w = NW;
+      cols[l].forEach(function (i) { w = Math.max(w, widthOf(i)); });
+      cols[l].forEach(function (i) { pos[i.name] = { x: x, y: y, w: widthOf(i), h: heightOf(i) }; y += heightOf(i) + GAPY; });
+      mainBottom = Math.max(mainBottom, y - GAPY); x += w + GAPX; W = x - GAPX + 30;
+    }
+    // Row 2: the failure branch, starting under the item that sends to it
+    var y2 = maxL >= 0 ? mainBottom + 120 : 40, bx = 30, branchBottom = y2;
+    if (pl.branch.length) {
+      var found = false;
+      d.connections.forEach(function (c) { if (!found && c.to === pl.branch[0].name && pos[c.from]) { bx = pos[c.from].x; found = true; } });
+    }
+    pl.branch.forEach(function (i) {
+      pos[i.name] = { x: bx, y: y2, w: widthOf(i), h: heightOf(i) };
+      bx += widthOf(i) + GAPX; branchBottom = Math.max(branchBottom, y2 + heightOf(i)); W = Math.max(W, bx - GAPX + 30);
     });
-    d.connections.forEach(function (c) {
-      var a = pos[c.from], b = pos[c.to]; if (!a || !b) return;
-      var toAi = hostOf[c.to] || hostOf[c.from];
-      var forward = b.x > a.x;
-      svg.appendChild(forward ? path(a.x + a.w, a.y + 30, b.x, b.y + 30, toAi ? "#a78bfa" : "#9ca3af")
-        : path(a.x, a.y + 60, b.x + b.w, b.y + 60, "#6b7280"));
-    });
-    // Component strip of each host under the map
-    var cy = bottom + 40;
+    // Row 3: the parts of each host, centred under it
+    var cy = branchBottom + 90, comps = [];
     d.hosts.forEach(function (h) {
       var hp = pos[h.item]; if (!hp) return;
-      var perRow = Math.max(4, Math.floor((width - 60) / 122)), count = h.components.length;
-      cv.appendChild(el("span", "AI Hub parts of " + h.item, "wb-strip-title")).style.top = (cy - 28) + "px";
-      h.components.forEach(function (c, idx) {
-        var k = KIND[c.kind], col = idx % perRow, row = Math.floor(idx / perRow);
-        var cx = 30 + col * 122, ty = cy + row * 150;
-        var comp = div("wb-comp"); comp.dataset.id = c.id;
+      var count = h.components.length, perRow = Math.max(4, Math.min(count, Math.floor((Math.max(W, 900) - 60) / CW)));
+      var first = Math.min(count, perRow), sx = Math.max(30, hp.x + hp.w / 2 - first * CW / 2);
+      W = Math.max(W, sx + first * CW + 30);
+      comps.push({ h: h, hp: hp, sx: sx, perRow: perRow, y: cy });
+      cy += Math.ceil(count / perRow) * 150 + 20;
+    });
+    // Row 4: items with no links
+    if (pl.other.length) {
+      var oy = cy + 10, per = Math.max(1, Math.floor((Math.max(W, 900) - 60) / 200));
+      pl.other.forEach(function (i, idx) { pos[i.name] = { x: 30 + (idx % per) * 200, y: oy + 28 + Math.floor(idx / per) * 54, w: 186, h: 42, small: true }; });
+      cy = oy + 28 + Math.ceil(pl.other.length / per) * 54;
+      var ttl = el("span", "Other items", "wb-strip-title"); ttl.style.top = oy + "px"; stage.appendChild(ttl);
+    }
+    W = Math.max(W, 900);
+    var H = cy + 20;
+
+    d.items.forEach(function (i) {
+      var p = pos[i.name]; if (!p) return;
+      var n = nodeBox(i, hostOf[i.name], p.small);
+      n.style.left = p.x + "px"; n.style.top = p.y + "px"; n.style.width = p.w + "px"; n.style.height = p.h + "px";
+      stage.appendChild(n);
+    });
+    d.connections.forEach(function (c) {
+      var a = pos[c.from], b = pos[c.to]; if (!a || !b || a.small || b.small) return;
+      var col = (hostOf[c.to] || hostOf[c.from]) ? "#a78bfa" : "#9ca3af";
+      if (b.y >= a.y + a.h + 30) svg.appendChild(vpath(a.x + a.w * 0.7, a.y + a.h, b.x + b.w * 0.7, b.y, col));
+      else if (b.y + b.h + 30 <= a.y) svg.appendChild(vpath(a.x + a.w * 0.3, a.y, b.x + b.w * 0.3, b.y + b.h, "#34d399"));
+      else if (b.x > a.x) svg.appendChild(hpath(a.x + a.w, a.y + 30, b.x, b.y + 30, col));
+      else svg.appendChild(hpath(a.x, a.y + a.h - 14, b.x + b.w, b.y + b.h - 14, "#6b7280"));
+    });
+    comps.forEach(function (cg) {
+      stage.appendChild(el("span", "AI Hub parts of " + short(cg.h.item), "wb-strip-title")).style.top = (cg.y - 30) + "px";
+      cg.h.components.forEach(function (c, idx) {
+        var k = KIND[c.kind], cx = cg.sx + (idx % cg.perRow) * CW, ty = cg.y + Math.floor(idx / cg.perRow) * 150;
+        var comp = div("wb-comp"); comp.dataset.id = c.id; comp.title = c.title + " · " + c["class"];
         comp.style.left = cx + "px"; comp.style.top = ty + "px";
         var circle = div("wb-circle"); circle.style.color = k[2]; circle.appendChild(icon(k[1])); comp.appendChild(circle);
         var lab = div("wb-cl"); lab.appendChild(el("span", k[0], "wb-kind")); lab.appendChild(document.createElement("br")); lab.appendChild(document.createTextNode(c.title));
         comp.appendChild(lab); comp.appendChild(div("wb-cs", c.sub));
         comp.addEventListener("click", function () { mapSel = c.id; Array.prototype.forEach.call(cv.querySelectorAll(".wb-comp"), function (e) { e.classList.toggle("sel", e === comp); }); showSide(c); });
-        cv.appendChild(comp);
-        var ax = Math.min(Math.max(cx + 56, hp.x + 30), hp.x + hp.w - 30);
-        svg.appendChild(path(ax, hp.y + hp.h, cx + 56, ty, "#7b8291", true));
+        stage.appendChild(comp);
+        var ax = Math.min(Math.max(cx + 56, cg.hp.x + 30), cg.hp.x + cg.hp.w - 30);
+        svg.appendChild(vpath(ax, cg.hp.y + cg.hp.h, cx + 56, ty, "#7b8291", true));
       });
-      cy += Math.ceil(count / perRow) * 150 + 40;
     });
-    var h2 = Math.max(cy, 520);
-    cv.style.height = h2 + "px"; svg.setAttribute("width", width); svg.setAttribute("height", h2); svg.style.width = width + "px";
-    cv.style.minWidth = "0";
+    stageW = W; stageH = H;
+    stage.style.width = W + "px"; stage.style.height = H + "px";
+    svg.setAttribute("width", W); svg.setAttribute("height", H); svg.style.width = W + "px";
+    fit();
   }
+
+  function applyScale() {
+    if (!stage) return;
+    stage.style.transform = "scale(" + scale + ")";
+    cv.style.height = Math.ceil(stageH * scale) + "px";
+  }
+
+  // Whole map on screen at load: limited by the canvas width and the height left in the window
+  function fit() {
+    if (!stage) return;
+    var availH = Math.max(360, window.innerHeight - cv.getBoundingClientRect().top - 40), availW = cv.clientWidth || stageW;
+    scale = Math.max(0.45, Math.min(1, availW / stageW, availH / stageH));
+    applyScale();
+  }
+
+  function zoom(f) { scale = Math.max(0.3, Math.min(1.6, scale * f)); applyScale(); }
 
   function showSide(c) {
     clear(side);
@@ -366,15 +431,14 @@
 
   // ---- entry ---------------------------------------------------------------------------------
   window.workbenchShow = function (name) {
-    if (name !== "workbench") return;
-    if (!started) {
-      started = true; loadLib();
-      var sub = "lib"; try { sub = localStorage.getItem("agenticprod.wbsub") || "lib"; } catch (e) {}
-      showSub(subs[sub] ? sub : "lib");
-    }
+    var view = "";
+    Object.keys(TAB).forEach(function (k) { if (TAB[k] === name) view = k; });
+    if (!view) return;
+    if (!started) { started = true; loadLib(); }
+    if (view === "prod") { if (!mapData) loadProductions(); else fit(); }
   };
   // Read-only view for checks from the console
-  window.workbenchState = function () { return { library: lib && Object.keys(lib).map(function (k) { return k + ":" + lib[k].length; }), production: mapData && mapData.name, selected: mapSel }; };
+  window.workbenchState = function () { return { library: lib && Object.keys(lib).map(function (k) { return k + ":" + lib[k].length; }), production: mapData && mapData.name, selected: mapSel, scale: scale }; };
   var active = document.querySelector("#nav .nav-link.active");
   if (active) window.workbenchShow(active.dataset.tab);
 })();
