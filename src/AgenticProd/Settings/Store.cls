@@ -53,8 +53,9 @@ ClassMethod Prepare() As %Status
 		$$$ThrowOnError(..CreateResources())
 		// build 154 ships the registry empty: without it Config Store refuses AI.LLM entries
 		// ("No descriptor found for AI.LLM")
-		$$$ThrowOnError(##class(%ConfigStore.DescriptorManager).GetDescriptorClass("AI", "LLM", "", .tClass))
-		If tClass = "" $$$ThrowOnError(##class(%ConfigStore.DescriptorManager).RebuildRegistry())
+		// an empty registry returns an error status, not an empty class, so do not throw on it
+		Set tClass = "", tDSC = ##class(%ConfigStore.DescriptorManager).GetDescriptorClass("AI", "LLM", "", .tClass)
+		If $$$ISERR(tDSC) || (tClass = "") $$$ThrowOnError(##class(%ConfigStore.DescriptorManager).RebuildRegistry())
 		If '##class(%Wallet.Collection).Exists(..#COLLECTION) {
 			$$$ThrowOnError(##class(%Wallet.Collection).Create(..#COLLECTION, {"UseResource":(..#USERESOURCE), "EditResource":(..#EDITRESOURCE)}))
 		}
