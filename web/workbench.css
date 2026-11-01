@@ -43,7 +43,7 @@
 
 .wb-mapgrid { display: grid; grid-template-columns: 1fr 360px; gap: 16px; align-items: start; }
 .wb-cvwrap { position: relative; min-width: 0; }
-.wb-cv { position: relative; min-height: 360px; border-radius: 14px; background: #16181d; background-image: radial-gradient(#2c313a 1.2px, transparent 1.2px); background-size: 22px 22px; overflow: hidden; }
+.wb-cv { position: relative; min-height: 360px; border-radius: 14px; background: #16181d; background-image: radial-gradient(#2c313a 1.2px, transparent 1.2px); background-size: 22px 22px; overflow: auto; }
 .wb-stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
 .wb-zoom { position: absolute; right: 12px; bottom: 34px; display: flex; gap: 6px; }
 .wb-legend { position: absolute; left: 16px; bottom: 10px; font-size: 11.5px; color: #9ca3af; }

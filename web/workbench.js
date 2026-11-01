@@ -201,6 +201,7 @@
     prodNote.textContent = "Loading…"; clear(cv); mapSel = "";
     get("api/workbench/production?ns=" + encodeURIComponent(ns) + "&name=" + encodeURIComponent(name)).then(function (d) {
       mapData = d; prodNote.textContent = "";
+      var crumb = document.getElementById("crumb"); if (crumb) crumb.textContent = d.namespace + " · " + d.name;
       runBadge.textContent = d.running ? "running" : "stopped";
       runBadge.className = "badge " + (d.running ? "bg-green-lt" : "bg-secondary-lt");
       clear(statAi);
@@ -235,7 +236,7 @@
       [[u.runs, "runs"], [u.toolCalls, "tool calls"], [u.tokens, "tokens"]].forEach(function (p) { var s = el("span"); s.appendChild(el("b", num(p[0]))); s.appendChild(document.createTextNode(" " + p[1])); m.appendChild(s); });
       var c = el("span"); c.appendChild(el("b", usd(u.costUsd))); m.appendChild(c);
     } else {
-      var s1 = el("span"); s1.appendChild(el("b", num(it.in24h))); s1.appendChild(document.createTextNode(" in")); m.appendChild(s1);
+      var svc = it.type === "service", s1 = el("span"); s1.appendChild(el("b", num(svc ? it.sent24h : it.in24h))); s1.appendChild(document.createTextNode(svc ? " sent" : " in")); m.appendChild(s1);
       if (it.errors24h) { var s2 = el("span", null, "wb-e"); s2.appendChild(el("b", num(it.errors24h))); s2.appendChild(document.createTextNode(" errors")); m.appendChild(s2); }
       if (it.suspended) { var s3 = el("span", null, "wb-e"); s3.appendChild(el("b", num(it.suspended))); s3.appendChild(document.createTextNode(" suspended")); m.appendChild(s3); }
     }
@@ -258,7 +259,8 @@
     return curve("M" + x1 + "," + y1 + " C" + x1 + "," + m + " " + x2 + "," + m + " " + x2 + "," + y2, col, dash);
   }
 
-  // Main path: items reachable from the sources without entering Triage or an agent host.
+  // Main path: items reachable from the sources without entering Triage or an agent host; they sit in
+  // lanes by role (services, routing processes, operations).
   // Branch: Triage first, then the hosts, then what they send to. Items with no links go to a strip.
   function plan(d) {
     var byName = {}, hostOf = {}, out = {}, hasIn = {}, linked = {};
@@ -268,7 +270,10 @@
       if (!byName[c.from] || !byName[c.to]) return;
       (out[c.from] = out[c.from] || []).push(c.to); hasIn[c.to] = true; linked[c.from] = linked[c.to] = true;
     });
-    var special = function (i) { return !!(hostOf[i.name] || i.checks); };
+    // A process that sends to an agent host belongs to the failure branch with it
+    var caller = {};
+    d.connections.forEach(function (c) { if (hostOf[c.to] && byName[c.from] && byName[c.from].type === "process") caller[c.from] = true; });
+    var special = function (i) { return !!(hostOf[i.name] || i.checks || caller[i.name]); };
     var depth = {}, queue = [];
     d.items.forEach(function (i) { if (linked[i.name] && !special(i) && !hasIn[i.name]) { depth[i.name] = 0; queue.push(i.name); } });
     if (!queue.length) d.items.forEach(function (i) { if (!queue.length && linked[i.name] && !special(i)) { depth[i.name] = 0; queue.push(i.name); } });
@@ -283,7 +288,7 @@
       if (seen[n]) return; seen[n] = 1; order.push(byName[n]);
       (out[n] || []).forEach(function (t) { if (depth[t] === undefined && !seen[t]) bq.push(t); });
     });
-    var rank = function (i) { return i.checks ? 0 : hostOf[i.name] ? 1 : 2; };
+    var rank = function (i) { return hostOf[i.name] ? 1 : (i.checks || caller[i.name]) ? 0 : 2; };
     var branch = order.map(function (i, n) { return { i: i, n: n }; }).sort(function (a, b) { return rank(a.i) - rank(b.i) || a.n - b.n; }).map(function (e) { return e.i; });
     var other = d.items.filter(function (i) { return depth[i.name] === undefined && !seen[i.name]; });
     return { depth: depth, branch: branch, other: other, hostOf: hostOf, byName: byName };
@@ -298,10 +303,15 @@
     var widthOf = function (i) { return hostOf[i.name] ? HW : NW; }, heightOf = function (i) { return hostOf[i.name] ? HH : NH; };
 
     // Row 1: the main path by layer
-    var cols = {}, maxL = -1;
-    Object.keys(pl.depth).forEach(function (n) { var l = pl.depth[n]; (cols[l] = cols[l] || []).push(pl.byName[n]); maxL = Math.max(maxL, l); });
+    var cols = {}, maxL = -1, LANE = { service: 0, process: 1, operation: 2 };
+    d.items.forEach(function (i) {
+      if (pl.depth[i.name] === undefined) return;
+      var l = LANE[i.type] === undefined ? 1 : LANE[i.type];
+      (cols[l] = cols[l] || []).push(i); maxL = Math.max(maxL, l);
+    });
     var x = 30, mainBottom = 0, W = 0;
     for (var l = 0; l <= maxL; l++) {
+      if (!cols[l]) continue;
       var y = 40, w = NW;
       cols[l].forEach(function (i) { w = Math.max(w, widthOf(i)); });
       cols[l].forEach(function (i) { pos[i.name] = { x: x, y: y, w: widthOf(i), h: heightOf(i) }; y += heightOf(i) + GAPY; });
@@ -321,11 +331,12 @@
     var cy = branchBottom + 90, comps = [];
     d.hosts.forEach(function (h) {
       var hp = pos[h.item]; if (!hp) return;
-      var count = h.components.length, perRow = Math.max(4, Math.min(count, Math.floor((Math.max(W, 900) - 60) / CW)));
-      var first = Math.min(count, perRow), sx = Math.max(30, hp.x + hp.w / 2 - first * CW / 2);
-      W = Math.max(W, sx + first * CW + 30);
-      comps.push({ h: h, hp: hp, sx: sx, perRow: perRow, y: cy });
-      cy += Math.ceil(count / perRow) * 150 + 20;
+      // One row; the spacing shrinks to fit the width, down to 92 px
+      var count = h.components.length, cw = Math.max(92, Math.min(CW, Math.floor((Math.max(W, 900) - 60) / Math.max(1, count))));
+      var sx = Math.max(30, hp.x + hp.w / 2 - count * cw / 2);
+      W = Math.max(W, sx + count * cw + 30);
+      comps.push({ h: h, hp: hp, sx: sx, cw: cw, y: cy });
+      cy += 150 + 20;
     });
     // Row 4: items with no links
     if (pl.other.length) {
@@ -354,16 +365,16 @@
     comps.forEach(function (cg) {
       stage.appendChild(el("span", "AI Hub parts of " + short(cg.h.item), "wb-strip-title")).style.top = (cg.y - 30) + "px";
       cg.h.components.forEach(function (c, idx) {
-        var k = KIND[c.kind], cx = cg.sx + (idx % cg.perRow) * CW, ty = cg.y + Math.floor(idx / cg.perRow) * 150;
+        var k = KIND[c.kind], cx = cg.sx + idx * cg.cw, ty = cg.y;
         var comp = div("wb-comp"); comp.dataset.id = c.id; comp.title = c.title + " · " + c["class"];
-        comp.style.left = cx + "px"; comp.style.top = ty + "px";
+        comp.style.left = cx + "px"; comp.style.top = ty + "px"; comp.style.width = (cg.cw - 6) + "px";
         var circle = div("wb-circle"); circle.style.color = k[2]; circle.appendChild(icon(k[1])); comp.appendChild(circle);
         var lab = div("wb-cl"); lab.appendChild(el("span", k[0], "wb-kind")); lab.appendChild(document.createElement("br")); lab.appendChild(document.createTextNode(c.title));
         comp.appendChild(lab); comp.appendChild(div("wb-cs", c.sub));
         comp.addEventListener("click", function () { mapSel = c.id; Array.prototype.forEach.call(cv.querySelectorAll(".wb-comp"), function (e) { e.classList.toggle("sel", e === comp); }); showSide(c); });
         stage.appendChild(comp);
-        var ax = Math.min(Math.max(cx + 56, cg.hp.x + 30), cg.hp.x + cg.hp.w - 30);
-        svg.appendChild(vpath(ax, cg.hp.y + cg.hp.h, cx + 56, ty, "#7b8291", true));
+        var mid = cx + (cg.cw - 6) / 2, ax = Math.min(Math.max(mid, cg.hp.x + 30), cg.hp.x + cg.hp.w - 30);
+        svg.appendChild(vpath(ax, cg.hp.y + cg.hp.h, mid, ty, "#7b8291", true));
       });
     });
     stageW = W; stageH = H;
@@ -375,14 +386,17 @@
   function applyScale() {
     if (!stage) return;
     stage.style.transform = "scale(" + scale + ")";
-    cv.style.height = Math.ceil(stageH * scale) + "px";
+    // Taller than the window: the canvas scrolls inside its own box
+    var availH = Math.max(360, window.innerHeight - cv.getBoundingClientRect().top - 40);
+    cv.style.height = Math.min(Math.ceil(stageH * scale), availH) + "px";
   }
 
   // Whole map on screen at load: limited by the canvas width and the height left in the window
   function fit() {
     if (!stage) return;
     var availH = Math.max(360, window.innerHeight - cv.getBoundingClientRect().top - 40), availW = cv.clientWidth || stageW;
-    scale = Math.max(0.45, Math.min(1, availW / stageW, availH / stageH));
+    // Never below 0.85: past that the labels stop being readable, so the canvas scrolls instead
+    scale = Math.max(0.85, Math.min(1, availW / stageW, availH / stageH));
     applyScale();
   }
 

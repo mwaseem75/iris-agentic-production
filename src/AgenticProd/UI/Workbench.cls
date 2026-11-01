@@ -62,6 +62,10 @@ ClassMethod NamespaceRow(pNs As %String) As %DynamicObject [ Internal ]
 	For {
 		Set tName = $ORDER(tNames(tName))
 		Quit:tName=""
+		// A production with no items is an empty shell, nothing to map
+		Set tCfg = ##class(Ens.Config.Production).%OpenId(tName)
+		Set:'$IsObject(tCfg) tCfg = ##class(Ens.Config.Production).LoadFromClass(tName)
+		Continue:('$IsObject(tCfg) || 'tCfg.Items.Count())
 		Set tP = {"name":(tName)}
 		Do tP.%Set("current", ''(tName = tCurrent), "boolean")
 		Do tP.%Set("running", ''((tName = tCurrent) && (tState = $$$eProductionStateRunning)), "boolean")
@@ -112,21 +116,73 @@ ClassMethod Production(pNs As %String, pName As %String) As %DynamicObject
 		Do tRow.%Set("checks", ''(tClass = "AgenticProd.Process.Triage"), "boolean")
 		Set tAiCount = tAiCount + tIsAI
 		Set tHealth = ..ItemHealth(tItem.Name, tSince)
-		Set tRow.errors24h = tHealth.errors24h, tRow.suspended = tHealth.suspended, tRow.lastError = tHealth.lastError, tRow.in24h = tHealth.in24h
+		Set tRow.errors24h = tHealth.errors24h, tRow.suspended = tHealth.suspended, tRow.lastError = tHealth.lastError, tRow.in24h = tHealth.in24h, tRow.sent24h = tHealth.sent24h
 		Do tOut.items.%Push(tRow)
 		Do:tHost tOut.hosts.%Push(..Host(tItem, tUsage, tSince, tHome, pNs))
+		Set tNames(tItem.Name) = ""
 		For j = 1:1:tItem.Settings.Count() {
 			Set tSet = tItem.Settings.GetAt(j)
-			Continue:(tSet.Name '= "TargetConfigName")&&(tSet.Name '= "TargetConfigNames")
-			Set tList = $TRANSLATE(tSet.Value, " ", "")
-			For k = 1:1:$LENGTH(tList, ",") {
-				Set tTo = $PIECE(tList, ",", k)
-				Do:tTo'="" tOut.connections.%Push({"from":(tItem.Name), "to":(tTo)})
+			// TargetConfigName(s) plus the named targets of our hosts (TriageTarget, FHIRTarget, AgentTarget)
+			If (tSet.Name = "TargetConfigName") || (tSet.Name = "TargetConfigNames") || ($EXTRACT(tSet.Name, *-5, *) = "Target") {
+				Do ..AddLinks(tItem.Name, tSet.Value, .tLink)
+			} ElseIf (tSet.Name = "BusinessRuleName") && (tSet.Value '= "") {
+				Do ..AddLinks(tItem.Name, ..RuleTargets(tSet.Value), .tLink)
 			}
+		}
+	}
+	Do ..ObservedLinks(.tNames, .tLink)
+	Set tFrom = ""
+	For {
+		Set tFrom = $ORDER(tLink(tFrom))
+		Quit:tFrom=""
+		Set tTo = ""
+		For {
+			Set tTo = $ORDER(tLink(tFrom, tTo))
+			Quit:tTo=""
+			// Rule and setting targets can name things that are not items (a workflow role)
+			Do:$DATA(tNames(tTo)) tOut.connections.%Push({"from":(tFrom), "to":(tTo)})
 		}
 	}
 	Set tOut.aiItems = tAiCount, tOut.totalItems = tProd.Items.Count()
 	Quit tOut
+}
+
+/// Adds the comma-separated targets of one item to the link set.
+ClassMethod AddLinks(pFrom As %String, pList As %String, ByRef pLink) [ Internal ]
+{
+	Set tList = $TRANSLATE(pList, " ", "")
+	For k = 1:1:$LENGTH(tList, ",") {
+		Set tTo = $PIECE(tList, ",", k)
+		Set:((tTo '= "") && (tTo '= pFrom)) pLink(pFrom, tTo) = ""
+	}
+}
+
+/// Targets named in a routing rule: every target="..." of its RuleDefinition (send actions).
+/// Read in the production's namespace; a rule that is not a class gives "".
+ClassMethod RuleTargets(pRule As %String) As %String [ Internal ]
+{
+	Set tOut = ""
+	Try {
+		If ##class(%Dictionary.CompiledXData).%ExistsId(pRule_"||RuleDefinition") {
+			Set tText = ##class(%Dictionary.CompiledXData).%OpenId(pRule_"||RuleDefinition").Data.Read(3000000)
+			Set tMatcher = ##class(%Regex.Matcher).%New("target=""([^""]*)""", tText)
+			While tMatcher.Locate() { Set tOut = tOut_","_tMatcher.Group(1) }
+		}
+	} Catch {}
+	Quit tOut
+}
+
+/// Source to target pairs of request messages in the last 7 days, between items of this production.
+ClassMethod ObservedLinks(ByRef pNames, ByRef pLink) [ Internal ]
+{
+	Try {
+		Set tNow = $ZTIMESTAMP, tWeek = $ZDATETIME((tNow - 7)_","_$PIECE(tNow, ",", 2), 3)
+		Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT DISTINCT SourceConfigName, TargetConfigName FROM Ens.MessageHeader WHERE Type = 1 AND TimeCreated >= ?", tWeek)
+		While tRS.%Next() {
+			Set tA = tRS.%GetData(1), tB = tRS.%GetData(2)
+			Set:((tA '= tB) && $DATA(pNames(tA)) && $DATA(pNames(tB))) pLink(tA, tB) = ""
+		}
+	} Catch {}
 }
 
 /// True for the operation class that runs a declarative agent.
@@ -160,11 +216,14 @@ ClassMethod Usage24h(pNs As %String, pSince As %String) As %DynamicObject [ Inte
 /// Messages, errors and suspended messages of one item, read in the current namespace.
 ClassMethod ItemHealth(pItem As %String, pSince As %String) As %DynamicObject [ Internal ]
 {
-	Set tOut = {"in24h":0, "errors24h":0, "suspended":0, "lastError":""}
+	Set tOut = {"in24h":0, "sent24h":0, "errors24h":0, "suspended":0, "lastError":""}
 	// Plain SQL: the namespace may not map AgenticProd classes
 	Try {
 		Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT COUNT(*) FROM Ens.MessageHeader WHERE TargetConfigName = ? AND TimeCreated >= ?", pItem, pSince)
 		If tRS.%Next() Set tOut.in24h = +tRS.%GetData(1)
+		// Services receive no messages from inside the production; they send
+		Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT COUNT(*) FROM Ens.MessageHeader WHERE SourceConfigName = ? AND Type = 1 AND TimeCreated >= ?", pItem, pSince)
+		If tRS.%Next() Set tOut.sent24h = +tRS.%GetData(1)
 		Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT COUNT(*) FROM Ens_Util.Log WHERE ConfigName = ? AND Type = 2 AND TimeLogged >= ?", pItem, pSince)
 		If tRS.%Next() Set tOut.errors24h = +tRS.%GetData(1)
 		Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT COUNT(*) FROM Ens.MessageHeader WHERE TargetConfigName = ? AND %EXTERNAL(Status) = 'Suspended'", pItem)

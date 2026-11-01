@@ -89,6 +89,26 @@ Method TestOwnProductions()
 	Set tProd = ##class(AgenticProd.UI.Workbench).Production("LEGACY", "Legacy.OrdersProduction")
 	Do $$$AssertEquals(tProd.name, "Legacy.OrdersProduction", "map reads the production asked for")
 	Do $$$AssertEquals(tProd.namespace, "LEGACY")
+	For tTo = "BillingOut", "LabelPrinter", "LabOrdersOut", "ResultsOut" {
+		Do $$$AssertTrue(..HasLink(tProd, "OrdersRouter", tTo), "OrdersRouter -> "_tTo)
+	}
+}
+
+Method TestIrisappLinks()
+{
+	Set tProd = ##class(AgenticProd.UI.Workbench).Production($NAMESPACE, "AgenticProd.Production")
+	Do $$$AssertTrue(..HasLink(tProd, "LabRouter", "EhrOut"), "LabRouter -> EhrOut")
+	Do $$$AssertTrue(..HasLink(tProd, "LabRouter", "FhirOut"), "LabRouter -> FhirOut")
+	Set tIter = tProd.items.%GetIterator()
+	While tIter.%GetNext(, .tItem) { Do $$$AssertTrue(tItem.%IsDefined("sent24h"), tItem.name_" has sent24h") }
+}
+
+ClassMethod HasLink(pProd As %DynamicObject, pFrom As %String, pTo As %String) As %Boolean [ Internal ]
+{
+	Set tIter = pProd.connections.%GetIterator()
+	Set tFound = 0
+	While tIter.%GetNext(, .tC) { Set:(tC.from=pFrom)&&(tC.to=pTo) tFound = 1 }
+	Quit tFound
 }
 
 Method TestSource()
