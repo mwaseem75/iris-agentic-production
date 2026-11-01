@@ -1,5 +1,5 @@
 /* AI Hub Workbench tab. The map is absolutely positioned nodes over one SVG for the lines. */
-#wb-lib, #wb-play, #wb-prod { --wb-ai: #7c3aed; }
+#wb-lib, #wb-new, #wb-prod { --wb-ai: #7c3aed; }
 .nav-grp { color: #6b7a90; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; margin: 16px 20px 6px; list-style: none; }
 .wb-panel.hidden { display: none; }
 .wb-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
@@ -112,3 +112,66 @@
 .wb-tpl.soon { opacity: .55; cursor: default; }
 .wb-tpl.soon:hover { border-color: var(--line); background: #fff; }
 @media (max-width: 1100px) { .wb-bgrid, .wb-two { grid-template-columns: 1fr; } }
+
+/* Header controls that only fit the message tabs */
+.wbmode .wbh { display: none !important; }
+.wbmode.wbmap #refresh { display: inline-flex !important; }
+
+/* Create an agent */
+.wz-stepper { display: flex; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 6px; margin-bottom: 16px; }
+.wz-st { flex: 1; display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 9px; color: #667085; font-weight: 500; cursor: pointer; }
+.wz-st small { display: block; font-weight: 400; font-size: 12px; color: #98a2b3; }
+.wz-nb { width: 28px; height: 28px; border-radius: 50%; border: 2px solid #d0d5dd; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex: none; }
+.wz-st.done { color: #15803d; } .wz-st.done .wz-nb { background: #16a34a; border-color: #16a34a; color: #fff; }
+.wz-st.on { background: #f5f3ff; color: #5b21b6; } .wz-st.on .wz-nb { background: #7c3aed; border-color: #7c3aed; color: #fff; }
+.wz-lay { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 18px; align-items: start; }
+@media (max-width: 1100px) { .wz-lay { grid-template-columns: 1fr; } }
+.wz-q { font-size: 18px; font-weight: 600; color: #101828; }
+.wz-qs { color: #667085; font-size: 13.5px; margin-top: 2px; }
+.wz-goals { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin: 14px 0; }
+.wz-goal { border: 1.5px solid var(--line); border-radius: 12px; padding: 14px; display: flex; gap: 12px; cursor: pointer; background: var(--panel); }
+.wz-goal.on { border-color: #7c3aed; background: #faf5ff; }
+.wz-gic { width: 42px; height: 42px; border-radius: 11px; display: flex; align-items: center; justify-content: center; font-size: 22px; flex: none; background: #f3e8ff; color: #7c3aed; }
+.wz-gt { font-weight: 600; } .wz-gd { font-size: 13px; color: #667085; }
+.wz-two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 800px) { .wz-two { grid-template-columns: 1fr; } }
+.wz-f { margin-top: 12px; }
+.wz-reads { border-left: 3px solid #7c3aed; background: #faf5ff; padding: 8px 12px; border-radius: 6px; font-size: 13px; color: #5b21b6; margin-top: 6px; }
+.wz-add { float: right; }
+.wz-abs { margin-top: 8px; clear: both; }
+.wz-ab, .wz-rule { display: flex; align-items: flex-start; gap: 14px; padding: 14px 0; border-bottom: 1px solid #eef1f5; }
+.wz-ab:last-child, .wz-rule:last-child { border-bottom: 0; }
+.wz-aic { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex: none; }
+.wz-aic.tl { background: #e0f2fe; color: #0369a1; } .wz-aic.sk { background: #ede9fe; color: #6d28d9; }
+.wz-at { font-weight: 600; } .wz-ad { font-size: 13px; color: #667085; }
+.wz-tech { font-size: 11.5px; color: #98a2b3; font-family: ui-monospace, Consolas, monospace; }
+.wz-soft { color: #98a2b3; font-weight: 400; font-size: 12.5px; }
+.wz-mine { font-size: 11px; background: #f3e8ff; color: #6d28d9; border-radius: 6px; padding: 1px 7px; margin-left: 6px; font-weight: 500; }
+.wz-lock { font-size: 11.5px; color: #15803d; background: #e7f6ec; border-radius: 6px; padding: 1px 7px; margin-left: 6px; font-weight: 400; }
+.wz-sw .form-check-input { width: 2.6em; height: 1.4em; margin: 2px 0 0; float: none; }
+.wz-num { width: 80px; }
+.wz-try { background: #f8fafc; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-top: 8px; font-size: 13px; }
+.wz-nav { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; gap: 10px; flex-wrap: wrap; }
+.wz-runbar { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.wz-runbar select { flex: 1; min-width: 240px; }
+.wz-steps { margin-top: 12px; }
+.wz-step { display: flex; gap: 12px; padding: 9px 0; border-bottom: 1px solid #eef1f5; font-size: 14px; }
+.wz-step:last-child { border-bottom: 0; }
+.wz-dot { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 15px; flex: none; }
+.wz-d-read { background: #e0f2fe; color: #0369a1; } .wz-d-deny { background: #fee2e2; color: #b91c1c; } .wz-d-ok { background: #e7f6ec; color: #15803d; }
+.wz-deny { color: #b91c1c; }
+.wz-confirm { background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 10px 12px; font-size: 13.5px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.wz-sum { cursor: pointer; font-size: 13.5px; }
+.wz-sum-card { position: sticky; top: 12px; }
+.wz-sav { width: 40px; height: 40px; border-radius: 10px; background: #f3e8ff; color: #7c3aed; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+.wz-sname { font-size: 17px; }
+.wz-h6 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: #98a2b3; margin: 14px 0 6px; }
+.wz-ul { padding-left: 0; list-style: none; margin: 0; }
+.wz-ul li { font-size: 14px; margin-bottom: 4px; }
+.wz-ul.y i { color: #16a34a; } .wz-ul.n i { color: #dc2626; }
+.wz-shade { position: fixed; inset: 0; background: rgba(16, 24, 40, .35); z-index: 55; }
+.wz-drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 640px; max-width: 100vw; background: var(--panel); box-shadow: -12px 0 40px rgba(16, 24, 40, .18); z-index: 60; display: flex; flex-direction: column; }
+.wz-dhd { padding: 18px 22px; border-bottom: 1px solid #eef1f5; display: flex; align-items: center; gap: 10px; }
+.wz-dbd { padding: 18px 22px; overflow: auto; flex: 1; }
+.wz-dft { padding: 14px 22px; border-top: 1px solid #eef1f5; display: flex; gap: 8px; justify-content: flex-end; align-items: center; }
+.wb-tbl { overflow: auto; max-height: 260px; margin-top: 8px; }

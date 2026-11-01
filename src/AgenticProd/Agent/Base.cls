@@ -9,6 +9,12 @@ Parameter AUTHPOLICY As STRING;
 /// Audit policy class; same rule as AUTHPOLICY.
 Parameter AUDITPOLICY As STRING;
 
+/// Tool rounds per message (outer loop limit); 0 keeps the AI Hub default.
+Parameter MAXSTEPS = 0;
+
+/// Daily spend limit in dollars, enforced by the production item that hosts the agent; 0 is none.
+Parameter DAILYBUDGET = 0;
+
 /// Config Store LLM entry name (AI.LLM.<name>); set before %Init().
 Property ProviderConfig As %String(MAXLEN = 100);
 
@@ -21,6 +27,7 @@ Method %OnInit() As %Status
 {
 	Set tSC = $$$OK
 	Try {
+		Set:+..#MAXSTEPS ..MaxIterations = ..#MAXSTEPS
 		Set tAuth = ..#AUTHPOLICY, tAudit = ..#AUDITPOLICY
 		If (tAuth '= "") && '$IsObject(..ToolManager.AuthPolicy) {
 			$$$ThrowOnError(..ToolManager.SetAuthPolicy($CLASSMETHOD(tAuth, "%New")))

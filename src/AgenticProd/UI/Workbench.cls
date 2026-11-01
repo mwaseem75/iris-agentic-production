@@ -423,7 +423,7 @@ ClassMethod SourceText(pClass As %String) As %String [ Internal ]
 ClassMethod AgentClassesOf(pBases As %String) As %DynamicArray [ Internal ]
 {
 	Set tOut = []
-	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT Name, Abstract, Description, Super FROM %Dictionary.CompiledClass WHERE Name NOT LIKE '|%%' ESCAPE '|' AND Name NOT LIKE 'Ens%' AND Name NOT LIKE 'HS%' AND Name NOT LIKE 'IrisDevTmp%' AND Name NOT LIKE '%.Test.%' ORDER BY Name")
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT Name, Abstract, Description, Super FROM %Dictionary.CompiledClass WHERE Name NOT LIKE '|%%' ESCAPE '|' AND Name NOT LIKE 'Ens%' AND Name NOT LIKE 'HS%' AND Name NOT LIKE 'IrisDevTmp%' AND Name NOT LIKE '%.Test.%' AND Name NOT LIKE 'MyAI.WbTest.%' ORDER BY Name")
 	While tRS.%Next() {
 		Set tName = tRS.Name
 		Continue:tRS.Abstract||((","_..#HIDE_",")[(","_tName_","))
@@ -575,7 +575,29 @@ ClassMethod Source(pClass As %String) As %DynamicObject
 		While tIter.%GetNext(, .tRow) { Set:tRow.class=pClass tOk = 1 }
 	}
 	Quit:'tOk ""
-	Quit {"class":(pClass), "source":(..SourceText(pClass))}
+	Quit {"class":(pClass), "source":(..WithoutSpec(..SourceText(pClass)))}
+}
+
+/// Drops the XData BuilderSpec block (and its doc line): it is the builder's own bookkeeping.
+ClassMethod WithoutSpec(pText As %String) As %String [ Internal ]
+{
+	Set tOut = "", tSkip = 0, tN = $LENGTH(pText, $CHAR(10))
+	For i = 1:1:tN {
+		Set tLine = $PIECE(pText, $CHAR(10), i)
+		// The doc line above the block belongs to it
+		Continue:('tSkip && (tLine [ "/// Workbench form values;"))
+		If 'tSkip && (tLine [ "XData BuilderSpec") {
+			Set tSkip = 1
+			Continue
+		}
+		If tSkip {
+			// The XData body is { json }; its closing brace is the first line that is exactly }
+			Set:(tLine = "}") tSkip = 0
+			Continue
+		}
+		Set tOut = tOut_tLine_$SELECT(i < tN: $CHAR(10), 1: "")
+	}
+	Quit tOut
 }
 
 }

@@ -1,10 +1,10 @@
 "use strict";
-// AI Hub Workbench: Library of the AI Hub classes, Playground (placeholder) and a read-only
+// AI Hub Workbench: Library of the AI Hub classes and a read-only
 // map of what a production uses. Nothing here changes IRIS. Needs el, get from the dashboard script.
 (function () {
-  var panels = { lib: document.getElementById("wb-lib"), play: document.getElementById("wb-play"), prod: document.getElementById("wb-prod") };
-  if (!panels.lib || !panels.play || !panels.prod) return;
-  var TAB = { lib: "wblib", play: "wbplay", prod: "wbprod" };
+  var panels = { lib: document.getElementById("wb-lib"), prod: document.getElementById("wb-prod") };
+  if (!panels.lib || !panels.prod) return;
+  var TAB = { lib: "wblib", prod: "wbprod" };
   var started = false, lib = null, libType = "all", libQuery = "", mapData = null, mapSel = "", mapRes = null;
 
   // Library groups in page order; key is the field in /workbench/library
@@ -152,15 +152,6 @@
     }
     drawer.appendChild(body);
   }
-
-  // ---- playground ----------------------------------------------------------------------------
-  (function () {
-    var c = div("wb-empty");
-    c.appendChild(icon("player-play", "wb-empty-ic"));
-    c.appendChild(div("fw-bold", "Playground"));
-    c.appendChild(div("wb-d", "Run one agent on one message and watch each step. Coming in a later step of the Workbench."));
-    panels.play.appendChild(c);
-  })();
 
   // ---- production map ------------------------------------------------------------------------
   var prodBar = div("wb-bar"), pick = el("select", null, "form-select wb-pick");
@@ -432,9 +423,7 @@
     var row = div("d-flex gap-2 mt-3");
     var lb = el("button", null, "btn flex-fill"); lb.type = "button"; lb.appendChild(icon("books", "me-1")); lb.appendChild(document.createTextNode("Open in Library"));
     lb.addEventListener("click", function () { openInLibrary(c); });
-    var pb = el("button", null, "btn flex-fill"); pb.type = "button"; pb.appendChild(icon("player-play", "me-1")); pb.appendChild(document.createTextNode("Try in Playground"));
-    pb.addEventListener("click", function () { showSub("play"); });
-    row.appendChild(lb); row.appendChild(pb); b2.appendChild(row);
+    row.appendChild(lb); b2.appendChild(row);
     cardEl.appendChild(b2); side.appendChild(cardEl);
   }
 
@@ -452,6 +441,7 @@
   }
 
   window.workbenchReload = loadLib;
+  window.workbenchRefresh = function () { loadProductions(); };
 
   // ---- entry ---------------------------------------------------------------------------------
   window.workbenchShow = function (name) {

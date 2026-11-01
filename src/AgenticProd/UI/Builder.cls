@@ -374,7 +374,7 @@ ClassMethod Codepolicy(pSpec As %DynamicObject, pClass As %String) As %String [ 
 
 ClassMethod Cleanagent(pSpec As %DynamicObject) As %DynamicObject [ Internal ]
 {
-	Quit {"kind":"agent", "class":(..Str(pSpec, "class")), "providerConfig":(..Str(pSpec, "providerConfig")), "model":(..Str(pSpec, "model")), "toolsets":(..StrList(pSpec, "toolsets")), "skills":(..StrList(pSpec, "skills")), "authPolicy":(..Str(pSpec, "authPolicy")), "auditPolicy":(..Str(pSpec, "auditPolicy")), "instructions":($ZSTRIP($TRANSLATE(pSpec.%Get("instructions"), $CHAR(13)), "<>W"))}
+	Quit {"kind":"agent", "class":(..Str(pSpec, "class")), "providerConfig":(..Str(pSpec, "providerConfig")), "provider":(..Str(pSpec, "provider")), "apiKey":(..Str(pSpec, "apiKey")), "model":(..Str(pSpec, "model")), "toolsets":(..StrList(pSpec, "toolsets")), "skills":(..StrList(pSpec, "skills")), "authPolicy":(..Str(pSpec, "authPolicy")), "auditPolicy":(..Str(pSpec, "auditPolicy")), "maxSteps":(+pSpec.%Get("maxSteps")), "dailyBudget":(+pSpec.%Get("dailyBudget")), "instructions":($ZSTRIP($TRANSLATE(pSpec.%Get("instructions"), $CHAR(13)), "<>W"))}
 }
 
 ClassMethod Checkagent(pSpec As %DynamicObject) As %DynamicArray [ Internal ]
@@ -382,13 +382,21 @@ ClassMethod Checkagent(pSpec As %DynamicObject) As %DynamicArray [ Internal ]
 	Set tErr = []
 	Set tP = ..ClassProblem(pSpec.class)
 	Do:tP'="" tErr.%Push(tP)
-	Do:'..NameOk(pSpec.providerConfig, "id") tErr.%Push("Choose a model configuration (Settings tab).")
+	// No Config Store entry: the agent takes its provider and a key reference from the environment, like the triage agent
+	If pSpec.providerConfig = "" {
+		Do:'..NameOk(pSpec.provider, "id") tErr.%Push("Choose a model configuration (Settings tab) or a provider.")
+		Do:'(pSpec.apiKey ?1"@{env:"1A.(1AN,1"_")1"}") tErr.%Push("The key is an environment reference like @{env:OPENAI_API_KEY}.")
+	} ElseIf '..NameOk(pSpec.providerConfig, "id") {
+		Do tErr.%Push("Choose a model configuration (Settings tab).")
+	}
 	Do:pSpec.model="" tErr.%Push("Model is required.")
 	Do:($LENGTH(pSpec.instructions) < 20) tErr.%Push("Instructions are required.")
 	Set tIter = pSpec.toolsets.%GetIterator()
 	While tIter.%GetNext(, .tT) { Do:'..IsKind(tT, "%AI.ToolSet") tErr.%Push("Tools class "_tT_" is not a ToolSet in this namespace.") }
 	Set tIter = pSpec.skills.%GetIterator()
 	While tIter.%GetNext(, .tT) { Do:'..IsKind(tT, "%AI.Agent.Skill") tErr.%Push("Skill class "_tT_" is not a skill in this namespace.") }
+	Do:((pSpec.maxSteps < 0) || (pSpec.maxSteps > 50) || (pSpec.maxSteps '= (pSpec.maxSteps\1))) tErr.%Push("Max steps is a whole number from 0 (no limit) to 50.")
+	Do:((pSpec.dailyBudget < 0) || (pSpec.dailyBudget > 10000)) tErr.%Push("Daily budget is an amount in dollars, 0 for no limit.")
 	Do:(pSpec.authPolicy'="")&&'..IsKind(pSpec.authPolicy, "%AI.Policy.Authorization") tErr.%Push("Authorization policy "_pSpec.authPolicy_" is not an authorization policy.")
 	Do:(pSpec.auditPolicy'="")&&'..IsKind(pSpec.auditPolicy, "%AI.Policy.Audit") tErr.%Push("Audit policy "_pSpec.auditPolicy_" is not an audit policy.")
 	Quit tErr
@@ -398,13 +406,20 @@ ClassMethod Codeagent(pSpec As %DynamicObject, pClass As %String) As %String [ I
 {
 	Set nl = $CHAR(10)
 	Set tCode = "/// "_..Summary($PIECE($TRANSLATE(pSpec.instructions, "#"), nl, 1, 3))_nl_"Class "_pClass_" Extends AgenticProd.Agent.Base"_nl_"{"_nl_nl
-	Set tCode = tCode_"Parameter PROVIDERCONFIG = "_..Q(pSpec.providerConfig)_";"_nl_nl
+	If pSpec.providerConfig '= "" {
+		Set tCode = tCode_"Parameter PROVIDERCONFIG = "_..Q(pSpec.providerConfig)_";"_nl_nl
+	} Else {
+		Set tCode = tCode_"Parameter PROVIDER = "_..Q(pSpec.provider)_";"_nl_nl_"Parameter APIKEY = "_..Q(pSpec.apiKey)_";"_nl_nl
+	}
 	Set tCode = tCode_"Parameter MODEL = "_..Q(pSpec.model)_";"_nl_nl
 	Set tCode = tCode_"Parameter TOOLSETS = "_..Q(..Join(pSpec.toolsets))_";"_nl_nl
 	Set tCode = tCode_"Parameter SKILLS = "_..Q(..Join(pSpec.skills))_";"_nl_nl
 	Set tCode = tCode_"// Attached in %OnInit by AgenticProd.Agent.Base when the caller sets no policy"_nl
 	Set tCode = tCode_"Parameter AUTHPOLICY = "_..Q(pSpec.authPolicy)_";"_nl_nl
 	Set tCode = tCode_"Parameter AUDITPOLICY = "_..Q(pSpec.auditPolicy)_";"_nl_nl
+	// Read by Agent.Base: the step limit applies on every run; the daily budget when a production hosts the agent
+	Set:pSpec.maxSteps tCode = tCode_"Parameter MAXSTEPS = "_pSpec.maxSteps_";"_nl_nl
+	Set:pSpec.dailyBudget tCode = tCode_"Parameter DAILYBUDGET = "_pSpec.dailyBudget_";"_nl_nl
 	Set tCode = tCode_"XData INSTRUCTIONS [ MimeType = text/markdown ]"_nl_"{"_nl_..XDataSafe(pSpec.instructions)_nl_"}"_nl_nl
 	Quit tCode_..SpecBlock(pSpec)_"}"_nl
 }

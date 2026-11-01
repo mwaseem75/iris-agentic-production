@@ -239,7 +239,7 @@
     send("POST", "api/workbench/builder/test-tool", { kind: "tool", spec: cur, args: args }).then(function (r) {
       clear(testOut);
       if (r.errors && r.errors.length) { testOut.appendChild(errList(r.errors)); return; }
-      testOut.appendChild(el("pre", r.result, "wb-src wb-small"));
+      testOut.appendChild(window.wbTable(r.result));
       testOut.appendChild(div("wb-help", r.elapsedMs + " ms · ran as you; the agent itself runs with SELECT only."));
     }).catch(function (e) { testOut.textContent = e.message; });
   }
@@ -256,6 +256,25 @@
       testOut.appendChild(d);
     }).catch(function (e) { testOut.textContent = e.message; });
   }
+
+  // Query tools answer {"columns":[{name}],"rows":[{...}]}: shown as a table, the JSON only when it is not that
+  window.wbTable = function (text) {
+    var j = null;
+    try { j = JSON.parse(text); } catch (e) { j = null; }
+    if (!j || !Array.isArray(j.columns) || !Array.isArray(j.rows)) return el("pre", text, "wb-src wb-small");
+    var wrap = div("wb-tbl"), t = el("table", null, "table table-sm mb-1"), hd = el("tr");
+    j.columns.forEach(function (c) { hd.appendChild(el("th", c.name)); });
+    t.appendChild(el("thead")).appendChild(hd);
+    var tb = el("tbody"); t.appendChild(tb);
+    j.rows.forEach(function (r) {
+      var tr = el("tr");
+      j.columns.forEach(function (c) { var v = r[c.name]; tr.appendChild(el("td", v == null ? "" : String(v))); });
+      tb.appendChild(tr);
+    });
+    wrap.appendChild(t);
+    wrap.appendChild(div("wb-help", j.row_count + " row" + (j.row_count === 1 ? "" : "s") + (j.truncated ? " (more were cut off)" : "")));
+    return wrap;
+  };
 
   // ---- preview, validate, save ---------------------------------------------------------------
   function errList(list) {
@@ -288,6 +307,8 @@
       showResult(r);
       if (name === "save" && r.saved) {
         cur.$editing = true; msgEl.textContent = "Saved and compiled " + r.class + ".";
+        // The lists in the forms (tools, skills, policies) now include this class
+        get("api/workbench/builder/options").then(function (o) { opts = o; });
         if (window.workbenchReload) window.workbenchReload();
       } else msgEl.textContent = r.ok ? "Compiled. Nothing was saved." : "Not saved.";
     }).catch(function (e) { msgEl.textContent = e.message; })

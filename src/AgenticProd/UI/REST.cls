@@ -43,6 +43,8 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
 <Route Url="/workbench/builder/options" Method="GET" Call="BuilderOptions"/>
 <Route Url="/workbench/builder/open" Method="GET" Call="BuilderOpen"/>
 <Route Url="/workbench/builder/:action" Method="POST" Call="BuilderAction"/>
+<Route Url="/workbench/wizard/options" Method="GET" Call="WizardOptions"/>
+<Route Url="/workbench/wizard/:action" Method="POST" Call="WizardAction"/>
 <Route Url="/burst" Method="POST" Call="Burst"/>
 <Route Url="/evalruns" Method="GET" Call="EvalRuns"/>
 <Route Url="/evalruns/:id" Method="GET" Call="EvalResults"/>
@@ -522,6 +524,42 @@ ClassMethod BuilderAction(pAction As %String) As %Status
 			Quit
 		}
 		Set tResult = ##class(AgenticProd.UI.Builder).Handle(pAction, tBody, ..CanEditSettings())
+		Set %response.Status = $CASE(tResult.status, 200: ..#HTTP200OK, 400: ..#HTTP400BADREQUEST, 403: ..#HTTP403FORBIDDEN, : ..#HTTP500INTERNALSERVERERROR)
+		Write tResult.%ToJSON()
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// GET /workbench/wizard/options: starting points, abilities, samples and whether this user may save.
+ClassMethod WizardOptions() As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		Write ##class(AgenticProd.UI.Wizard).Options(..CanEditSettings()).%ToJSON()
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// POST /workbench/wizard/:action {"spec","sample","confirm"}: compose, save, run. See UI.Wizard.Handle.
+ClassMethod WizardAction(pAction As %String) As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		Try {
+			Set tBody = {}.%FromJSON(%request.Content)
+		} Catch {
+			Set tBody = ""
+		}
+		If '$IsObject(tBody) {
+			Set %response.Status = ..#HTTP400BADREQUEST
+			Write {"error":"Body must be a JSON object"}.%ToJSON()
+			Quit
+		}
+		Set tResult = ##class(AgenticProd.UI.Wizard).Handle(pAction, tBody, ..CanEditSettings())
 		Set %response.Status = $CASE(tResult.status, 200: ..#HTTP200OK, 400: ..#HTTP400BADREQUEST, 403: ..#HTTP403FORBIDDEN, : ..#HTTP500INTERNALSERVERERROR)
 		Write tResult.%ToJSON()
 	} Catch ex {
