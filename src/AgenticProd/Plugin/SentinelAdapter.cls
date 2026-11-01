@@ -7,6 +7,10 @@ Include Ensemble
 Class AgenticProd.Plugin.SentinelAdapter Extends Ens.InboundAdapter
 {
 
+/// Comma-separated config names to watch: a failure counts when its source or target is one of
+/// them. Empty watches the whole production (the AI.* plug-in).
+Property WatchItems As %String(MAXLEN = 2000);
+
 /// Seconds a header must be old before it is looked at: by then its status is final.
 Property SettleSeconds As %Integer(MINVAL = 0) [ InitialExpression = 10 ];
 
@@ -22,7 +26,7 @@ Property OwnPrefix As %String(MAXLEN = 20) [ InitialExpression = "AI." ];
 /// in-flight headers are passed, so one stuck message cannot stop the Sentinel.
 Property PendingWaitSeconds As %Integer(MINVAL = 0) [ InitialExpression = 300 ];
 
-Parameter SETTINGS = "SettleSeconds:Sentinel,MaxPerPoll:Sentinel,OwnPrefix:Sentinel,PendingWaitSeconds:Sentinel";
+Parameter SETTINGS = "WatchItems:Sentinel,SettleSeconds:Sentinel,MaxPerPoll:Sentinel,OwnPrefix:Sentinel,PendingWaitSeconds:Sentinel";
 
 /// First start: marks at the newest header and log entry, so the plug-in watches failures from
 /// now on and an old backlog never turns into a burst of agent calls.
@@ -53,7 +57,7 @@ Method OnTask() As %Status
 			Quit
 		}
 		Set tAfterHdr = +$GET($$$EnsStaticAppData(tKey, "header")), tAfterLog = +$GET($$$EnsStaticAppData(tKey, "log"))
-		$$$ThrowOnError(..Scan(tAfterHdr, tAfterLog, ..SettleSeconds, ..MaxPerPoll, ..OwnPrefix, .tFound, .tLastHdr, .tLastLog, ..PendingWaitSeconds))
+		$$$ThrowOnError(..Scan(tAfterHdr, tAfterLog, ..SettleSeconds, ..MaxPerPoll, ..OwnPrefix, .tFound, .tLastHdr, .tLastLog, ..PendingWaitSeconds, ..WatchItems))
 		For i = 1:1:tFound {
 			$$$ThrowOnError(..BusinessHost.ProcessInput(##class(Ens.StringContainer).%New(tFound(i))))
 		}
@@ -71,7 +75,7 @@ Method OnTask() As %Status
 /// namespace already has a DecisionLog row for. pLastHdr and pLastLog are the new marks: the last
 /// header and log entry looked at, so a later poll starts after them. The header scan stops at
 /// the first header still in flight that is younger than pPendingWait seconds.
-ClassMethod Scan(pAfterHdr As %Integer, pAfterLog As %Integer, pSettle As %Integer, pMax As %Integer, pOwnPrefix As %String, Output pFound, Output pLastHdr As %Integer, Output pLastLog As %Integer, pPendingWait As %Integer = 300) As %Status
+ClassMethod Scan(pAfterHdr As %Integer, pAfterLog As %Integer, pSettle As %Integer, pMax As %Integer, pOwnPrefix As %String, Output pFound, Output pLastHdr As %Integer, Output pLastLog As %Integer, pPendingWait As %Integer = 300, pWatch As %String = "") As %Status
 {
 	Kill pFound
 	Set pFound = 0, pLastHdr = pAfterHdr, pLastLog = pAfterLog
@@ -88,6 +92,7 @@ ClassMethod Scan(pAfterHdr As %Integer, pAfterLog As %Integer, pSettle As %Integ
 			Set pLastHdr = tRS.ID
 			Continue:'tRS.IsError&&(tRS.Status'="Suspended")&&(tRS.Status'="Error")
 			Continue:..IsOwn(tRS.SourceConfigName, pOwnPrefix)||..IsOwn(tRS.TargetConfigName, pOwnPrefix)
+			Continue:((pWatch '= "") && '..IsWatched(tRS.SourceConfigName, pWatch) && '..IsWatched(tRS.TargetConfigName, pWatch))
 			Do ..Add(tRS.SessionId, tRS.ID, .pFound)
 		}
 		Quit:pFound>=pMax
@@ -97,6 +102,7 @@ ClassMethod Scan(pAfterHdr As %Integer, pAfterLog As %Integer, pSettle As %Integ
 		While (pFound < pMax) && tRS.%Next() {
 			Set pLastLog = tRS.ID
 			Continue:(tRS.SessionId="")||..IsOwn(tRS.ConfigName, pOwnPrefix)
+			Continue:((pWatch '= "") && '..IsWatched(tRS.ConfigName, pWatch))
 			// A session ID is the ID of the session's first header
 			Do ..Add(tRS.SessionId, tRS.SessionId, .pFound)
 		}
@@ -114,6 +120,11 @@ ClassMethod Add(pSessionId As %Integer, pHeaderId As %Integer, ByRef pFound) [ I
 	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 1 ID FROM AgenticProd_Data.DecisionLog WHERE SessionId = ? AND Namespace = ?", pSessionId, $NAMESPACE)
 	Quit:tRS.%Next()
 	Set pFound($INCREMENT(pFound)) = pHeaderId
+}
+
+ClassMethod IsWatched(pConfigName As %String, pWatch As %String) As %Boolean [ Internal ]
+{
+	Quit $LISTFIND($LISTFROMSTRING($ZSTRIP(pWatch, "*W")), pConfigName)
 }
 
 ClassMethod IsOwn(pConfigName As %String, pPrefix As %String) As %Boolean [ Internal ]

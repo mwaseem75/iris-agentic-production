@@ -297,7 +297,8 @@
     var right = div("d-flex gap-2 align-items-center"); saveMsg = div("wb-note"); right.appendChild(saveMsg);
     var save = btn("Save agent", "btn-primary", "device-floppy", doSave);
     if (!opts.canEdit) { save.disabled = true; save.title = "Only administrators can save."; }
-    var add = btn("Save & add to a production", "", "route"); add.disabled = true; add.title = "Next step"; add.appendChild(el("span", "next step", "wz-soft ms-1"));
+    var add = btn("Save & add to a production", "", "route", doSaveAndAdd);
+    if (!opts.canEdit) { add.disabled = true; add.title = "Only administrators can save."; }
     right.appendChild(save); right.appendChild(add); nv.appendChild(right); root.appendChild(nv);
   }
   function loadPreview(sm, hostEl) {
@@ -331,13 +332,18 @@
       runBox.appendChild(div("wb-help mt-2", (r.ms / 1000).toFixed(1) + " s · " + (r.promptTokens + r.completionTokens) + " tokens · " + money(r.costUsd)));
     }).catch(function (e) { clear(runBox); runBox.appendChild(div("wb-note", e.message)); });
   }
-  function doSave() {
+  function doSave(then) {
     saveMsg.textContent = "Saving…";
     send("POST", "api/workbench/wizard/save", { spec: spec() }).then(function (r) {
       if (!r.saved) { saveMsg.textContent = ""; clear(runBox); runBox.appendChild(errs(r.errors || ["Not saved."])); return; }
       saveMsg.textContent = "Saved " + r.classes.join(" and ") + ". Find it in the Library.";
       if (window.workbenchReload) window.workbenchReload();
+      if (typeof then === "function") then(r.classes[r.classes.length - 1]);
     }).catch(function (e) { saveMsg.textContent = e.message; });
+  }
+  // The agent class is the last one saved; the dialog adds it to a production
+  function doSaveAndAdd() {
+    doSave(function (cls) { if (window.wbAddProd) window.wbAddProd.open({ agentClass: cls, name: idOf(S.name) }); });
   }
 
   // ---- summary card --------------------------------------------------------------------------

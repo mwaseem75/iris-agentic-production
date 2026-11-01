@@ -84,6 +84,7 @@
     else if (item.usedBy) u.appendChild(document.createTextNode((g.type === "tool" ? " " : "") + item.usedBy));
     if (g.type === "check") u.insertBefore(el("span", "plain IRIS", "wb-tag"), u.firstChild);
     c.appendChild(u);
+    if (g.type === "agent" && window.wbAddProd && window.wbAddProd.canAdd(item["class"])) c.appendChild(window.wbAddProd.cardBits(item, loadLib));
     if (window.wbBuilder && window.wbBuilder.editable(item["class"])) u.insertBefore(el("span", "yours · editable", "wb-tag"), u.firstChild);
     var open = function () {
       var drawerOpen = function () { openDrawer(item, g); };
@@ -407,7 +408,9 @@
       var how = div("card"); var b = div("card-body");
       b.appendChild(div("fw-semibold mb-2", "How to read this map"));
       b.appendChild(div("wb-d", "Grey items move messages and do not use AI Hub. The purple card hosts the AI Hub agent; the circles under it are the AI Hub parts it uses. Click a circle to see what it is. Triage is plain IRIS: it checks every agent answer before anything changes."));
-      how.appendChild(b); side.appendChild(how); return;
+      how.appendChild(b); side.appendChild(how);
+      if (window.wbAddProd && mapData && mapData.installs && mapData.installs.length) side.appendChild(window.wbAddProd.installCards(mapData.installs, function () { openProduction(mapData.namespace, mapData.name); }));
+      return;
     }
     var k = KIND[c.kind];
     var cardEl = div("card"), b2 = div("card-body");

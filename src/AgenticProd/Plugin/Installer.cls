@@ -97,7 +97,7 @@ ClassMethod Disable(pNamespace As %String, pProduction As %String = "", Output p
 		New $NAMESPACE
 		Set $NAMESPACE = pNamespace
 		$$$ThrowOnError(..OpenProduction(.pProduction, .tProd))
-		Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID, ItemName FROM AgenticProd_Data.PluginItem WHERE Namespace = ? AND Production = ?", pNamespace, pProduction)
+		Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID, ItemName FROM AgenticProd_Data.PluginItem WHERE Namespace = ? AND Production = ? AND (Owner IS NULL OR Owner = '')", pNamespace, pProduction)
 		If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message))
 		While tRS.%Next() {
 			Set tItem = tProd.FindItemByConfigName(tRS.ItemName)
@@ -144,7 +144,7 @@ ClassMethod SetMode(pNamespace As %String, pProduction As %String = "", pMode As
 		Quit:tOld=pMode
 		Set tSettings(tTriage, "Host", "ActionMode") = pMode
 		$$$ThrowOnError(..Apply(pProduction, .tSettings, tTriage, "ActionMode", .pNote))
-		Set tRS = ##class(%SQL.Statement).%ExecDirect(, "UPDATE AgenticProd_Data.PluginItem SET Mode = ? WHERE Namespace = ? AND Production = ?", pMode, pNamespace, pProduction)
+		Set tRS = ##class(%SQL.Statement).%ExecDirect(, "UPDATE AgenticProd_Data.PluginItem SET Mode = ? WHERE Namespace = ? AND Production = ? AND (Owner IS NULL OR Owner = '')", pMode, pNamespace, pProduction)
 		If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message))
 		$$$ThrowOnError(##class(AgenticProd.Data.SettingsAudit).Log("productions", pNamespace_" "_pProduction, "mode", tOld, pMode))
 	} Catch ex {
@@ -210,7 +210,7 @@ ClassMethod Productions() As %DynamicArray
 	Set tSince = ..Since(), tSeen(tHome) = ""
 	Set tRow = {"namespace":(tHome), "production":(tHomeProd), "mode":(..HomeMode()), "items":[], "native":true, "enabled":true}
 	Do tOut.%Push(tRow)
-	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT Namespace, Production, Mode, ItemName, AddedAt, AddedBy FROM AgenticProd_Data.PluginItem ORDER BY Namespace, Production, ID")
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT Namespace, Production, Mode, ItemName, AddedAt, AddedBy FROM AgenticProd_Data.PluginItem WHERE (Owner IS NULL OR Owner = '') ORDER BY Namespace, Production, ID")
 	While tRS.%Next() {
 		Set tKey = tRS.Namespace_"|"_tRS.Production
 		If '$DATA(tByKey(tKey)) {

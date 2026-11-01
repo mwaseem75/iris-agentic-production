@@ -45,6 +45,8 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
 <Route Url="/workbench/builder/:action" Method="POST" Call="BuilderAction"/>
 <Route Url="/workbench/wizard/options" Method="GET" Call="WizardOptions"/>
 <Route Url="/workbench/wizard/:action" Method="POST" Call="WizardAction"/>
+<Route Url="/workbench/addprod/watch" Method="GET" Call="AddProdWatch"/>
+<Route Url="/workbench/addprod/:action" Method="POST" Call="AddProdAction"/>
 <Route Url="/burst" Method="POST" Call="Burst"/>
 <Route Url="/evalruns" Method="GET" Call="EvalRuns"/>
 <Route Url="/evalruns/:id" Method="GET" Call="EvalResults"/>
@@ -560,6 +562,43 @@ ClassMethod WizardAction(pAction As %String) As %Status
 			Quit
 		}
 		Set tResult = ##class(AgenticProd.UI.Wizard).Handle(pAction, tBody, ..CanEditSettings())
+		Set %response.Status = $CASE(tResult.status, 200: ..#HTTP200OK, 400: ..#HTTP400BADREQUEST, 403: ..#HTTP403FORBIDDEN, : ..#HTTP500INTERNALSERVERERROR)
+		Write tResult.%ToJSON()
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// GET /workbench/addprod/watch?ns=&name=: items of that production with 24 h errors, and its roles.
+ClassMethod AddProdWatch() As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		If '..WorkbenchTarget(%request.Get("ns"), %request.Get("name")) Quit
+		Write ##class(AgenticProd.Plugin.AddAgent).Watchable(%request.Get("ns"), %request.Get("name")).%ToJSON()
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// POST /workbench/addprod/:action {spec}: plan, apply or remove. See Plugin.AddAgent.Handle.
+ClassMethod AddProdAction(pAction As %String) As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		Try {
+			Set tBody = {}.%FromJSON(%request.Content)
+		} Catch {
+			Set tBody = ""
+		}
+		If '$IsObject(tBody) {
+			Set %response.Status = ..#HTTP400BADREQUEST
+			Write {"error":"Body must be a JSON object"}.%ToJSON()
+			Quit
+		}
+		Set tResult = ##class(AgenticProd.Plugin.AddAgent).Handle(pAction, tBody, ..CanEditSettings())
 		Set %response.Status = $CASE(tResult.status, 200: ..#HTTP200OK, 400: ..#HTTP400BADREQUEST, 403: ..#HTTP403FORBIDDEN, : ..#HTTP500INTERNALSERVERERROR)
 		Write tResult.%ToJSON()
 	} Catch ex {

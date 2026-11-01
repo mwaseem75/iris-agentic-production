@@ -68,6 +68,9 @@ Property DecisionJSON As %String(MAXLEN = "");
 /// 1 = answered from a recorded run, no LLM call (tokens and cost 0).
 Property Replay As %Boolean [ InitialExpression = 0 ];
 
+/// Agent class of the run, so a hosted agent's DAILYBUDGET counts only its own spend.
+Property AgentClass As %String(MAXLEN = 128);
+
 Index HeaderIdx On HeaderId;
 
 Index EvalCaseIdx On (EvalRunId, CaseId);
@@ -183,6 +186,9 @@ Storage Default
 </Value>
 <Value name="27">
 <Value>Namespace</Value>
+</Value>
+<Value name="28">
+<Value>AgentClass</Value>
 </Value>
 </Data>
 <DataLocation>^AgenticProd.Data.UsageD</DataLocation>

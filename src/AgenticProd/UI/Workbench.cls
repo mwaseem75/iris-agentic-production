@@ -92,6 +92,7 @@ ClassMethod Production(pNs As %String, pName As %String) As %DynamicObject
 	// Plug-in rows are in the home namespace; the other namespace may not map our classes
 	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT ItemName, Mode FROM AgenticProd_Data.PluginItem WHERE Namespace = ? AND Production = ?", pNs, pName)
 	While tRS.%Next() { Set tAI(tRS.ItemName) = tRS.Mode }
+	Set tInstalls = ##class(AgenticProd.Plugin.AddAgent).Installs("", pNs, pName)
 	Set tHome = $NAMESPACE
 	Set tNow = $ZTIMESTAMP, tSince = $ZDATETIME((tNow - 1)_","_$PIECE(tNow, ",", 2), 3)
 	Set tUsage = ..Usage24h(pNs, tSince)
@@ -101,7 +102,7 @@ ClassMethod Production(pNs As %String, pName As %String) As %DynamicObject
 	Set:'$IsObject(tProd) tProd = ##class(Ens.Config.Production).LoadFromClass(pName)
 	Quit:'$IsObject(tProd) ""
 	Do ##class(Ens.Director).GetProductionStatus(.tCurrent, .tState)
-	Set tOut = {"namespace":(pNs), "name":(pName), "items":[], "connections":[], "hosts":[], "usage24h":(tUsage)}
+	Set tOut = {"namespace":(pNs), "name":(pName), "items":[], "connections":[], "hosts":[], "usage24h":(tUsage), "installs":(tInstalls)}
 	Do tOut.%Set("running", ''((pName = tCurrent) && (tState = $$$eProductionStateRunning)), "boolean")
 	Set tAiCount = 0
 	For i = 1:1:tProd.Items.Count() {
@@ -262,6 +263,11 @@ ClassMethod Host(pItem As Ens.Config.Item, pUsage As %DynamicObject, pSince As %
 		Set:tSet.Name="ProviderConfig" tProvider = tSet.Value
 		Set:tSet.Name="Model" tModelSetting = tSet.Value
 		Set:tSet.Name="DisabledSkills" tDisabled = tSet.Value
+	}
+	// An Add to production install hosts its own agent class
+	For j = 1:1:pItem.Settings.Count() {
+		Set tSet = pItem.Settings.GetAt(j)
+		If (tSet.Name = "AgentClass") && (tSet.Value '= "") && ##class(%Dictionary.CompiledClass).%ExistsId(tSet.Value) Set tAgent = tSet.Value
 	}
 	Set tHost = {"item":(pItem.Name), "operation":(pItem.ClassName), "agentClass":(tAgent), "usage":(pUsage), "components":[]}
 	Set tKey = ..KeySource($PARAMETER(tAgent, "APIKEY"), tProvider)
@@ -484,6 +490,7 @@ ClassMethod Library() As %DynamicObject
 		Set tHosted = ($LENGTH(tHostText) && (tHostText [ tAC))
 		Set tInfo = {"class":(tAC), "name":(tA.name), "description":(tA.description), "provider":($PARAMETER(tAC, "PROVIDER")), "model":($PARAMETER(tAC, "MODEL")), "toolsets":(..CountList(tToolsets)), "skills":(..CountList(tSkills))}
 		Set tInfo.hostedBy = $SELECT(tHosted: tHostItem, 1: "")
+		Set tInfo.installs = ##class(AgenticProd.Plugin.AddAgent).Installs(tAC)
 		Do tOut.agents.%Push(tInfo)
 	}
 	Set tIter = tSets.%GetIterator()

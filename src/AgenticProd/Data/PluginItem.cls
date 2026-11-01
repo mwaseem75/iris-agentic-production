@@ -20,6 +20,15 @@ Property AddedBy As %String(MAXLEN = 128) [ InitialExpression = {$USERNAME} ];
 
 Property AddedAt As %TimeStamp [ InitialExpression = {$ZDATETIME($ZTIMESTAMP, 3)} ];
 
+/// Name of the agent host item of an "Add to production" install; its items share this owner and
+/// Remove takes out exactly them. Empty for the AI.* plug-in, which Disable removes as one set.
+Property Owner As %String(MAXLEN = 128);
+
+/// Agent class the install hosts (MyAI.Agent.X); set on the owner's host item row.
+Property AgentClass As %String(MAXLEN = 128);
+
+Index OwnerIdx On Owner;
+
 Index ItemIdx On (Namespace, Production, ItemName) [ Unique ];
 
 Storage Default
@@ -48,6 +57,12 @@ Storage Default
 </Value>
 <Value name="8">
 <Value>AddedAt</Value>
+</Value>
+<Value name="9">
+<Value>Owner</Value>
+</Value>
+<Value name="10">
+<Value>AgentClass</Value>
 </Value>
 </Data>
 <DataLocation>^AgenticProd.Data.PluginItemD</DataLocation>
