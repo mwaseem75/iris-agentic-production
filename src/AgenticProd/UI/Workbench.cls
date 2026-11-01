@@ -90,8 +90,9 @@ ClassMethod KnownNs(pNs As %String) As %Boolean
 ClassMethod Production(pNs As %String, pName As %String) As %DynamicObject
 {
 	// Plug-in rows are in the home namespace; the other namespace may not map our classes
-	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT ItemName, Mode FROM AgenticProd_Data.PluginItem WHERE Namespace = ? AND Production = ?", pNs, pName)
-	While tRS.%Next() { Set tAI(tRS.ItemName) = tRS.Mode }
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT ItemName, Owner FROM AgenticProd_Data.PluginItem WHERE Namespace = ? AND Production = ?", pNs, pName)
+	// Items the installers added; only the ones that host an agent count as AI Hub
+	While tRS.%Next() { Set tAI(tRS.ItemName) = $SELECT(tRS.Owner '= "": "Workbench", 1: "plug-in") }
 	Set tInstalls = ##class(AgenticProd.Plugin.AddAgent).Installs("", pNs, pName)
 	Set tHome = $NAMESPACE
 	Set tNow = $ZTIMESTAMP, tSince = $ZDATETIME((tNow - 1)_","_$PIECE(tNow, ",", 2), 3)
@@ -112,8 +113,9 @@ ClassMethod Production(pNs As %String, pName As %String) As %DynamicObject
 		Do tRow.%Set("enabled", ''tItem.Enabled, "boolean")
 		// Plug-in namespaces may not map our classes, so the host is also recognised by name
 		Set tHost = (tClass = ..#HOSTCLASS) || ..IsHost(tClass)
-		Set tIsAI = ''(tHost || $DATA(tAI(tItem.Name)))
+		Set tIsAI = ''tHost
 		Do tRow.%Set("ai", tIsAI, "boolean")
+		Set tRow.added = $SELECT($DATA(tAI(tItem.Name)) && 'tHost: tAI(tItem.Name), 1: "")
 		Do tRow.%Set("checks", ''(tClass = "AgenticProd.Process.Triage"), "boolean")
 		Set tAiCount = tAiCount + tIsAI
 		Set tHealth = ..ItemHealth(tItem.Name, tSince)
@@ -123,6 +125,7 @@ ClassMethod Production(pNs As %String, pName As %String) As %DynamicObject
 		Set tNames(tItem.Name) = ""
 		For j = 1:1:tItem.Settings.Count() {
 			Set tSet = tItem.Settings.GetAt(j)
+			Set:(tSet.Name = "WatchItems") tRow.watches = tSet.Value
 			// TargetConfigName(s) plus the named targets of our hosts (TriageTarget, FHIRTarget, AgentTarget)
 			If (tSet.Name = "TargetConfigName") || (tSet.Name = "TargetConfigNames") || ($EXTRACT(tSet.Name, *-5, *) = "Target") {
 				Do ..AddLinks(tItem.Name, tSet.Value, .tLink)

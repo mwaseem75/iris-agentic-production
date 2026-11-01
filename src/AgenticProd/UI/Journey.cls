@@ -23,7 +23,7 @@ ClassMethod Get(pNs As %String, pId As %String) As %DynamicObject
 	Set tTools = $SELECT($IsObject(tUsage)&&(tUsage.AgentSessionId '= ""): ##class(AgenticProd.UI.REST).Rows("SELECT Tool, Status, DurationMs, ResultLength, ErrorText, CreatedAt FROM AgenticProd_Data.ToolCall WHERE AgentSessionId = ? AND Namespace = ? ORDER BY ID", tUsage.AgentSessionId, pNs), 1: [])
 	Set tLearned = ##class(AgenticProd.UI.REST).Rows("SELECT TOP 1 ID, LocalCode, Loinc, Display, Reviewer, ApprovedAt FROM AgenticProd_Data.LearnedMapping WHERE DecisionLogId = ? AND Origin = 'Approved' ORDER BY ID DESC", pId).%Get(0)
 	Set tMessage = ##class(AgenticProd.UI.REST).MaskedMessage(tLog.HeaderId, .tSecrets, pNs)
-	Quit ..Build(tLog, pNs, ..Items(), ..Hops(tLog.SessionId), tTools, tUsage, tLearned, tSpanOutcome, .tSecrets)
+	Quit ..Build(tLog, pNs, ..Items(), ..Hops(tLog.SessionId, ..TriageSessions(tLog.HeaderId)), tTools, tUsage, tLearned, tSpanOutcome, .tSecrets)
 }
 
 /// Items of the running production by upper-case name: {name, lane, workflow}. Header names and item
@@ -38,23 +38,46 @@ ClassMethod Items() As %DynamicObject
 	For i = 1:1:tProd.Items.Count() {
 		Set tItem = tProd.Items.GetAt(i), tClass = tItem.ClassName
 		Set tWorkflow = ##class(%Dictionary.CompiledClass).%ExistsId(tClass) && $CLASSMETHOD(tClass, "%IsA", "EnsLib.Workflow.Operation")
-		Do tItems.%Set($ZCONVERT(tItem.Name, "U"), {"name":(tItem.Name), "lane":(##class(AgenticProd.UI.Flow).Lane(tClass)), "workflow":(''tWorkflow)})
+		Set tAgentCls = ""
+		Do:(tClass = "AgenticProd.Operation.Agent") tItem.GetSetting("AgentClass", .tAgentCls)
+		// GetSetting leaves the output undefined when the item has no such setting
+		Set:'$DATA(tAgentCls) tAgentCls = ""
+		Do tItems.%Set($ZCONVERT(tItem.Name, "U"), {"name":(tItem.Name), "lane":(##class(AgenticProd.UI.Flow).Lane(tClass)), "workflow":(''tWorkflow), "agentClass":(tAgentCls)})
 	}
 	Quit tItems
 }
 
+/// Sessions in which a Sentinel (plug-in or Add to production) handed the failed header pHeaderId to Triage.
+/// Triage's own messages run there, not in the failed message's session.
+ClassMethod TriageSessions(pHeaderId As %Integer) As %String
+{
+	Set tOut = ""
+	Quit:pHeaderId="" tOut
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT DISTINCT SessionId FROM Ens.MessageHeader WHERE MessageBodyClassName = 'AgenticProd.Msg.TriageRequest' AND MessageBodyId IN (SELECT ID FROM AgenticProd_Msg.TriageRequest WHERE HeaderId = ?)", pHeaderId)
+	While tRS.%Next() { Set:tRS.SessionId'="" tOut = tOut_$SELECT(tOut'="": ",", 1: "")_tRS.SessionId }
+	Quit tOut
+}
+
 /// Request hops of the message's session and of the sessions its resends started, in header order.
-ClassMethod Hops(pSessionId As %Integer) As %DynamicArray
+/// pExtra: comma list of further sessions (TriageSessions); their hops are marked triage.
+ClassMethod Hops(pSessionId As %Integer, pExtra As %String = "") As %DynamicArray
 {
 	Quit:pSessionId="" []
 	Set tSessions = pSessionId
+	For i = 1:1:$LENGTH(pExtra, ",") {
+		Set tX = $PIECE(pExtra, ",", i)
+		Set:(tX'="")&&(tX'=pSessionId) tSessions = tSessions_","_tX, tExtra(tX) = ""
+	}
 	// a resent copy may start its own session; Resent on the original points to it
 	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT DISTINCT SessionId FROM Ens.MessageHeader WHERE ID IN (SELECT Resent FROM Ens.MessageHeader WHERE SessionId = ? AND Resent > 0) OR SuperSession = ?", pSessionId, pSessionId)
 	While tRS.%Next() {
 		Set:(tRS.SessionId'="")&&((","_tSessions_",")'[(","_tRS.SessionId_",")) tSessions = tSessions_","_tRS.SessionId
 	}
-	Quit ##class(AgenticProd.UI.REST).Rows("SELECT ID, SessionId, SourceConfigName AS ""From"", TargetConfigName AS ""To"", TimeCreated AS T0, TimeProcessed AS T1, IsError AS Error FROM Ens.MessageHeader"
+	Set tHops = ##class(AgenticProd.UI.REST).Rows("SELECT ID, SessionId, SourceConfigName AS ""From"", TargetConfigName AS ""To"", TimeCreated AS T0, TimeProcessed AS T1, IsError AS Error, %EXTERNAL(Status) AS St FROM Ens.MessageHeader"
 		_" WHERE Type = 1 AND SessionId IN ("_tSessions_") AND NOT SourceConfigName %STARTSWITH 'Ens.' AND NOT TargetConfigName %STARTSWITH 'Ens.' ORDER BY ID")
+	Set tIter = tHops.%GetIterator()
+	While tIter.%GetNext(, .tHop) { Do:$DATA(tExtra(tHop.SessionId)) tHop.%Set("triage", 1, "number") }
+	Quit tHops
 }
 
 /// Milliseconds from UTC timestamp pA to pB; "" when either is empty.
@@ -81,7 +104,7 @@ ClassMethod Build(pLog As AgenticProd.Data.DecisionLog, pNs As %String, pItems A
 	Set tS0 = pLog.SessionId, tReviewed = pLog.ReviewedAt
 	Set tOutcome = ##class(AgenticProd.UI.REST).TriageOutcome(pLog, pSpanOutcome)
 	Set tSteps = []
-	Set tAgentName = "", tRouterName = ""
+	Set tAgentName = "", tRouterName = "", tFailedAt = "", tSentinel = "", tCheckName = "", tTaskTo = "", tInFrom = ""
 	For tName = "inbound", "triage", "agent", "task", "later" Set tBucket(tName) = []
 
 	// Sort hops into the phases of the path
@@ -91,14 +114,19 @@ ClassMethod Build(pLog As AgenticProd.Data.DecisionLog, pNs As %String, pItems A
 		Do tHop.%Set("From", ##class(AgenticProd.UI.Flow).Alias(tHop.From)), tHop.%Set("To", ##class(AgenticProd.UI.Flow).Alias(tHop.To))
 		Set tSrc = pItems.%Get($ZCONVERT(tHop.From, "U")), tDst = pItems.%Get($ZCONVERT(tHop.To, "U"))
 		Set tSrcLane = $SELECT($IsObject(tSrc): tSrc.lane, 1: ""), tDstLane = $SELECT($IsObject(tDst): tDst.lane, 1: "")
-		If (tHop.SessionId '= tS0) || ((tReviewed '= "") && (tHop.T0 ] tReviewed)) {
+		// A Sentinel hands the failure to Triage in a session of its own; those hops belong to the path
+		// An operation that kept retrying until its FailureTimeout ends in status Error without IsError set
+		If (tHop.SessionId = tS0) && (tHop.Error || (tHop.St = "Error")) && (tFailedAt = "") Set tFailedAt = tHop.To
+		If tSrcLane = "sentinel" Set tSentinel = tHop.From, tCheckName = tHop.To
+		If (tHop.SessionId '= tS0) && 'tHop.triage || ((tReviewed '= "") && (tHop.T0 ] tReviewed)) {
 			Set tKind = "later"
 		} ElseIf $IsObject(tDst) && tDst.workflow {
-			Set tKind = "task"
+			Set tKind = "task", tTaskTo = tDst.name
 		} ElseIf tDstLane = "ai" {
 			Set tKind = "agent", tAgentName = tDst.name
 		} ElseIf tSrcLane = "inbound" {
 			Set tKind = "inbound", tRouterName = $SELECT($IsObject(tDst): tDst.name, 1: tHop.To)
+			Set:(tInFrom = "") tInFrom = tHop.From
 		} ElseIf tDstLane = "decision" {
 			Set tKind = "triage"
 		} Else {
@@ -118,7 +146,9 @@ ClassMethod Build(pLog As AgenticProd.Data.DecisionLog, pNs As %String, pItems A
 
 	// router check: the message stopped there with its error text
 	Set tAt = $SELECT(tPrevEnd'="": tPrevEnd, 1: pLog.CreatedAt)
-	Do ..Add(tSteps, "router", "Router check", "The router checked the message and stopped it ("_pLog.ErrorClass_"): "_$SELECT(pLog.ErrorText '= "": ##class(AgenticProd.UI.REST).Mask(pLog.ErrorText, .pSecrets), 1: "no problem text recorded")_".", tAt, tAt, {"node":(tRouterName)}, tS0, "bad", .tPrevEnd)
+	Set tWatch = (tSentinel '= "")
+	Set tRouterText = $SELECT(tWatch && (tFailedAt '= ""): tRouterName_" could not deliver to "_tFailedAt_" ("_pLog.ErrorClass_"); "_tSentinel_" saw the failure: ", 1: "The router checked the message and stopped it ("_pLog.ErrorClass_"): ")
+	Do ..Add(tSteps, "router", $SELECT(tWatch && (tFailedAt '= ""): "Delivery failed", 1: "Router check"), tRouterText_$SELECT(pLog.ErrorText '= "": ##class(AgenticProd.UI.REST).Mask(pLog.ErrorText, .pSecrets), 1: "no problem text recorded")_".", tAt, tAt, {"node":(tRouterName), "failedAt":($SELECT(tWatch: tFailedAt, 1: ""))}, tS0, "bad", .tPrevEnd)
 
 	Do ..AddHops(tSteps, tBucket("triage"), "hop", "Failed message to Triage", .tPrevEnd, tReviewed)
 	Do ..AddHops(tSteps, tBucket("agent"), "hop", "Triage asks the agent", .tPrevEnd, tReviewed)
@@ -198,8 +228,17 @@ ClassMethod Build(pLog As AgenticProd.Data.DecisionLog, pNs As %String, pItems A
 		Do:(tGap > ..#LONGWAITMS)&&(tStep.waitLabel = "") tStep.%Set("waitLabel", "waited "_..Human(tGap))
 		Set tPrev = $SELECT(tStep.endAt ] tStep.at: tStep.endAt, 1: tStep.at)
 	}
+	// The real item names along the path, only where a Sentinel carried the failure
+	Set tPath = []
+	If tWatch {
+		For tPart = tInFrom, tRouterName, $SELECT(tFailedAt '= "": tFailedAt_" (fails)", 1: ""), tSentinel, tCheckName, tAgentName, tTaskTo {
+			Do:tPart'="" tPath.%Push(tPart)
+		}
+	}
+	Set tAgentCls = pItems.%Get($ZCONVERT(tAgentName, "U"))
 	Quit {"id":(+pLog.%Id()), "headerId":(pLog.HeaderId), "sessionId":(tS0), "namespace":(pNs), "decision":(pLog.Decision), "errorClass":(pLog.ErrorClass), "createdAt":(pLog.CreatedAt), "outcome":(##class(AgenticProd.UI.Flow).OutcomeLane(tOutcome)),
-		"traceUrl":(##class(AgenticProd.UI.REST).TraceUrl(pNs)), "agent":(..AgentInfo(tAgentName, pUsage, pTools, pLearned)), "steps":(tSteps)}
+		"traceUrl":(##class(AgenticProd.UI.REST).TraceUrl(pNs)), "agent":(..AgentInfo(tAgentName, pUsage, pTools, pLearned, $SELECT($IsObject(tAgentCls): tAgentCls.agentClass, 1: ""))), "steps":(tSteps),
+		"path":(tPath), "sentinel":(tSentinel), "checkName":(tCheckName), "workflowName":(tTaskTo)}
 }
 
 /// The agent sub-node a tool call lights: knowledge, skills or tools. A refused call also shows on policies.
@@ -210,9 +249,9 @@ ClassMethod SubNode(pCall As %DynamicObject) As %String [ Internal ]
 
 /// What the agent used for this message, one entry per sub-node of the canvas. Names come from the
 /// agent class parameters, counts from the recorded tool calls.
-ClassMethod AgentInfo(pName As %String, pUsage As %DynamicObject, pTools As %DynamicArray, pLearned As %DynamicObject) As %DynamicObject [ Internal ]
+ClassMethod AgentInfo(pName As %String, pUsage As %DynamicObject, pTools As %DynamicArray, pLearned As %DynamicObject, pAgentClass As %String = "") As %DynamicObject [ Internal ]
 {
-	Set tCls = "AgenticProd.Agent.TriageAgent", tUsed = $IsObject(pUsage) && (pUsage.Decision '= "")
+	Set tCls = $SELECT((pAgentClass '= "") && ##class(%Dictionary.CompiledClass).%ExistsId(pAgentClass): pAgentClass, 1: "AgenticProd.Agent.TriageAgent"), tUsed = $IsObject(pUsage) && (pUsage.Decision '= "")
 	Set tNames = [], tSeen = "", tAllowed = 0, tDenied = 0, tCand = 0, tSkillCalls = 0
 	Set tIter = pTools.%GetIterator()
 	While tIter.%GetNext(, .tCall) {
@@ -230,7 +269,7 @@ ClassMethod AgentInfo(pName As %String, pUsage As %DynamicObject, pTools As %Dyn
 		Set tSkillCls = $PIECE($PARAMETER(tCls, "SKILLS"), ",", i)
 		If (tOne'="") && ..SkillUsed(tSkillCls, tSeen) Do tSkillsUsed.%Push(tOne)
 	}
-	Quit {"name":(pName), "class":"%AI.Agent", "used":(''tUsed),
+	Quit {"name":(pName), "class":"%AI.Agent", "agentClass":(tCls), "used":(''tUsed),
 		"model":($SELECT(tUsed: pUsage.Model, 1: "")), "provider":($PARAMETER(tCls, "PROVIDER")), "replay":($SELECT(tUsed: ''pUsage.Replay, 1: 0)),
 		"sessionId":($SELECT(tUsed: pUsage.AgentSessionId, 1: "")),
 		"decision":($SELECT(tUsed: pUsage.Decision, 1: "")), "confidence":($SELECT(tUsed: pUsage.Confidence, 1: "")),

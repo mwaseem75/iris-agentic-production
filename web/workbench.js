@@ -216,13 +216,13 @@
   }
 
   var NW = 210, NH = 92, HW = 340, HH = 100, GAPX = 90, GAPY = 36, CW = 122;
-  var stage = null, scale = 1, stageW = 0, stageH = 0, PAD = 48;
+  var stage = null, scale = 1, stageW = 0, stageH = 0, PAD = 48, MINSCALE = 0.85;
 
   function nodeBox(it, host, small) {
     var n = div("wb-n-node" + (host ? " wb-host" : it.ai ? " wb-ainode" : it.checks ? " wb-chk" : " wb-plain") + (small ? " wb-small" : ""));
     n.dataset.name = it.name;
     n.title = it.name + " · " + it["class"];
-    if (!small) n.appendChild(el("span", host || it.ai ? "AI HUB" : it.checks ? "checks around the agent" : "no AI Hub", "wb-tagpill" + (host || it.ai ? " hub" : "")));
+    if (!small) n.appendChild(el("span", host || it.ai ? "AI HUB" : it.added ? "added by " + it.added : it.checks ? "checks around the agent" : "no AI Hub", "wb-tagpill" + (host || it.ai ? " hub" : it.added ? " added" : "")));
     var h = div("wb-nh"); h.appendChild(icon(host ? "robot" : (it.checks ? "shield-half" : TYPE_ICON[it.type] || "box")));
     var t = div("wb-nx"); t.appendChild(div("wb-nt", short(it.name)));
     t.appendChild(div("wb-nk", host ? "Operation " + short(host.operation) + " · agent " + short(host.agentClass) : it.type + " · " + short(it["class"])));
@@ -269,6 +269,7 @@
     });
     d.items.forEach(function (i) {
       if (hostOf[i.name]) role[i.name] = "host";
+      else if (/Plugin\.Sentinel$/.test(i["class"])) role[i.name] = "sentinel";
       else if (i.checks || (i.type === "process" && (out[i.name] || []).some(function (t) { return hostOf[t]; }))) role[i.name] = "checker";
       else if (/Workflow/i.test(i["class"])) role[i.name] = "workflow";
     });
@@ -279,7 +280,7 @@
     d.items.forEach(function (i) { if (!role[i.name]) role[i.name] = "main"; });
     var pick = function (r) { return d.items.filter(function (i) { return role[i.name] === r; }); };
     return { role: role, hostOf: hostOf, out: out, byName: byName, main: pick("main"),
-      branch: pick("checker").concat(pick("host"), pick("workflow")), other: pick("helper") };
+      branch: pick("sentinel").concat(pick("checker"), pick("host"), pick("workflow")), other: pick("helper") };
   }
 
   function drawMap(d) {
@@ -339,10 +340,20 @@
       stage.appendChild(n);
     });
     var PURPLE = "#a78bfa", GREY = "#9ca3af", seenArc = {};
+    // Watched items -> Sentinel (red dashed), then Sentinel -> check process
+    d.items.forEach(function (i) {
+      var s = pos[i.name]; if (role[i.name] !== "sentinel" || !s) return;
+      String(i.watches || "").split(",").forEach(function (w) {
+        var a = pos[w.trim()]; if (!a || a.small) return;
+        svg.appendChild(vpath(a.x + a.w / 2, a.y + a.h, s.x + s.w / 2, s.y, "#f87171", true));
+      });
+    });
     d.connections.forEach(function (c) {
       var a = pos[c.from], b = pos[c.to]; if (!a || !b || a.small || b.small) return;
       var ra = role[c.from], rb = role[c.to];
-      if (ra === "main" && rb === "main") {
+      if (ra === "sentinel" && rb === "checker") {
+        svg.appendChild(curve("M" + (a.x + a.w) + "," + (a.y + a.h / 2) + " C" + (a.x + a.w + 40) + "," + (a.y + a.h / 2) + " " + (b.x - 40) + "," + (b.y + b.h / 2) + " " + b.x + "," + (b.y + b.h / 2), "#f87171", true));
+      } else if (ra === "main" && rb === "main") {
         if (b.x >= a.x + a.w) svg.appendChild(hpath(a.x + a.w, a.y + a.h / 2, b.x, b.y + b.h / 2, GREY));
       } else if (ra === "main" && rb === "checker") {
         svg.appendChild(vpath(a.x + a.w * 0.7, a.y + a.h, b.x + b.w * 0.7, b.y, "#f87171"));
@@ -396,7 +407,7 @@
   // Width decides the scale and the page scrolls for height. Never below 0.85: labels stop being readable.
   function fit() {
     if (!stage) return;
-    scale = Math.max(0.85, Math.min(1, (cv.clientWidth || stageW) / stageW));
+    scale = Math.max(MINSCALE, Math.min(1, (cv.clientWidth || stageW) / stageW));
     applyScale();
   }
 

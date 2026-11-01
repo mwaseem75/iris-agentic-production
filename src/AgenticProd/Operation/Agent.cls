@@ -242,8 +242,11 @@ Method BuildAgent(pHeaderId As %Integer, Output pAgent As %AI.Agent, Output pSes
 		Set pSession = pAgent.CreateSession({"cache":{"enabled":1,"cache_system_prompt":1,"cache_tool_definitions":1}})
 		// Saved early so ToolCall rows carry the session ID
 		$$$ThrowOnError(pSession.%Save())
-		If $PARAMETER(..AgentClass, "AUDITPOLICY") = "" {
-			Set tAudit = ##class(AgenticProd.Policy.Audit).%New()
+		// The class's own audit policy is used when it is (a subclass of) ours, but it still needs the
+		// header and session, or its ToolCall rows cannot be joined to the run
+		Set tAuditClass = $PARAMETER(..AgentClass, "AUDITPOLICY")
+		If (tAuditClass = "") || $CLASSMETHOD(tAuditClass, "%Extends", "AgenticProd.Policy.Audit") {
+			Set tAudit = $CLASSMETHOD($SELECT(tAuditClass = "": "AgenticProd.Policy.Audit", 1: tAuditClass), "%New")
 			Set tAudit.HeaderId = pHeaderId
 			Set tAudit.AgentSessionId = pSession.%Id()
 			$$$ThrowOnError(pAgent.ToolManager.SetAuditPolicy(tAudit))

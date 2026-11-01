@@ -58,10 +58,18 @@ ClassMethod Lane(pClass As %String) As %String
 {
 	Quit:pClass="AgenticProd.Process.Triage" "decision"
 	Quit:pClass="AgenticProd.Operation.Agent" "ai"
+	Quit:pClass="AgenticProd.Plugin.Sentinel" "sentinel"
 	Quit:'##class(%Dictionary.CompiledClass).%ExistsId(pClass) "router"
 	Quit:$CLASSMETHOD(pClass, "%IsA", "Ens.BusinessService") "inbound"
 	Quit:$CLASSMETHOD(pClass, "%IsA", "Ens.BusinessOperation") "outcome"
 	Quit "router"
+}
+
+/// Lane on the Flow tab's map, which has no sentinel column: the Sentinel stays with the inbound services.
+ClassMethod MapLane(pClass As %String) As %String
+{
+	Set tLane = ..Lane(pClass)
+	Quit $SELECT(tLane = "sentinel": "inbound", 1: tLane)
 }
 
 /// UTC timestamp pMinutes ago, to the millisecond.
@@ -142,7 +150,7 @@ ClassMethod Map(pNs As %String, pFrom As %String = "", pTo As %String = "", pInc
 
 	For i = 1:1:tProd.Items.Count() {
 		Set tItem = tProd.Items.GetAt(i), tN = tItem.Name, tU = $ZCONVERT(tN, "U"), tItems(tU) = tN
-		Do tOut.items.%Push({"name":(tN), "className":(tItem.ClassName), "lane":(..Lane(tItem.ClassName)), "enabled":(''tItem.Enabled),
+		Do tOut.items.%Push({"name":(tN), "className":(tItem.ClassName), "lane":(..MapLane(tItem.ClassName)), "enabled":(''tItem.Enabled),
 			"in":(+$GET(tIn(tU))), "out":(+$GET(tOutN(tU))), "errors":(+$GET(tErr(tU))), "queue":(+$GET(tQueue(tU)))})
 	}
 	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT SourceConfigName AS S, TargetConfigName AS T, COUNT(*) AS C, AVG(DATEDIFF('ms', TimeCreated, TimeProcessed)) AS Ms"

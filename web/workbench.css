@@ -222,3 +222,8 @@
 .ap-inst { display: flex; align-items: center; gap: 8px; font-size: 12.5px; flex-wrap: wrap; }
 @media (max-width: 1000px) { .ap-body { grid-template-columns: 1fr; } .ap-ways, .ap-items, .ap-two, .ap-row { grid-template-columns: 1fr; } }
 .ap-opt.off { opacity: .5; cursor: not-allowed; }
+.wb-tagpill.added { background: #e5e7eb; color: #475467; }
+.fl-path { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 10px; font-size: 13px; }
+.fl-path .nm { background: #f2f4f7; border-radius: 6px; padding: 2px 8px; font-family: ui-monospace, Consolas, monospace; }
+.fl-path .nm.bad { background: #fef2f2; color: #b91c1c; }
+.fl-path .sep { color: #98a2b3; }

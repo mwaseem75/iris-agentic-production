@@ -290,11 +290,22 @@
     var names = {};
     J.steps.forEach(function (s) {
       if (s.kind === "inbound" && s.edge && !names.trigger) names.trigger = s.edge.from;
-      if (s.kind === "router" && s.node && !names.router) names.router = s.node;
+      if (s.kind === "router" && s.node && !names.router) { names.router = s.node; if (s.failedAt) names.fail = s.failedAt; }
     });
+    // Real item names along the path when a Sentinel carried the failure to Triage
+    var old = root.parentNode.querySelector(".fl-path");
+    if (old) old.parentNode.removeChild(old);
+    if (J.path && J.path.length) {
+      var strip = h("div", "fl-path");
+      J.path.forEach(function (p, i) {
+        if (i) strip.appendChild(h("span", "sep", "\u2192"));
+        strip.appendChild(h("span", /fails\)$/.test(p) ? "nm bad" : "nm", p));
+      });
+      root.parentNode.insertBefore(strip, root);
+    }
     mkNode("trigger", 8, 92, 112, 96, "Trigger", "trigger", "main", names.trigger);
-    mkNode("router", 142, 92, 112, 96, "Router", "router", "main", names.router);
-    mkNode("agent", 280, 55, 250, 170, "AI Hub Agent", "agent", "agent").sub.textContent = (ag.name || "TriageAgent") + " · " + (ag["class"] || "%AI.Agent");
+    mkNode("router", 142, 92, 112, 96, "Router", "router", "main", (names.router || "") + (names.fail ? " \u2192 " + names.fail + " \u2717" : ""));
+    mkNode("agent", 280, 55, 250, 170, "AI Hub Agent", "agent", "agent").sub.textContent = (ag.name || "TriageAgent") + " · " + (ag.agentClass || ag["class"] || "%AI.Agent");
     cvUi.agent.live = h("div", "s live");
     cvUi.agent.sub.parentNode.appendChild(cvUi.agent.live);
     var g = mkNode("guard", 562, 75, 130, 130, "Guardrails", "guard");
@@ -303,10 +314,10 @@
       row.appendChild(mark); row.appendChild(h("span", null, r.charAt(0).toUpperCase() + r.slice(1)));
       g.sub.appendChild(row); g[r] = mark;
     });
-    mkNode("triage", 722, 92, 96, 96, "Triage", "triage", "main");
+    mkNode("triage", 722, 92, 96, 96, "Triage", "triage", "main", J.checkName || "");
     // the human review card carries wrapped status text, so it is the tall one
     var oh = function (k) { return k === "out:human" ? 108 : 56; }, oy = outs.length > 1 ? 8 : 100;
-    outs.forEach(function (k) { mkNode(k, 840, oy, 152, oh(k), nodeTitle(k), outIcon(k)); oy += oh(k) + 8; });
+    outs.forEach(function (k) { mkNode(k, 840, oy, 152, oh(k), nodeTitle(k), outIcon(k), undefined, k === "out:human" ? J.workflowName : undefined); oy += oh(k) + 8; });
     SUBS.forEach(function (k, i) { mkNode(k, 8 + i * 166, 312, 156, 136, SUB_TITLE[k], k); });
     (ag.tools || []).forEach(function (t) { if (t !== "search_loinc" && t !== "load_skill") cvUi.tools.sub.appendChild(h("span", "chip", t)); });
     (ag.skills || []).forEach(function (t) { cvUi.skills.sub.appendChild(h("span", "chip", t)); });
