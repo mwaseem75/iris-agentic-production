@@ -35,9 +35,9 @@ ClassMethod Init(pRoot As %String = "") As %Status
 		}
 		For tSub = "in", "out", "out-fhir", "rejected", "legacy/in", "legacy/archive", "legacy/lab", "legacy/labels", "legacy/ehr" {
 			Set tDir = ..Dir("data/"_tSub_"/")
-			If '##class(%File).DirectoryExists(tDir), '##class(%File).CreateDirectoryChain(tDir) {
-				$$$ThrowStatus($$$ERROR($$$GeneralError, "cannot create "_tDir))
-			}
+			// The image build mounts the repo read-only; the folders then come with the checkout (.gitkeep)
+			// or are made on the first run. A folder that is missing is not an install error.
+			If '##class(%File).DirectoryExists(tDir) Do ##class(%File).CreateDirectoryChain(tDir)
 		}
 	} Catch ex {
 		Set tSC = ex.AsStatus()

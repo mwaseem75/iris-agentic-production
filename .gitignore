@@ -3,6 +3,10 @@
 # Runtime message folders (synthetic data only); keep the folders
 data/*/*
 !data/*/.gitkeep
+# Legacy demo folders one level deeper
+!data/legacy/*/
+data/legacy/*/*
+!data/legacy/*/.gitkeep
 
 # Local logs
 iris-main.log

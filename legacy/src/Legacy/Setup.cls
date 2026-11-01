@@ -11,9 +11,8 @@ ClassMethod Run() As %Status
 	Try {
 		For tI = 1:1:$LENGTH(..#FOLDERS, ",") {
 			Set tDir = ##class(AgenticProd.Paths).Dir("data/legacy/")_$PIECE(..#FOLDERS, ",", tI)_"/"
-			If '##class(%File).DirectoryExists(tDir), '##class(%File).CreateDirectoryChain(tDir) {
-				$$$ThrowStatus($$$ERROR($$$GeneralError, "cannot create "_tDir))
-			}
+			// Read-only mount during the image build: the folders then come with the checkout (.gitkeep)
+			If '##class(%File).DirectoryExists(tDir) Do ##class(%File).CreateDirectoryChain(tDir)
 		}
 		$$$ThrowOnError(##class(AgenticProd.Paths).ApplyToProduction("Legacy.OrdersProduction"))
 		$$$ThrowOnError(..SeedLabCodes())
