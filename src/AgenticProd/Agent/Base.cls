@@ -3,11 +3,36 @@
 Class AgenticProd.Agent.Base Extends %AI.Agent
 {
 
+/// Authorization policy class (built by the Workbench); empty for agents whose caller sets policies.
+Parameter AUTHPOLICY As STRING;
+
+/// Audit policy class; same rule as AUTHPOLICY.
+Parameter AUDITPOLICY As STRING;
+
 /// Config Store LLM entry name (AI.LLM.<name>); set before %Init().
 Property ProviderConfig As %String(MAXLEN = 100);
 
 /// Provider kind actually used (openai, anthropic, ...), for Data.Usage.
 Property ProviderName As %String(MAXLEN = 50);
+
+/// Attaches AUTHPOLICY/AUDITPOLICY only when no policy is set yet, so Operation.Agent, which sets
+/// its own after %Init(), behaves as before.
+Method %OnInit() As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		Set tAuth = ..#AUTHPOLICY, tAudit = ..#AUDITPOLICY
+		If (tAuth '= "") && '$IsObject(..ToolManager.AuthPolicy) {
+			$$$ThrowOnError(..ToolManager.SetAuthPolicy($CLASSMETHOD(tAuth, "%New")))
+		}
+		If (tAudit '= "") && '$IsObject(..ToolManager.AuditPolicy) {
+			$$$ThrowOnError(..ToolManager.SetAuditPolicy($CLASSMETHOD(tAudit, "%New")))
+		}
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
 
 /// build 154: PROVIDERCONFIG is a class parameter, so a config picked at run time has to be
 /// loaded here. Provider.Create rejects unknown fields, so only the entry's own fields are passed.

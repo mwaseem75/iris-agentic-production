@@ -48,7 +48,9 @@
     });
     filt.appendChild(b);
   });
-  libBar.appendChild(search); libBar.appendChild(filt);
+  var newBtn = el("button", null, "btn btn-primary btn-sm"); newBtn.type = "button"; newBtn.appendChild(icon("plus", "me-1")); newBtn.appendChild(document.createTextNode("New from template"));
+  newBtn.addEventListener("click", function () { if (window.wbBuilder) window.wbBuilder.templates(); });
+  libBar.appendChild(search); libBar.appendChild(filt); libBar.appendChild(newBtn);
   libBar.appendChild(div("wb-hint", "Every block is a real IRIS class. Open one to read its source."));
   panels.lib.appendChild(libBar); panels.lib.appendChild(libNote); panels.lib.appendChild(libBody);
 
@@ -82,7 +84,12 @@
     else if (item.usedBy) u.appendChild(document.createTextNode((g.type === "tool" ? " " : "") + item.usedBy));
     if (g.type === "check") u.insertBefore(el("span", "plain IRIS", "wb-tag"), u.firstChild);
     c.appendChild(u);
-    var open = function () { openDrawer(item, g); };
+    if (window.wbBuilder && window.wbBuilder.editable(item["class"])) u.insertBefore(el("span", "yours · editable", "wb-tag"), u.firstChild);
+    var open = function () {
+      var drawerOpen = function () { openDrawer(item, g); };
+      if (window.wbBuilder && window.wbBuilder.editable(item["class"]) && g.type !== "knowledge" && g.type !== "check") window.wbBuilder.edit(item["class"], drawerOpen);
+      else drawerOpen();
+    };
     c.addEventListener("click", open);
     c.addEventListener("keydown", function (e) { if (e.key === "Enter") open(); });
     return c;
@@ -217,7 +224,7 @@
   }
 
   var NW = 210, NH = 92, HW = 340, HH = 100, GAPX = 90, GAPY = 36, CW = 122;
-  var stage = null, scale = 1, stageW = 0, stageH = 0;
+  var stage = null, scale = 1, stageW = 0, stageH = 0, PAD = 48;
 
   function nodeBox(it, host, small) {
     var n = div("wb-n-node" + (host ? " wb-host" : it.ai ? " wb-ainode" : it.checks ? " wb-chk" : " wb-plain") + (small ? " wb-small" : ""));
@@ -389,7 +396,9 @@
   function applyScale() {
     if (!stage) return;
     stage.style.transform = "scale(" + scale + ")";
-    cv.style.height = Math.ceil(stageH * scale) + "px";
+    // Top pad keeps the zoom buttons clear of the nodes
+    stage.style.top = PAD + "px";
+    cv.style.height = (Math.ceil(stageH * scale) + PAD) + "px";
   }
 
   // Width decides the scale and the page scrolls for height. Never below 0.85: labels stop being readable.
@@ -441,6 +450,8 @@
     };
     if (lib) find(); else get("api/workbench/library").then(function (d) { lib = d; find(); });
   }
+
+  window.workbenchReload = loadLib;
 
   // ---- entry ---------------------------------------------------------------------------------
   window.workbenchShow = function (name) {

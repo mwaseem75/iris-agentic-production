@@ -40,6 +40,9 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
 <Route Url="/workbench/production" Method="GET" Call="WorkbenchProduction"/>
 <Route Url="/workbench/library" Method="GET" Call="WorkbenchLibrary"/>
 <Route Url="/workbench/source" Method="GET" Call="WorkbenchSource"/>
+<Route Url="/workbench/builder/options" Method="GET" Call="BuilderOptions"/>
+<Route Url="/workbench/builder/open" Method="GET" Call="BuilderOpen"/>
+<Route Url="/workbench/builder/:action" Method="POST" Call="BuilderAction"/>
 <Route Url="/burst" Method="POST" Call="Burst"/>
 <Route Url="/evalruns" Method="GET" Call="EvalRuns"/>
 <Route Url="/evalruns/:id" Method="GET" Call="EvalResults"/>
@@ -466,6 +469,61 @@ ClassMethod WorkbenchSource() As %Status
 			Quit
 		}
 		Write tOut.%ToJSON()
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// GET /workbench/builder/options: choices for the builder forms and whether this user may save.
+ClassMethod BuilderOptions() As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		Write ##class(AgenticProd.UI.Builder).Options(..CanEditSettings()).%ToJSON()
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// GET /workbench/builder/open?class=: form values of a MyAI class the builders wrote; 404 otherwise.
+ClassMethod BuilderOpen() As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		Set tSpec = ##class(AgenticProd.UI.Builder).OpenSpec(%request.Get("class"))
+		If '$IsObject(tSpec) {
+			Set %response.Status = ..#HTTP404NOTFOUND
+			Write {"error":"not a class built in the Workbench"}.%ToJSON()
+			Quit
+		}
+		Write {"spec":(tSpec)}.%ToJSON()
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// POST /workbench/builder/:action {"kind","spec","args","tool"}: generate, validate, save,
+/// test-tool, test-policy. Admin only. See UI.Builder.Handle.
+ClassMethod BuilderAction(pAction As %String) As %Status
+{
+	Set tSC = $$$OK
+	Try {
+		Try {
+			Set tBody = {}.%FromJSON(%request.Content)
+		} Catch {
+			Set tBody = ""
+		}
+		If '$IsObject(tBody) {
+			Set %response.Status = ..#HTTP400BADREQUEST
+			Write {"error":"Body must be a JSON object"}.%ToJSON()
+			Quit
+		}
+		Set tResult = ##class(AgenticProd.UI.Builder).Handle(pAction, tBody, ..CanEditSettings())
+		Set %response.Status = $CASE(tResult.status, 200: ..#HTTP200OK, 400: ..#HTTP400BADREQUEST, 403: ..#HTTP403FORBIDDEN, : ..#HTTP500INTERNALSERVERERROR)
+		Write tResult.%ToJSON()
 	} Catch ex {
 		Set tSC = ex.AsStatus()
 	}

@@ -364,6 +364,14 @@ ClassMethod ToolSetInfo(pClass As %String) As %DynamicObject [ Internal ]
 		Do tOut.tools.%Push($PIECE(tPart, """", 1))
 		Do tOut.toolDescriptions.%Push(..Unescape($PIECE($PIECE(tPart, "<Description>", 2), "</Description>", 1)))
 	}
+	// <Query> tools: the description is an attribute
+	Set tParts = $LENGTH(tXml, "<Query Name=""")
+	For i = 2:1:tParts {
+		Set tPart = $PIECE(tXml, "<Query Name=""", i)
+		Do tOut.tools.%Push($PIECE(tPart, """", 1))
+		Do tOut.toolDescriptions.%Push($ZCONVERT($PIECE($PIECE(tPart, "Description=""", 2), """", 1), "I", "XML"))
+	}
+	Set:((tOut.description = "") && tOut.toolDescriptions.%Size()) tOut.description = tOut.toolDescriptions.%Get(0)
 	Quit tOut
 }
 
