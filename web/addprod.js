@@ -77,7 +77,7 @@
   function open(o) {
     close();
     S = { agentClass: o.agentClass, name: o.name || "", ns: "", prod: "", way: "failure", watch: {}, mode: "propose", role: NEWROLE, roleNew: "",
-      tab: "objectscript", items: [], roles: [], plan: null, msg: "", busy: false, prods: [] };
+      tab: "objectscript", items: [], roles: [], canFail: true, plan: null, msg: "", busy: false, prods: [] };
     onDone = o.done || null;
     root = div("ap-root");
     document.body.appendChild(root);
@@ -97,8 +97,11 @@
 
   function loadWatch(redraw) {
     S.items = []; S.roles = []; S.watch = {};
-    get("api/workbench/addprod/watch?ns=" + encodeURIComponent(S.ns) + "&name=" + encodeURIComponent(S.prod)).then(function (r) {
+    get("api/workbench/addprod/watch?ns=" + encodeURIComponent(S.ns) + "&name=" + encodeURIComponent(S.prod) + "&class=" + encodeURIComponent(S.agentClass)).then(function (r) {
       S.items = r.items || []; S.roles = r.roles || [];
+      // An agent without the Triage answer format cannot sit behind "When a message fails"
+      S.canFail = r.canFail !== false;
+      if (!S.canFail && S.way === "failure") S.way = "process";
       S.items.forEach(function (i) { if (i.errors24h) S.watch[i.name] = true; });
       S.roleNew = S.roleNew || (S.name ? S.name + "Support" : "");
       if (redraw !== false) draw();
@@ -169,12 +172,14 @@
   function drawWays() {
     clear(elWays);
     WAYS.forEach(function (w) {
-      var o = div("ap-opt" + (S.way === w[0] ? " on" : "")); o.tabIndex = 0;
+      var off = w[0] === "failure" && !S.canFail;
+      var o = div("ap-opt" + (S.way === w[0] ? " on" : "") + (off ? " off" : "")); o.tabIndex = off ? -1 : 0;
+      if (off) o.title = "This agent has no answer format for Triage. Build it with the Fix or Explain goal to use this way.";
       var ic = el("span", null, "ap-ic"); ic.style.background = w[5]; ic.style.color = w[6]; ic.appendChild(icon(w[1])); o.appendChild(ic);
       var t = div(); var h = div("ap-t", w[2]);
       if (w[4]) h.appendChild(el("span", w[4], "ap-rec"));
       t.appendChild(h); t.appendChild(div("ap-d", w[3])); o.appendChild(t);
-      var pick = function () { S.way = w[0]; drawWays(); drawPanel(); queuePlan(); };
+      var pick = function () { if (off) return; S.way = w[0]; drawWays(); drawPanel(); queuePlan(); };
       o.addEventListener("click", pick); o.addEventListener("keydown", function (e) { if (e.key === "Enter") pick(); });
       elWays.appendChild(o);
     });

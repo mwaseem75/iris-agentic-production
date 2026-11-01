@@ -576,7 +576,7 @@ ClassMethod AddProdWatch() As %Status
 	Set tSC = $$$OK
 	Try {
 		If '..WorkbenchTarget(%request.Get("ns"), %request.Get("name")) Quit
-		Write ##class(AgenticProd.Plugin.AddAgent).Watchable(%request.Get("ns"), %request.Get("name")).%ToJSON()
+		Write ##class(AgenticProd.Plugin.AddAgent).Watchable(%request.Get("ns"), %request.Get("name"), %request.Get("class")).%ToJSON()
 	} Catch ex {
 		Set tSC = ex.AsStatus()
 	}

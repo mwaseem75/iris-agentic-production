@@ -34,7 +34,7 @@ Parameter STEPTEXT = "get_failed_message|Read the failed message;get_error_event
 ClassMethod Options(pAdmin As %Boolean) As %DynamicObject
 {
 	Set tBase = ##class(AgenticProd.UI.Builder).Options(pAdmin)
-	Set tOut = {"canEdit":(''pAdmin), "providers":[], "starters":(..Starters()), "abilities":(..Abilities(tBase)), "ready":(..ReadyQueries()), "samples":(..Samples()), "killSwitch":(..KillSwitch())}
+	Set tOut = {"canEdit":(''pAdmin), "providers":[], "starters":(..Starters()), "abilities":(..Abilities(tBase)), "ready":(..ReadyQueries()), "samples":(..Samples()), "killSwitch":(..KillSwitch()), "outputFormat":(..OutputSection())}
 	Set tIter = tBase.providers.%GetIterator()
 	While tIter.%GetNext(, .tP) { Do tOut.providers.%Push({"name":(tP.name), "model":(tP.model), "price":(..PriceFor(tP.model))}) }
 	// No Config Store entry yet: offer the key from .env that the triage agent uses
@@ -57,15 +57,45 @@ ClassMethod PriceFor(pModel As %String) As %String
 	Quit $SELECT($$$ISOK(tSC): tCost, 1: "")
 }
 
+/// The answer format Triage parses (same contract as TriageAgent). Added to the instructions of the
+/// goals that run inside the failure flow; AddAgent only offers "When a message fails" when it is there.
+ClassMethod OutputSection() As %String
+{
+	Set nl = $CHAR(10)
+	Quit "## Output"_nl_"Reply with exactly one JSON object and nothing else:"_nl_nl
+		_"```json"_nl
+		_"{""decision"":""AUTO_FIX|MAP_CODE|RESEND|REJECT|ESCALATE"","_nl
+		_" ""error_class"":""UNMAPPED_CODE|MISSING_FIELD|BAD_FORMAT|INVALID_VALUE|IDENTITY_ISSUE|STRUCTURE_ERROR|ROUTING|TRANSIENT|OTHER"","_nl
+		_" ""confidence"":0.0,"_nl
+		_" ""fix"":[{""path"":"""",""from"":"""",""to"":""""}],"_nl
+		_" ""mapping"":{""local_code"":"""",""loinc"":"""",""display"":""""},"_nl
+		_" ""validated"":false,"_nl
+		_" ""evidence"":[],"_nl
+		_" ""reason"":""""}"_nl
+		_"```"_nl_nl
+		_"- `confidence` is a number from 0 to 1."_nl
+		_"- `fix` lists each change for AUTO_FIX (path like `OBX(1):14`); otherwise `[]`."_nl
+		_"- `mapping` is filled only for MAP_CODE."_nl
+		_"- `evidence` quotes the facts you used. `reason` is one or two sentences."_nl
+		_"- `validated` is `true` only after a validation tool passed for the exact fix. Never AUTO_FIX otherwise."_nl
+		_"- If you are unsure, use `ESCALATE`."
+}
+
+/// Goals whose agent ends up in the failure flow, so its answer must follow OutputSection.
+ClassMethod NeedsContract(pStarter As %String) As %Boolean
+{
+	Quit (pStarter = "fix") || (pStarter = "explain")
+}
+
 ClassMethod Starters() As %DynamicArray
 {
 	Quit [
 		{"id":"fix", "title":"Fix failed messages", "text":"Find why a message failed and propose a fix. A person approves.", "icon":"first-aid-kit", "name":"Message fixer",
-			"toolsets":["AgenticProd.Tools.Base"], "skills":["AgenticProd.Skill.HL7Repair","AgenticProd.Skill.CodeMapping"], "protectPid":true,
+			"toolsets":["AgenticProd.Tools.Base"], "skills":["AgenticProd.Skill.HL7Repair","AgenticProd.Skill.CodeMapping"], "protectPid":true, "contract":1,
 			"does":["Find why a message failed","Propose a fix; a person approves"],
 			"instructions":("You look at messages that failed in this production."_$CHAR(10)_"1. Read the error first, then the message."_$CHAR(10)_"2. Load a skill when the error needs one."_$CHAR(10)_"3. Never change patient identity. If unsure, escalate."_$CHAR(10)_"Answer with one decision.")},
 		{"id":"explain", "title":"Explain failures", "text":"Write a plain explanation for the support team. Changes nothing.", "icon":"message-question", "name":"Failure explainer",
-			"toolsets":["AgenticProd.Tools.Base"], "skills":[], "protectPid":true,
+			"toolsets":["AgenticProd.Tools.Base"], "skills":[], "protectPid":true, "contract":1,
 			"does":["Explain in plain words why a message failed"],
 			"instructions":("You explain why a message failed, for the support team."_$CHAR(10)_"1. Read the error, then the message."_$CHAR(10)_"2. Say what went wrong and what a person should check."_$CHAR(10)_"3. Do not propose to change the message.")},
 		{"id":"scratch", "title":"Start from scratch", "text":"Your own instructions and abilities.", "icon":"pencil", "name":"My agent",
@@ -193,7 +223,7 @@ ClassMethod Compose(pSpec As %DynamicObject) As %DynamicObject
 	Set tMessage = $SELECT(tRulesIn.%Get("protectPid"): ..#PIDMESSAGE, 1: ..#CUSTOMMESSAGE)
 	Set tPolicySpec = {"kind":"policy", "class":(tOut.policyClass), "tools":[], "message":(tMessage), "rules":(tPolicyRules)}
 	Set tAgentSpec = {"kind":"agent", "class":(tOut.agentClass), "providerConfig":(pSpec.%Get("providerConfig")), "provider":(pSpec.%Get("provider")), "apiKey":(pSpec.%Get("apiKey")), "model":(pSpec.%Get("model")),
-		"toolsets":(pSpec.%Get("toolsets")), "skills":(pSpec.%Get("skills")), "instructions":(pSpec.%Get("instructions")),
+		"toolsets":(pSpec.%Get("toolsets")), "skills":(pSpec.%Get("skills")), "instructions":(pSpec.%Get("instructions")_$SELECT(..NeedsContract(pSpec.%Get("starter")): $CHAR(10,10)_..OutputSection(), 1: "")),
 		"authPolicy":"AgenticProd.Policy.ReadOnly", "auditPolicy":($SELECT(tRulesIn.%Get("audit"): "AgenticProd.Policy.Audit", 1: "")),
 		"maxSteps":(+tRulesIn.%Get("maxSteps")), "dailyBudget":(+tRulesIn.%Get("dailyBudget"))}
 	Set tOut.agentSpec = tAgentSpec, tOut.policySpec = $SELECT(tHasPolicy: tPolicySpec, 1: "")

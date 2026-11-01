@@ -20,9 +20,9 @@ Parameter OWNCLASSES = "AgenticProd.Plugin.Sentinel,AgenticProd.Process.Triage,A
 
 /// Items of production pProduction in pNamespace with their 24 h error counts, most errors first,
 /// plus the Workflow roles there. {"items":[{name,type,class,errors24h}],"roles":[]}.
-ClassMethod Watchable(pNamespace As %String, pProduction As %String) As %DynamicObject
+ClassMethod Watchable(pNamespace As %String, pProduction As %String, pAgentClass As %String = "") As %DynamicObject
 {
-	Set tOut = {"items":[], "roles":[]}
+	Set tOut = {"items":[], "roles":[], "canFail":(''..ContractReady(pAgentClass))}
 	Quit:'##class(AgenticProd.UI.Workbench).KnownNs(pNamespace) tOut
 	Set tSince = ##class(AgenticProd.Plugin.Installer).Since()
 	New $NAMESPACE
@@ -59,6 +59,15 @@ ClassMethod Watchable(pNamespace As %String, pProduction As %String) As %Dynamic
 	Quit tOut
 }
 
+/// True when the agent class tells the model the decision-JSON answer format Triage parses (the
+/// "## Output" section Wizard.OutputSection writes). Without it "When a message fails" cannot work.
+ClassMethod ContractReady(pClass As %String) As %Boolean
+{
+	Quit:pClass="" 0
+	Set tText = ##class(AgenticProd.UI.Workbench).SourceText(pClass)
+	Quit (tText [ "## Output") && (tText [ """error_class""")
+}
+
 /// Check pSpec and list what would be added. pSpec: {agentClass, namespace, production, name,
 /// way (WAYS), watch:[item names], mode (MODES), role, roleNew}. Returns {"ok", "errors":[],
 /// "items":[{name,class,note}], "snippets":{objectscript,bpl,rule}}. Nothing is changed.
@@ -72,6 +81,7 @@ ClassMethod Plan(pSpec As %DynamicObject) As %DynamicObject
 	}
 	If tName '? 1A.AN || ($LENGTH(tName) > 40) Do tOut.errors.%Push("The item name must start with a letter and use only letters and digits.")
 	If '$LISTFIND($LISTFROMSTRING(..#WAYS), tWay) Do tOut.errors.%Push("Pick one of the three ways in.")
+	If (tWay = "failure") && '..ContractReady(tClass) Do tOut.errors.%Push("This agent has no answer format for Triage. Build it with the Fix or Explain goal, or use one of the other two ways.")
 	Set tMode = $SELECT(pSpec.mode = "": "propose", 1: pSpec.mode)
 	If '$LISTFIND($LISTFROMSTRING(..#MODES), tMode) Do tOut.errors.%Push("Mode must be one of "_..#MODES_".")
 	If '##class(AgenticProd.UI.Workbench).KnownNs(tNs) {

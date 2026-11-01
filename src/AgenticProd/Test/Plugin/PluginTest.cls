@@ -228,9 +228,10 @@ ClassMethod InReviewRole(pNS As %String, pRole As %String) As %Boolean
 	Quit ##class(EnsLib.Workflow.RoleMembership).%ExistsId(pRole_"||"_##class(AgenticProd.Setup).#REVIEWUSER)
 }
 
+/// AI.* plug-in rows only: Add to production installs (Owner set) are counted by AddAgentTest.
 ClassMethod TrackedMode(pNS As %String, pProduction As %String) As %String
 {
-	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT DISTINCT %EXACT(Mode) AS Mode FROM AgenticProd_Data.PluginItem WHERE Namespace = ? AND Production = ?", pNS, pProduction)
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT DISTINCT %EXACT(Mode) AS Mode FROM AgenticProd_Data.PluginItem WHERE Namespace = ? AND Production = ? AND (Owner IS NULL OR Owner = '')", pNS, pProduction)
 	Set tModes = ""
 	While tRS.%Next() {
 		Set tModes = tModes_$SELECT(tModes '= "": ",", 1: "")_tRS.Mode
@@ -442,7 +443,7 @@ ClassMethod WaitStarted(pNS As %String, pAfter As %Integer, pNames As %String) A
 
 ClassMethod Tracked(pNS As %String, pProduction As %String) As %Integer
 {
-	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT COUNT(*) AS N FROM AgenticProd_Data.PluginItem WHERE Namespace = ? AND Production = ?", pNS, pProduction)
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT COUNT(*) AS N FROM AgenticProd_Data.PluginItem WHERE Namespace = ? AND Production = ? AND (Owner IS NULL OR Owner = '')", pNS, pProduction)
 	Do tRS.%Next()
 	Quit +tRS.N
 }

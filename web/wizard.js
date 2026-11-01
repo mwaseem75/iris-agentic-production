@@ -38,7 +38,7 @@
   function spec() {
     var pr = provider(), ts = [], sk = [];
     (opts.abilities || []).forEach(function (a) { if (S.on[a["class"]]) (a.kind === "skill" ? sk : ts).push(a["class"]); });
-    return { name: S.name, providerConfig: pr.name, provider: pr.provider || "", apiKey: pr.apiKey || "", model: pr.model, instructions: S.instructions, toolsets: ts, skills: sk,
+    return { starter: S.starter, name: S.name, providerConfig: pr.name, provider: pr.provider || "", apiKey: pr.apiKey || "", model: pr.model, instructions: S.instructions, toolsets: ts, skills: sk,
       rules: { protectPid: S.protectPid, audit: S.audit, custom: S.customOn ? S.custom.filter(function (r) { return r.arg && r.value; }) : [],
         maxSteps: S.maxOn ? Number(S.maxSteps) || 0 : 0, dailyBudget: S.budgetOn ? Number(S.dailyBudget) || 0 : 0 } };
   }
@@ -114,6 +114,13 @@
     c.body.appendChild(two);
     var fi = field("Instructions", ins); fi.appendChild(div("wz-reads", "The AI reads this first, every time. Short numbered steps work best."));
     c.body.appendChild(fi);
+    // Goals that run in the failure flow get the answer format Triage parses; it cannot be edited
+    var st0 = opts.starters.filter(function (s) { return s.id === S.starter; })[0];
+    if (st0 && st0.contract && opts.outputFormat) {
+      var fo = field("Answer format (required by Triage)", el("pre", opts.outputFormat, "wb-src wb-small"));
+      fo.appendChild(div("wz-reads", "Added after your instructions when the agent is saved. Triage reads this JSON to decide what happens next."));
+      c.body.appendChild(fo);
+    }
     root.appendChild(c); root.appendChild(nav(false, true, "Next: abilities"));
   }
 

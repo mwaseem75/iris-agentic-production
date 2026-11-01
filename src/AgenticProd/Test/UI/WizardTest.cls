@@ -32,6 +32,20 @@ ClassMethod Spec(pName As %String = "Wb test wizard") As %DynamicObject
 		"rules":{"protectPid":true, "audit":true, "custom":[{"arg":"topic", "op":"contains", "value":"secret"}], "maxSteps":6, "dailyBudget":0.5}}
 }
 
+Method TestOutputContractOnlyForFailureGoals()
+{
+	Set tSpec = ..Spec()
+	Set tSpec.starter = "fix"
+	Set tCode = ##class(AgenticProd.UI.Wizard).Compose(tSpec).parts.%Get(1).code
+	Do $$$AssertTrue(tCode [ "## Output", "fix goal gets the answer format")
+	Do $$$AssertTrue(tCode [ "error_class", "with the decision fields")
+	Do $$$AssertTrue(##class(AgenticProd.UI.Wizard).Options(1).outputFormat [ "## Output", "shown read-only in the wizard")
+	Set tSpec.starter = "explain"
+	Do $$$AssertTrue(##class(AgenticProd.UI.Wizard).Compose(tSpec).parts.%Get(1).code [ "## Output", "explain goal too")
+	Set tSpec.starter = "scratch"
+	Do $$$AssertNotTrue(##class(AgenticProd.UI.Wizard).Compose(tSpec).parts.%Get(1).code [ "## Output", "scratch agents get none")
+}
+
 Method TestIdOf()
 {
 	Do $$$AssertEquals(##class(AgenticProd.UI.Wizard).IdOf("Orders triage"), "OrdersTriage")

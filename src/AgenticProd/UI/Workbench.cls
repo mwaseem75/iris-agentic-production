@@ -281,20 +281,31 @@ ClassMethod Host(pItem As Ens.Config.Item, pUsage As %DynamicObject, pSince As %
 		Set tDef = ..ToolSetInfo(tClass)
 		Do tHost.components.%Push({"id":(tClass), "kind":"toolset", "title":(tDef.name), "sub":($PIECE(tClass, ".", *)_" · "_tDef.tools.%Size()_" tools"), "class":(tClass), "detail":(tDef.description), "usedBy":[($PIECE(tAgent, ".", *))], "tools":(tDef.tools), "calls24h":(..CallsFor(tDef.tools, tCalls))})
 	}
-	Set tSkills = ..ActiveSkills($PARAMETER(tAgent, "SKILLS"), tDisabled)
+	// Operation.Agent applies DisabledSkills to the triage agent only
+	Set tSkills = ..ActiveSkills($PARAMETER(tAgent, "SKILLS"), $SELECT(tAgent = ..#AGENTCLASS: tDisabled, 1: ""))
 	For i = 1:1:$LENGTH(tSkills, ",") {
 		Set tClass = $PIECE(tSkills, ",", i)
 		Continue:tClass=""
 		Set tSk = ..SkillInfo(tClass)
 		Do tHost.components.%Push({"id":(tClass), "kind":"skill", "title":(tSk.name), "sub":("+ "_tSk.toolsetNames_" ("_tSk.tools.%Size()_")"), "class":(tClass), "detail":(tSk.description), "usedBy":[($PIECE(tAgent, ".", *))], "tools":(tSk.tools), "calls24h":(..CallsFor(tSk.tools, tCalls))})
 	}
-	Set tText = ..SourceText(pItem.ClassName)_..SourceText(tAgent)
-	If tText [ "search_loinc" {
+	// Knowledge counts when a tool the agent really has (its tool sets, its skills' tool sets) searches it
+	Set tHasLoinc = 0, tSets = tToolsets
+	For i = 1:1:$LENGTH(tSkills, ",") { Set tSets = tSets_","_$PARAMETER($PIECE(tSkills, ",", i), "TOOLS") }
+	For i = 1:1:$LENGTH(tSets, ",") {
+		Set tTs = $ZSTRIP($PIECE(tSets, ",", i), "<>W")
+		Set:((tTs'="") && (..SourceText(tTs) [ "search_loinc")) tHasLoinc = 1
+	}
+	If tHasLoinc {
 		Do tHost.components.%Push({"id":"search_loinc", "kind":"knowledge", "title":"LOINC subset", "sub":"search_loinc", "class":"search_loinc", "detail":"Vector search over the LOINC lab codes, used when mapping a code.", "usedBy":[($PIECE(tAgent, ".", *))], "tools":["search_loinc"], "calls24h":(..CallsFor(["search_loinc"], tCalls))})
 	}
+	// Operation.Agent.BuildAgent: the class's own policy when it names one, else the host's ReadOnly and Audit
+	Set tAuth = $PARAMETER(tAgent, "AUTHPOLICY"), tAudit = $PARAMETER(tAgent, "AUDITPOLICY")
+	Set:tAuth="" tAuth = "AgenticProd.Policy.ReadOnly"
+	Set:tAudit="" tAudit = "AgenticProd.Policy.Audit"
 	Set tIter = ..AgentClassesOf("%AI.Policy.Authorization,%AI.Policy.Audit").%GetIterator()
 	While tIter.%GetNext(, .tPol) {
-		Continue:tText'[tPol.class
+		Continue:((tPol.class '= tAuth) && (tPol.class '= tAudit))
 		Do tHost.components.%Push({"id":(tPol.class), "kind":"policy", "title":(tPol.name), "sub":(tPol.kind), "class":(tPol.class), "detail":(tPol.description), "usedBy":[($PIECE(tAgent, ".", *))], "tools":[], "calls24h":0})
 	}
 	Quit tHost

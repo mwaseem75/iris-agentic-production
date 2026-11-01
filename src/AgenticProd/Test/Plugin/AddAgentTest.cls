@@ -83,6 +83,21 @@ Method TestPlanChecks()
 	Do $$$AssertEquals(..ItemNames(), "ScratchOut", "planning changes nothing")
 }
 
+Method TestFailureWayNeedsTheAnswerFormat()
+{
+	Do $$$AssertTrue(##class(AgenticProd.Plugin.AddAgent).ContractReady(..#AGENT), "triage agent has it")
+	Do $$$AssertNotTrue(##class(AgenticProd.Plugin.AddAgent).ContractReady("AgenticProd.Agent.PingAgent"), "ping agent has none")
+	Set tSpec = ..Spec()
+	Set tSpec.agentClass = "AgenticProd.Agent.PingAgent"
+	Set tPlan = ##class(AgenticProd.Plugin.AddAgent).Plan(tSpec)
+	Do $$$AssertNotTrue(tPlan.ok, "failure way refused without the answer format")
+	Do $$$AssertTrue(tPlan.errors.%Get(0) [ "answer format")
+	Set tSpec.way = "process"
+	Do $$$AssertTrue(##class(AgenticProd.Plugin.AddAgent).Plan(tSpec).ok, "own process still allowed")
+	Do $$$AssertTrue(##class(AgenticProd.Plugin.AddAgent).Watchable($NAMESPACE, ..#PROD, ..#AGENT).canFail)
+	Do $$$AssertNotTrue(##class(AgenticProd.Plugin.AddAgent).Watchable($NAMESPACE, ..#PROD, "AgenticProd.Agent.PingAgent").canFail)
+}
+
 Method TestWatchableListsItemsNotOwnClasses()
 {
 	Set tOut = ##class(AgenticProd.Plugin.AddAgent).Watchable($NAMESPACE, ..#PROD)
