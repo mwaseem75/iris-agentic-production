@@ -552,6 +552,8 @@ ClassMethod AddFavoriteAs(pUser As %String) [ Internal ]
 
 ClassMethod CreateDashboardApp(pNamespace As %String) As %Status [ Private ]
 {
+	// Paths is not mapped into %SYS, so resolve the folders before switching
+	Set tWebDir = ##class(AgenticProd.Paths).Dir("web/"), tVendorDir = ##class(AgenticProd.Paths).Dir("web/vendor/")
 	New $NAMESPACE
 	Set $NAMESPACE = "%SYS"
 	Set tSC = $$$OK
@@ -578,14 +580,14 @@ ClassMethod CreateDashboardApp(pNamespace As %String) As %Status [ Private ]
 			Set tProps("Enabled") = 1
 			If tApp = ..#DASHAPP {
 				Set tProps("Description") = "AgenticProd dashboard page"
-				Set tProps("DispatchClass") = "", tProps("Path") = ##class(AgenticProd.Paths).Dir("web/"), tProps("ServeFiles") = 3
+				Set tProps("DispatchClass") = "", tProps("Path") = tWebDir, tProps("ServeFiles") = 3
 				// ServeFiles 3: static files go through the login and resource check (1 serves them to anyone)
 				// Recurse off, or /agenticprod/api would be served from DASHDIR too
 				Set tProps("Recurse") = 0
 			} ElseIf tApp = ..#DASHVENDOR {
 				// Own app so the page app can keep Recurse off; same login and resource as the page
 				Set tProps("Description") = "AgenticProd dashboard libraries (web/vendor)"
-				Set tProps("DispatchClass") = "", tProps("Path") = ##class(AgenticProd.Paths).Dir("web/vendor/"), tProps("ServeFiles") = 3, tProps("Recurse") = 1
+				Set tProps("DispatchClass") = "", tProps("Path") = tVendorDir,tProps("ServeFiles") = 3, tProps("Recurse") = 1
 			} Else {
 				Set tProps("Description") = "AgenticProd dashboard API (read-only; settings writes need AgenticProd_Admin)"
 				Set tProps("DispatchClass") = "AgenticProd.UI.REST"
