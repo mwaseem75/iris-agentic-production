@@ -264,7 +264,7 @@ ClassMethod DashboardSetup() As %Status
 	Set tSC = $$$OK
 	Try {
 		$$$ThrowOnError(..CreateDashboardApp($NAMESPACE))
-		Set tSql = "GRANT SELECT ON AgenticProd_Data.DecisionLog, AgenticProd_Data.Usage, AgenticProd_Data.EvalRun, AgenticProd_Data.EvalResult, AgenticProd_Data.ToolCall, AgenticProd_Data.Span, AgenticProd_Data.SavedCall, AgenticProd_Data.PriceTable, AgenticProd_Data.SettingsAudit, AgenticProd_Data.LearnedMapping, AgenticProd_Data.PluginItem, AgenticProd_Data.StudioDraft, AgenticProd_Msg.ApprovalTask, AgenticProd_Msg.FHIRResult, AgenticProd_Msg.TriageRequest, Ens.MessageHeader, Ens_Util.Log, EnsLib_Workflow.TaskResponse, EnsLib_Workflow.RoleDefinition, %Dictionary.CompiledClass TO "_..#DASHROLE
+		Set tSql = "GRANT SELECT ON AgenticProd_Data.DecisionLog, AgenticProd_Data.Usage, AgenticProd_Data.EvalRun, AgenticProd_Data.EvalResult, AgenticProd_Data.ToolCall, AgenticProd_Data.Span, AgenticProd_Data.SavedCall, AgenticProd_Data.PriceTable, AgenticProd_Data.SettingsAudit, AgenticProd_Data.LearnedMapping, AgenticProd_Data.PluginItem, AgenticProd_Msg.ApprovalTask, AgenticProd_Msg.FHIRResult, AgenticProd_Msg.TriageRequest, Ens.MessageHeader, Ens_Util.Log, EnsLib_Workflow.TaskResponse, EnsLib_Workflow.RoleDefinition, %Dictionary.CompiledClass TO "_..#DASHROLE
 		Set tRS = ##class(%SQL.Statement).%ExecDirect(, tSql)
 		If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message_" ("_tSql_")"))
 	} Catch ex {
@@ -426,7 +426,7 @@ ClassMethod RemoveLegacyMappings() As %Status
 }
 
 /// What the dashboard reads in LEGACY: headers and the FHIR result table (story view), the event
-/// log (production health), class names (Studio lists the productions).
+/// log (production health), class names (the Workbench lists the productions).
 ClassMethod LegacyDashboardGrants() As %Status
 {
 	New $NAMESPACE

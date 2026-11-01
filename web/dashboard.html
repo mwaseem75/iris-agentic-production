@@ -6,7 +6,7 @@
 <title>Agentic Production</title>
 <link rel="stylesheet" href="vendor/tabler/tabler.min.css">
 <link rel="stylesheet" href="vendor/tabler/tabler-icons.min.css">
-<link rel="stylesheet" href="studio.css">
+<link rel="stylesheet" href="workbench.css">
 <style>
 :root {
   --tblr-font-sans-serif: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -283,10 +283,11 @@ td.go { white-space: nowrap; }
       <div class="brand"><i class="ti ti-topology-star-3 me-2"></i>Agentic Production<small>AI control plane for IRIS Interoperability</small></div>
       <ul class="navbar-nav pt-3 w-100" id="nav">
         <li class="nav-item"><a class="nav-link active" data-tab="overview" href="#overview"><i class="ti ti-layout-dashboard"></i>Overview</a></li>
-        <li class="nav-item"><a class="nav-link" data-tab="studio" href="#studio"><i class="ti ti-sparkles"></i>AI Studio<span class="badge text-white ms-auto" style="background:#7c3aed">new</span></a></li>
         <li class="nav-item"><a class="nav-link" data-tab="messages" href="#messages"><i class="ti ti-messages"></i>Messages<span class="badge bg-orange text-white ms-auto hidden" id="nav-waiting"></span></a></li>
         <li class="nav-item"><a class="nav-link" data-tab="trust" href="#trust"><i class="ti ti-shield-check"></i>Trust &amp; evaluation</a></li>
         <li class="nav-item"><a class="nav-link" data-tab="cost" href="#cost"><i class="ti ti-coin"></i>Cost</a></li>
+        <li class="nav-grp">AI Hub</li>
+        <li class="nav-item"><a class="nav-link" data-tab="workbench" href="#workbench"><i class="ti ti-tools"></i>Workbench</a></li>
         <li class="nav-item"><a class="nav-link" data-tab="settings" href="#settings"><i class="ti ti-settings"></i>Settings</a></li>
         <li class="nav-item mt-3"><a class="nav-link hidden" id="inbox-link" target="_blank" rel="noopener"><i class="ti ti-inbox"></i>Workflow inbox <i class="ti ti-external-link ms-auto" style="font-size:14px;margin:0"></i></a></li>
         <li class="nav-item"><a class="nav-link hidden" id="prod-link" target="_blank" rel="noopener"><i class="ti ti-route"></i>Production <i class="ti ti-external-link ms-auto" style="font-size:14px;margin:0"></i></a></li>
@@ -319,8 +320,8 @@ td.go { white-space: nowrap; }
       <p class="kill-banner hidden" id="kill-banner" role="alert">AI kill switch is ON: every failed message goes to a person, no LLM call. Turn it off on the Settings tab.</p>
       <p class="err hidden" id="error"></p>
 
-      <!-- AI Studio -->
-      <div class="tabpanel hidden" id="tab-studio" role="tabpanel"><div id="studio-root"></div></div>
+      <!-- Workbench -->
+      <div class="tabpanel hidden" id="tab-workbench" role="tabpanel"><div id="wb-root"></div></div>
 
       <!-- Overview -->
       <div class="tabpanel" id="tab-overview" role="tabpanel">
@@ -1939,7 +1940,7 @@ document.getElementById("kill-btn").addEventListener("click", function () {
   }).catch(function (e) { say("m-kill", e.message); }).then(function () { btn.disabled = false; });
 });
 
-var TITLES = { overview: "Overview", studio: "AI Studio", messages: "Messages", trust: "Trust & evaluation", cost: "Cost", settings: "Settings" };
+var TITLES = { overview: "Overview", workbench: "Workbench", messages: "Messages", trust: "Trust & evaluation", cost: "Cost", settings: "Settings" };
 function showTab(name) {
   if (!document.getElementById("tab-" + name)) name = "overview";
   if (name === "settings") loadSettings();
@@ -1953,7 +1954,7 @@ function showTab(name) {
   try { localStorage.setItem("agenticprod.tab", name); } catch (e) {}
   drawPending();
   if (window.flowShow) window.flowShow(name);
-  if (window.studioShow) window.studioShow(name);
+  if (window.workbenchShow) window.workbenchShow(name);
 }
 
 function showSection(name) {
@@ -2049,6 +2050,6 @@ setInterval(load, 30000);
   </div>
 </aside>
 <script src="flow.js"></script>
-<script src="studio.js"></script>
+<script src="workbench.js"></script>
 </body>
 </html>
