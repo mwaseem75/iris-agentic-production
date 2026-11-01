@@ -92,6 +92,11 @@ ClassMethod Plan(pSpec As %DynamicObject) As %DynamicObject
 	}
 	Set tOut.snippets = ..Snippets(tName)
 	If tOut.errors.%Size() Quit tOut
+	// The agent's package must be visible in the target namespace: map it when it is not
+	Set tHome = $NAMESPACE, tPkg = $PIECE(tClass, ".", 1), tMapped = ..MappingExists(tNs, tPkg)
+	If (tNs '= tHome) && 'tMapped {
+		Do tOut.items.%Push({"name":("Package mapping "_tPkg_" -> "_tNs), "class":"Config.MapPackages", "kind":"package", "note":("so "_tNs_" can see "_tPkg_".* (agent, tools, policy); added to the namespace config")})
+	}
 	New $NAMESPACE
 	Set $NAMESPACE = tNs
 	Set tSC = ##class(AgenticProd.Plugin.Installer).OpenProduction(.tProdName, .tProd)
@@ -99,7 +104,7 @@ ClassMethod Plan(pSpec As %DynamicObject) As %DynamicObject
 		Do tOut.errors.%Push($SYSTEM.Status.GetErrorText(tSC))
 		Quit tOut
 	}
-	If '##class(%Dictionary.CompiledClass).%ExistsId(tClass) Do tOut.errors.%Push(tClass_" is not visible in namespace "_tNs_"; map its package there first.")
+	If (tMapped || (tNs = tHome)) && '##class(%Dictionary.CompiledClass).%ExistsId(tClass) Do tOut.errors.%Push(tClass_" is not visible in namespace "_tNs_" although "_tPkg_" is mapped there.")
 	If '##class(%Dictionary.CompiledClass).%ExistsId(..#HOSTCLASS) Do tOut.errors.%Push("The AgenticProd classes are not mapped into namespace "_tNs_"; run Setup.LegacyMappings first.")
 	// Role item: an existing Workflow operation of that name is reused, anything else with it is a clash
 	If tRole '= "" {
@@ -112,7 +117,7 @@ ClassMethod Plan(pSpec As %DynamicObject) As %DynamicObject
 	}
 	Set tIter = tOut.items.%GetIterator()
 	While tIter.%GetNext(, .tRow) {
-		If tRow.name = tRole Continue
+		If (tRow.name = tRole) || (tRow.kind = "package") Continue
 		If $IsObject(tProd.FindItemByConfigName(tRow.name)) Do tOut.errors.%Push(tNs_" "_tProdName_" already has an item named "_tRow.name_". Nothing was changed; pick another name.")
 	}
 	Set tOut.ok = 'tOut.errors.%Size()
@@ -128,6 +133,7 @@ ClassMethod Apply(pSpec As %DynamicObject) As %DynamicObject
 	Quit:'tPlan.ok tOut
 	Set tNs = pSpec.namespace, tProdName = pSpec.production, tName = pSpec.name, tClass = pSpec.agentClass
 	Set tWay = pSpec.way, tMode = $SELECT(pSpec.mode = "": "propose", 1: pSpec.mode)
+	Set tCreated = 0, tPkg = $PIECE(tClass, ".", 1), tHome = $NAMESPACE
 	Try {
 		// Settings come from the home production's TriageAgent item; read before switching namespace
 		Set tOver = ""
@@ -137,11 +143,17 @@ ClassMethod Apply(pSpec As %DynamicObject) As %DynamicObject
 		Set:tModel'="" tList("Model") = $LISTBUILD("Host", tModel)
 		Set:tCfg'="" tList("ProviderConfig") = $LISTBUILD("Host", tCfg)
 		Set tRole = $SELECT(pSpec.role '= "": pSpec.role, 1: pSpec.roleNew)
+		// Mapping first: the production items name classes of this package
+		If (tNs '= tHome) && '..MappingExists(tNs, tPkg) {
+			$$$ThrowOnError(..AddMapping(tNs, tPkg))
+			Set tCreated = 1
+		}
 		New $NAMESPACE
 		Set $NAMESPACE = tNs
 		$$$ThrowOnError(##class(AgenticProd.Plugin.Installer).OpenProduction(.tProdName, .tProd))
 		Set tIter = tPlan.items.%GetIterator()
 		While tIter.%GetNext(, .tRow) {
+			Continue:(tRow.kind = "package")
 			Set tItem = ##class(Ens.Config.Item).%New()
 			Set tItem.Name = tRow.name, tItem.ClassName = tRow.class, tItem.PoolSize = 1, tItem.Enabled = 1
 			Set tItem.Category = "AI Hub agent: "_tName, tItem.Comment = "Added by AgenticProd.Plugin.AddAgent; Remove takes it out"
@@ -163,8 +175,14 @@ ClassMethod Apply(pSpec As %DynamicObject) As %DynamicObject
 		}
 		If tRole '= "" && (tWay = "failure") $$$ThrowOnError(##class(AgenticProd.Plugin.Installer).ReviewRole(tRole))
 		$$$ThrowOnError(##class(AgenticProd.Plugin.Installer).SaveAndApply(tProd))
+		// One mapping row per install that relies on it; the first one created it
+		If tNs '= tHome {
+			$$$ThrowOnError(..Track(tNs, tProdName, "Package mapping "_tPkg_" -> "_tNs_" for "_tName, "Config.MapPackages", $SELECT(tCreated: "created", 1: "used"), tName, tPkg))
+			Do:tCreated tOut.added.%Push("Package mapping "_tPkg_" -> "_tNs)
+		}
 		Set tIter = tPlan.items.%GetIterator()
 		While tIter.%GetNext(, .tRow) {
+			Continue:(tRow.kind = "package")
 			$$$ThrowOnError(..Track(tNs, tProdName, tRow.name, tRow.class, $SELECT(tWay = "failure": tMode, 1: tWay), tName, $SELECT(tRow.name = tName: tClass, 1: "")))
 			Do tOut.added.%Push(tRow.name)
 		}
@@ -172,8 +190,18 @@ ClassMethod Apply(pSpec As %DynamicObject) As %DynamicObject
 		Set tOut.ok = 1
 	} Catch ex {
 		Do tOut.errors.%Push($SYSTEM.Status.GetErrorText(ex.AsStatus()))
+		// Nothing else uses a mapping this call just made
+		If tCreated Do ..RemoveMapping(tNs, tPkg)
 	}
 	Quit tOut
+}
+
+/// Apply from a JSON spec in a background job (Job ..ApplyJob(key, json)): a production update can
+/// outlast an HTTP call. The result is left in ^IRIS.Temp.AgenticProdAdd(pKey).
+ClassMethod ApplyJob(pKey As %String, pJson As %String) [ Internal ]
+{
+	Set ^IRIS.Temp.AgenticProdAdd(pKey) = "running"
+	Set ^IRIS.Temp.AgenticProdAdd(pKey) = ..Apply({}.%FromJSON(pJson)).%ToJSON()
 }
 
 /// Take out the items of install pOwner in pNamespace/pProduction, exactly the tracked ones, then
@@ -186,6 +214,9 @@ ClassMethod Remove(pNamespace As %String, pProduction As %String, pOwner As %Str
 		Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID, ItemName FROM AgenticProd_Data.PluginItem WHERE Namespace = ? AND Production = ? AND Owner = ?", pNamespace, pProduction, pOwner)
 		If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message))
 		While tRS.%Next() { Set tRows(tRS.ID) = tRS.ItemName }
+		Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT AgentClass, Mode FROM AgenticProd_Data.PluginItem WHERE Namespace = ? AND Production = ? AND Owner = ? AND ClassName = 'Config.MapPackages'", pNamespace, pProduction, pOwner)
+		Set tMapPkg = "", tMapCreated = 0
+		If tRS.%Next() Set tMapPkg = tRS.AgentClass, tMapCreated = (tRS.Mode = "created")
 		If '$DATA(tRows) {
 			Do tOut.errors.%Push("No install named "_pOwner_" in "_pNamespace_" "_pProduction_".")
 			Quit
@@ -217,6 +248,20 @@ ClassMethod Remove(pNamespace As %String, pProduction As %String, pOwner As %Str
 			Set tId = $ORDER(tRows(tId))
 			Quit:tId=""
 			$$$ThrowOnError(##class(AgenticProd.Data.PluginItem).%DeleteId(tId))
+		}
+		If tMapPkg '= "" {
+			// Another install in this namespace may still need the package: it takes over the creator role
+			Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 1 ID FROM AgenticProd_Data.PluginItem WHERE Namespace = ? AND ClassName = 'Config.MapPackages' AND AgentClass = ?", pNamespace, tMapPkg)
+			If tRS.%Next() {
+				If tMapCreated {
+					Set tOther = ##class(AgenticProd.Data.PluginItem).%OpenId(tRS.ID)
+					Set tOther.Mode = "created"
+					$$$ThrowOnError(tOther.%Save())
+				}
+			} ElseIf tMapCreated {
+				$$$ThrowOnError(..RemoveMapping(pNamespace, tMapPkg))
+				Do tOut.removed.%Push("Package mapping "_tMapPkg_" -> "_pNamespace)
+			}
 		}
 		$$$ThrowOnError(##class(AgenticProd.Data.SettingsAudit).Log("productions", pNamespace_" "_pProduction, "add agent", pOwner, "removed"))
 		Set tOut.ok = 1
@@ -283,6 +328,39 @@ ClassMethod Snippets(pName As %String) As %DynamicObject
 		_"</call>"
 	Set tRule = "<send transform=""MyApp.ToAgentRequest"" target="""_pName_"""/>"
 	Quit {"objectscript":(tOs), "bpl":(tBpl), "rule":(tRule)}
+}
+
+/// True when namespace pNs maps package pPkg (read in %SYS, where the namespace config lives).
+ClassMethod MappingExists(pNs As %String, pPkg As %String) As %Boolean [ Internal ]
+{
+	New $NAMESPACE
+	Set $NAMESPACE = "%SYS"
+	Quit ''##class(Config.MapPackages).Exists(pNs, pPkg)
+}
+
+/// Map pPkg into pNs from the database the current namespace keeps its classes in, the way
+/// Setup.LegacyMappings maps AgenticProd.
+ClassMethod AddMapping(pNs As %String, pPkg As %String) As %Status [ Internal ]
+{
+	Set tHome = $NAMESPACE, tSC = $$$OK
+	New $NAMESPACE
+	Set $NAMESPACE = "%SYS"
+	Try {
+		$$$ThrowOnError(##class(Config.Namespaces).Get(tHome, .tNSProps))
+		Set tProps("Database") = tNSProps("Routines")
+		$$$ThrowOnError(##class(Config.MapPackages).Create(pNs, pPkg, .tProps))
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+ClassMethod RemoveMapping(pNs As %String, pPkg As %String) As %Status [ Internal ]
+{
+	New $NAMESPACE
+	Set $NAMESPACE = "%SYS"
+	Quit:'##class(Config.MapPackages).Exists(pNs, pPkg) $$$OK
+	Quit ##class(Config.MapPackages).Delete(pNs, pPkg)
 }
 
 ClassMethod BudgetNote(pClass As %String) As %String [ Internal ]

@@ -390,6 +390,12 @@ ClassMethod LegacyMappings() As %Status
 			Set tProps("Database") = tNSProps("Routines")
 			$$$ThrowOnError(##class(Config.MapPackages).Create(tNS, "AgenticProd", .tProps))
 		}
+		// Workbench agents (MyAI.*) are hosted by LEGACY items, so their classes must resolve there
+		If '##class(Config.MapPackages).Exists(tNS, "MyAI") {
+			Kill tProps
+			Set tProps("Database") = tNSProps("Routines")
+			$$$ThrowOnError(##class(Config.MapPackages).Create(tNS, "MyAI", .tProps))
+		}
 		For i = 1:1:$LENGTH(..#LEGACYGLOBALS, ",") {
 			Set tName = $PIECE(..#LEGACYGLOBALS, ",", i)
 			Continue:##class(Config.MapGlobals).Exists(tNS, tName)
@@ -418,6 +424,9 @@ ClassMethod RemoveLegacyMappings() As %Status
 		}
 		If ##class(Config.MapPackages).Exists(tNS, "AgenticProd") {
 			$$$ThrowOnError(##class(Config.MapPackages).Delete(tNS, "AgenticProd"))
+		}
+		If ##class(Config.MapPackages).Exists(tNS, "MyAI") {
+			$$$ThrowOnError(##class(Config.MapPackages).Delete(tNS, "MyAI"))
 		}
 	} Catch ex {
 		Set tSC = ex.AsStatus()
