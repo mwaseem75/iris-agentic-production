@@ -82,6 +82,7 @@ ClassMethod Run(pRoot As %String = "") As %Status
 		$$$ThrowOnError(..BuildLoincKB())
 		// Before the roles: they list the settings resources
 		$$$ThrowOnError(##class(AgenticProd.Settings.Store).Prepare())
+		$$$ThrowOnError(..EnsureLegacyResources())
 		$$$ThrowOnError(..AgentSecurity())
 		$$$ThrowOnError(..WorkflowSetup())
 		$$$ThrowOnError(..DashboardSetup())
@@ -441,6 +442,25 @@ ClassMethod LegacyDashboardGrants() As %Status
 	Set tRS = ##class(%SQL.Statement).%ExecDirect(, tSql)
 	Quit:tRS.%SQLCODE<0 $$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message_" ("_tSql_")")
 	Quit $$$OK
+}
+
+/// The roles list the LEGACY database resources, so they must exist before AgentSecurity runs,
+/// which is before the LEGACY namespace is created on a clean install.
+ClassMethod EnsureLegacyResources() As %Status [ Private ]
+{
+	New $NAMESPACE
+	Set $NAMESPACE = "%SYS"
+	Set tSC = $$$OK
+	Try {
+		For tDB = ..#LEGACYNS_"_CODE", ..#LEGACYNS_"_DATA" {
+			Set tRes = "%DB_"_tDB
+			Continue:##class(Security.Resources).Exists(tRes)
+			$$$ThrowOnError(##class(Security.Resources).Create(tRes, tDB_" database resource", ""))
+		}
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
 }
 
 ClassMethod CreateLegacyNamespace() As %Status [ Private ]
