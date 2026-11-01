@@ -259,86 +259,70 @@
     return curve("M" + x1 + "," + y1 + " C" + x1 + "," + m + " " + x2 + "," + m + " " + x2 + "," + y2, col, dash);
   }
 
-  // Main path: items reachable from the sources without entering Triage or an agent host; they sit in
-  // lanes by role (services, routing processes, operations).
-  // Branch: Triage first, then the hosts, then what they send to. Items with no links go to a strip.
+  // Roles: host runs the AI Hub agent; checker is the process that sends to a host (Triage); workflow is a
+  // human-task operation; helper is a service that only feeds checker/workflow/host. The rest is the main path.
   function plan(d) {
-    var byName = {}, hostOf = {}, out = {}, hasIn = {}, linked = {};
+    var byName = {}, hostOf = {}, out = {}, role = {};
     d.items.forEach(function (i) { byName[i.name] = i; });
     d.hosts.forEach(function (h) { hostOf[h.item] = h; });
     d.connections.forEach(function (c) {
-      if (!byName[c.from] || !byName[c.to]) return;
-      (out[c.from] = out[c.from] || []).push(c.to); hasIn[c.to] = true; linked[c.from] = linked[c.to] = true;
+      if (byName[c.from] && byName[c.to]) (out[c.from] = out[c.from] || []).push(c.to);
     });
-    // A process that sends to an agent host belongs to the failure branch with it
-    var caller = {};
-    d.connections.forEach(function (c) { if (hostOf[c.to] && byName[c.from] && byName[c.from].type === "process") caller[c.from] = true; });
-    var special = function (i) { return !!(hostOf[i.name] || i.checks || caller[i.name]); };
-    var depth = {}, queue = [];
-    d.items.forEach(function (i) { if (linked[i.name] && !special(i) && !hasIn[i.name]) { depth[i.name] = 0; queue.push(i.name); } });
-    if (!queue.length) d.items.forEach(function (i) { if (!queue.length && linked[i.name] && !special(i)) { depth[i.name] = 0; queue.push(i.name); } });
-    queue.forEach(function (n) {
-      (out[n] || []).forEach(function (t) {
-        if (depth[t] === undefined && !special(byName[t])) { depth[t] = depth[n] + 1; queue.push(t); }
-      });
+    d.items.forEach(function (i) {
+      if (hostOf[i.name]) role[i.name] = "host";
+      else if (i.checks || (i.type === "process" && (out[i.name] || []).some(function (t) { return hostOf[t]; }))) role[i.name] = "checker";
+      else if (/Workflow/i.test(i["class"])) role[i.name] = "workflow";
     });
-    var seen = {}, order = [];
-    var bq = d.items.filter(special).map(function (i) { return i.name; });
-    bq.forEach(function (n) {
-      if (seen[n]) return; seen[n] = 1; order.push(byName[n]);
-      (out[n] || []).forEach(function (t) { if (depth[t] === undefined && !seen[t]) bq.push(t); });
+    d.items.forEach(function (i) {
+      if (role[i.name] || i.type !== "service" || !(out[i.name] || []).length) return;
+      if (out[i.name].every(function (t) { return role[t]; })) role[i.name] = "helper";
     });
-    var rank = function (i) { return hostOf[i.name] ? 1 : (i.checks || caller[i.name]) ? 0 : 2; };
-    var branch = order.map(function (i, n) { return { i: i, n: n }; }).sort(function (a, b) { return rank(a.i) - rank(b.i) || a.n - b.n; }).map(function (e) { return e.i; });
-    var other = d.items.filter(function (i) { return depth[i.name] === undefined && !seen[i.name]; });
-    return { depth: depth, branch: branch, other: other, hostOf: hostOf, byName: byName };
+    d.items.forEach(function (i) { if (!role[i.name]) role[i.name] = "main"; });
+    var pick = function (r) { return d.items.filter(function (i) { return role[i.name] === r; }); };
+    return { role: role, hostOf: hostOf, out: out, byName: byName, main: pick("main"),
+      branch: pick("checker").concat(pick("host"), pick("workflow")), other: pick("helper") };
   }
 
   function drawMap(d) {
     clear(cv); showSide(null);
-    var pl = plan(d), pos = {}, hostOf = pl.hostOf;
+    var pl = plan(d), pos = {}, hostOf = pl.hostOf, role = pl.role;
     stage = div("wb-stage"); cv.appendChild(stage);
     var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"); svg.setAttribute("class", "wb-svg");
     stage.appendChild(svg);
     var widthOf = function (i) { return hostOf[i.name] ? HW : NW; }, heightOf = function (i) { return hostOf[i.name] ? HH : NH; };
+    var label = function (t, x, y, col) { var l = div("wb-lbl", t); l.style.left = x + "px"; l.style.top = y + "px"; if (col) l.style.color = col; stage.appendChild(l); };
 
-    // Row 1: the main path by layer
-    var cols = {}, maxL = -1, LANE = { service: 0, process: 1, operation: 2 };
-    d.items.forEach(function (i) {
-      if (pl.depth[i.name] === undefined) return;
-      var l = LANE[i.type] === undefined ? 1 : LANE[i.type];
-      (cols[l] = cols[l] || []).push(i); maxL = Math.max(maxL, l);
+    // Row 1: services, routing processes, then every operation stacked in the last column; columns centred on the tallest
+    var cols = [[], [], []], LANE = { service: 0, process: 1, operation: 2 };
+    pl.main.forEach(function (i) { cols[LANE[i.type] === undefined ? 1 : LANE[i.type]].push(i); });
+    var colH = cols.map(function (c) { return c.length ? c.length * NH + (c.length - 1) * GAPY : 0; });
+    var mainH = Math.max.apply(null, colH), x = 30, W = 0, procX = 330;
+    cols.forEach(function (c, l) {
+      if (!c.length) return;
+      if (l === 1) procX = x;
+      var y = 40 + (mainH - colH[l]) / 2;
+      c.forEach(function (i) { pos[i.name] = { x: x, y: y, w: NW, h: NH }; y += NH + GAPY; });
+      x += NW + GAPX; W = x - GAPX + 30;
     });
-    var x = 30, mainBottom = 0, W = 0;
-    for (var l = 0; l <= maxL; l++) {
-      if (!cols[l]) continue;
-      var y = 40, w = NW;
-      cols[l].forEach(function (i) { w = Math.max(w, widthOf(i)); });
-      cols[l].forEach(function (i) { pos[i.name] = { x: x, y: y, w: widthOf(i), h: heightOf(i) }; y += heightOf(i) + GAPY; });
-      mainBottom = Math.max(mainBottom, y - GAPY); x += w + GAPX; W = x - GAPX + 30;
-    }
-    // Row 2: the failure branch, starting under the item that sends to it
-    var y2 = maxL >= 0 ? mainBottom + 120 : 40, bx = 30, branchBottom = y2;
-    if (pl.branch.length) {
-      var found = false;
-      d.connections.forEach(function (c) { if (!found && c.to === pl.branch[0].name && pos[c.from]) { bx = pos[c.from].x; found = true; } });
-    }
+    var mainBottom = mainH > 0 ? 40 + mainH : 0;
+
+    // Row 2: checker, agent host, workflow, starting under the routing column
+    var y2 = mainBottom ? mainBottom + 110 : 50, bx = procX, branchBottom = y2;
     pl.branch.forEach(function (i) {
       pos[i.name] = { x: bx, y: y2, w: widthOf(i), h: heightOf(i) };
       bx += widthOf(i) + GAPX; branchBottom = Math.max(branchBottom, y2 + heightOf(i)); W = Math.max(W, bx - GAPX + 30);
     });
-    // Row 3: the parts of each host, centred under it
+    // Row 3: the parts of each host in one row directly under it
     var cy = branchBottom + 90, comps = [];
     d.hosts.forEach(function (h) {
       var hp = pos[h.item]; if (!hp) return;
-      // One row; the spacing shrinks to fit the width, down to 92 px
       var count = h.components.length, cw = Math.max(92, Math.min(CW, Math.floor((Math.max(W, 900) - 60) / Math.max(1, count))));
       var sx = Math.max(30, hp.x + hp.w / 2 - count * cw / 2);
       W = Math.max(W, sx + count * cw + 30);
       comps.push({ h: h, hp: hp, sx: sx, cw: cw, y: cy });
       cy += 150 + 20;
     });
-    // Row 4: items with no links
+    // Row 4: helper items as small chips, no lines
     if (pl.other.length) {
       var oy = cy + 10, per = Math.max(1, Math.floor((Math.max(W, 900) - 60) / 200));
       pl.other.forEach(function (i, idx) { pos[i.name] = { x: 30 + (idx % per) * 200, y: oy + 28 + Math.floor(idx / per) * 54, w: 186, h: 42, small: true }; });
@@ -346,21 +330,40 @@
       var ttl = el("span", "Other items", "wb-strip-title"); ttl.style.top = oy + "px"; stage.appendChild(ttl);
     }
     W = Math.max(W, 900);
-    var H = cy + 20;
+    var H = cy + 50;
 
     d.items.forEach(function (i) {
       var p = pos[i.name]; if (!p) return;
       var n = nodeBox(i, hostOf[i.name], p.small);
+      if (p.small) n.querySelector(".wb-nk").textContent = "-> " + ((pl.out[i.name] || []).map(short).join(", ") || "none");
       n.style.left = p.x + "px"; n.style.top = p.y + "px"; n.style.width = p.w + "px"; n.style.height = p.h + "px";
       stage.appendChild(n);
     });
+    var PURPLE = "#a78bfa", GREY = "#9ca3af", seenArc = {};
     d.connections.forEach(function (c) {
       var a = pos[c.from], b = pos[c.to]; if (!a || !b || a.small || b.small) return;
-      var col = (hostOf[c.to] || hostOf[c.from]) ? "#a78bfa" : "#9ca3af";
-      if (b.y >= a.y + a.h + 30) svg.appendChild(vpath(a.x + a.w * 0.7, a.y + a.h, b.x + b.w * 0.7, b.y, col));
-      else if (b.y + b.h + 30 <= a.y) svg.appendChild(vpath(a.x + a.w * 0.3, a.y, b.x + b.w * 0.3, b.y + b.h, "#34d399"));
-      else if (b.x > a.x) svg.appendChild(hpath(a.x + a.w, a.y + 30, b.x, b.y + 30, col));
-      else svg.appendChild(hpath(a.x, a.y + a.h - 14, b.x + b.w, b.y + b.h - 14, "#6b7280"));
+      var ra = role[c.from], rb = role[c.to];
+      if (ra === "main" && rb === "main") {
+        if (b.x >= a.x + a.w) svg.appendChild(hpath(a.x + a.w, a.y + a.h / 2, b.x, b.y + b.h / 2, GREY));
+      } else if (ra === "main" && rb === "checker") {
+        svg.appendChild(vpath(a.x + a.w * 0.7, a.y + a.h, b.x + b.w * 0.7, b.y, "#f87171"));
+        label("failed", a.x + a.w * 0.7 + 8, (a.y + a.h + b.y) / 2 - 8, "#f87171");
+      } else if (ra === "checker" && rb === "main") {
+        svg.appendChild(vpath(a.x + a.w * 0.3, a.y, b.x + b.w * 0.3, b.y + b.h, "#34d399"));
+        label("fixed / resend", a.x + a.w * 0.3 - 92, (a.y + b.y + b.h) / 2 - 8, "#34d399");
+      } else if (ra === "checker" && rb === "host") {
+        svg.appendChild(hpath(a.x + a.w, a.y + a.h / 2, b.x, b.y + b.h / 2, PURPLE));
+      } else if (rb === "workflow" && (ra === "host" || ra === "checker")) {
+        if (seenArc[c.to]) return; seenArc[c.to] = 1;
+        if (ra === "host") {
+          svg.appendChild(hpath(a.x + a.w, a.y + a.h / 2, b.x, b.y + b.h / 2, GREY));
+          label("human review", a.x + a.w + 6, a.y + a.h / 2 - 24, "#cbd5e1");
+        } else {
+          var ax = a.x + a.w * 0.85, bxm = b.x + b.w / 2, top = a.y - 26;
+          svg.appendChild(curve("M" + ax + "," + a.y + " L" + ax + "," + top + " L" + bxm + "," + top + " L" + bxm + "," + b.y, GREY));
+          label("human review", (ax + bxm) / 2 - 36, top - 20, "#cbd5e1");
+        }
+      }
     });
     comps.forEach(function (cg) {
       stage.appendChild(el("span", "AI Hub parts of " + short(cg.h.item), "wb-strip-title")).style.top = (cg.y - 30) + "px";
@@ -386,17 +389,13 @@
   function applyScale() {
     if (!stage) return;
     stage.style.transform = "scale(" + scale + ")";
-    // Taller than the window: the canvas scrolls inside its own box
-    var availH = Math.max(360, window.innerHeight - cv.getBoundingClientRect().top - 40);
-    cv.style.height = Math.min(Math.ceil(stageH * scale), availH) + "px";
+    cv.style.height = Math.ceil(stageH * scale) + "px";
   }
 
-  // Whole map on screen at load: limited by the canvas width and the height left in the window
+  // Width decides the scale and the page scrolls for height. Never below 0.85: labels stop being readable.
   function fit() {
     if (!stage) return;
-    var availH = Math.max(360, window.innerHeight - cv.getBoundingClientRect().top - 40), availW = cv.clientWidth || stageW;
-    // Never below 0.85: past that the labels stop being readable, so the canvas scrolls instead
-    scale = Math.max(0.85, Math.min(1, availW / stageW, availH / stageH));
+    scale = Math.max(0.85, Math.min(1, (cv.clientWidth || stageW) / stageW));
     applyScale();
   }
 

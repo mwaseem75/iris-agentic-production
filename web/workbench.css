@@ -45,8 +45,9 @@
 .wb-cvwrap { position: relative; min-width: 0; }
 .wb-cv { position: relative; min-height: 360px; border-radius: 14px; background: #16181d; background-image: radial-gradient(#2c313a 1.2px, transparent 1.2px); background-size: 22px 22px; overflow: auto; }
 .wb-stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
-.wb-zoom { position: absolute; right: 12px; bottom: 34px; display: flex; gap: 6px; }
+.wb-zoom { position: absolute; right: 12px; top: 12px; z-index: 2; display: flex; gap: 6px; }
 .wb-legend { position: absolute; left: 16px; bottom: 10px; font-size: 11.5px; color: #9ca3af; }
+.wb-lbl { position: absolute; font-size: 11.5px; color: #cbd5e1; white-space: nowrap; }
 .wb-svg { position: absolute; left: 0; top: 0; pointer-events: none; }
 .wb-n-node { position: absolute; background: #23262d; border: 1.5px solid #3f4451; border-radius: 12px; color: #e5e7eb; padding: 10px 12px; }
 .wb-n-node.wb-plain { opacity: .9; }
