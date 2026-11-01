@@ -6,19 +6,26 @@ Include Ensemble
 Class AgenticProd.Demo
 {
 
-Parameter CASEDIR = "/home/irisowner/dev/eval/cases/";
+/// Folder of the eval case files.
+ClassMethod CaseDir() As %String
+{
+	Quit ##class(AgenticProd.Paths).Dir("eval/cases/")
+}
 
 /// LabFileIn FilePath.
-Parameter INDIR = "/home/irisowner/dev/data/in/";
+ClassMethod InDir() As %String
+{
+	Quit ##class(AgenticProd.Paths).Dir("data/in/")
+}
 
 /// Copy eval/cases/<pCase>-*.hl7 to pDir (default data/in). pControlId, when set, replaces MSH-10
 /// so a case that already went through can be sent again as a new message. pFile returns the written path.
-ClassMethod SendCase(pCase As %String, pControlId As %String = "", pDir As %String = {..#INDIR}, Output pFile As %String) As %Status
+ClassMethod SendCase(pCase As %String, pControlId As %String = "", pDir As %String = {..InDir()}, Output pFile As %String) As %Status
 {
 	Set tSC = $$$OK, pFile = ""
 	Try {
 		Set tSource = ..CaseFile(pCase)
-		If tSource = "" $$$ThrowStatus($$$ERROR($$$GeneralError, "no case file "_..#CASEDIR_pCase_"-*.hl7"))
+		If tSource = "" $$$ThrowStatus($$$ERROR($$$GeneralError, "no case file "_..CaseDir()_pCase_"-*.hl7"))
 		Set tIn = ##class(%Stream.FileBinary).%New()
 		$$$ThrowOnError(tIn.LinkToFile(tSource))
 		Set tText = tIn.Read($$$MaxStringLength)
@@ -41,7 +48,7 @@ ClassMethod SendCase(pCase As %String, pControlId As %String = "", pDir As %Stri
 }
 
 /// Send each case in a comma list, e.g. "01,05,20". Stops at the first failure.
-ClassMethod SendBatch(pCases As %String, pDir As %String = {..#INDIR}) As %Status
+ClassMethod SendBatch(pCases As %String, pDir As %String = {..InDir()}) As %Status
 {
 	Set tSC = $$$OK
 	For i = 1:1:$LENGTH(pCases, ",") {
@@ -54,7 +61,11 @@ ClassMethod SendBatch(pCases As %String, pDir As %String = {..#INDIR}) As %Statu
 }
 
 /// Folders Reset empties (the .gitkeep files stay).
-Parameter RESETDIRS = "/home/irisowner/dev/data/in/,/home/irisowner/dev/data/out/,/home/irisowner/dev/data/out-fhir/,/home/irisowner/dev/data/rejected/";
+ClassMethod ResetDirs() As %String
+{
+	Set tRoot = ##class(AgenticProd.Paths).Dir("data/")
+	Quit tRoot_"in/,"_tRoot_"out/,"_tRoot_"out-fhir/,"_tRoot_"rejected/"
+}
 
 /// Clean state for a demo or a recording, without asking: deletes live (non-eval) DecisionLog,
 /// Usage, ToolCall, Span, SavedCall and FHIRResult rows and their Workflow tasks, purges every
@@ -73,7 +84,7 @@ ClassMethod Reset() As %Status
 		Set tCount("LearnedMapping") = ..Exec("DELETE FROM AgenticProd_Data.LearnedMapping")
 		Do ##class(Ens.Util.LookupTable).%ClearTable("LabCodeMap")
 		$$$ThrowOnError(##class(AgenticProd.Setup).SeedLabCodeMap())
-		Set tCount("files") = ..ClearFolders(..#RESETDIRS)
+		Set tCount("files") = ..ClearFolders(..ResetDirs())
 		Set tText = "", tKey = ""
 		For {
 			Set tKey = $ORDER(tCount(tKey))
@@ -158,7 +169,7 @@ ClassMethod ClearFolders(pDirs As %String) As %Integer
 ClassMethod CaseFile(pCase As %String) As %String
 {
 	Quit:pCase'?1.AN ""
-	Quit $ZSEARCH(..#CASEDIR_pCase_"-*.hl7")
+	Quit $ZSEARCH(..CaseDir()_pCase_"-*.hl7")
 }
 
 /// pText with MSH-10 set to pControlId. Works on the raw bytes so the case file's segment

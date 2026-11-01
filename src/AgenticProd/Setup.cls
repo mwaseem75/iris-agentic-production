@@ -29,8 +29,6 @@ Parameter DASHVENDOR = "/agenticprod/vendor";
 /// Name of the Management Portal home page Favorite that opens the dashboard.
 Parameter FAVORITENAME = "Agentic Production dashboard";
 
-Parameter DASHDIR = "/home/irisowner/dev/web/";
-
 /// Login group shared by DASHAPP and DASHAPI, so one login covers the page and its API calls.
 Parameter DASHGROUP = "AgenticProd";
 
@@ -57,9 +55,6 @@ Parameter MONITORROLE = "AgenticProd_Monitor";
 
 Parameter MONITORRESOURCES = "%DB_IRISAPP_DATA:R,%DB_IRISAPP_CODE:R,%DB_ENSLIB:R,%DB_IRISLIB:R";
 
-/// Synthetic-use LOINC subset (see kb/LOINC_NOTICE.md).
-Parameter LOINCFILE = "/home/irisowner/dev/kb/loinc_subset.csv";
-
 /// Database resources only cover what an interop job needs to store messages and read code.
 /// Data access inside IRISAPP_DATA is still all-or-nothing for globals; SQL grants narrow it
 /// for %SQL.Statement, which is the only way agent tools may query.
@@ -69,17 +64,18 @@ Parameter AGENTRESOURCES = "%DB_IRISAPP_DATA:RW,%DB_IRISAPP_CODE:R,%DB_LEGACY_DA
 /// Legacy demo production (customer side, no AI). Its own namespace: one production per namespace.
 Parameter LEGACYNS = "LEGACY";
 
-Parameter LEGACYSRC = "/home/irisowner/dev/legacy/src/";
-
 /// Globals LEGACY shares with IRISAPP: decision history, usage, spans, prices and the eval tables
 /// (Data.*), LearnedMapping and SettingsAudit (hashed storage 8110) and the LOINC KB (^EMZU is
 /// AgenticProd.KB's hashed storage). Messages, lookups and Workflow data stay in LEGACY.
 Parameter LEGACYGLOBALS = "AgenticProd.Data.*,AgenticProd8110.*,EMZU.*";
 
-ClassMethod Run() As %Status
+/// pRoot: folder with kb/, eval/, web/, legacy/ and data/ (the IPM module parameter root); empty keeps
+/// the Docker mount or the folder IPM copied the files to (AgenticProd.Paths).
+ClassMethod Run(pRoot As %String = "") As %Status
 {
 	Set tSC = $$$OK
 	Try {
+		$$$ThrowOnError(##class(AgenticProd.Paths).Init(pRoot))
 		$$$ThrowOnError(##class(AgenticProd.Data.PriceTable).Seed())
 		$$$ThrowOnError(..BackfillNamespace())
 		$$$ThrowOnError(..SeedLabCodeMap())
@@ -92,6 +88,7 @@ ClassMethod Run() As %Status
 		$$$ThrowOnError(..AdminSetup())
 		$$$ThrowOnError(..MonitorSetup())
 		$$$ThrowOnError(..PortalFavorites())
+		$$$ThrowOnError(##class(AgenticProd.Paths).ApplyToProduction(##class(AgenticProd.Production).%ClassName(1)))
 		$$$ThrowOnError(..LegacyDemo())
 		// Setup runs at image build with IRIS about to stop, so starting it here would not last
 		$$$ThrowOnError(##class(Ens.Director).SetAutoStart("AgenticProd.Production"))
@@ -173,7 +170,7 @@ ClassMethod BuildLoincKB(Output pCount As %Integer) As %Status
 		$$$ThrowOnError(tKB.Build(tEmb, tVS))
 
 		Set tFile = ##class(%Stream.FileCharacter).%New()
-		$$$ThrowOnError(tFile.LinkToFile(..#LOINCFILE))
+		$$$ThrowOnError(tFile.LinkToFile(##class(AgenticProd.Paths).Dir("kb/loinc_subset.csv")))
 		Do tFile.ReadLine()
 		While 'tFile.AtEnd {
 			Set tLine = $ZSTRIP(tFile.ReadLine(), ">", $CHAR(13))
@@ -366,7 +363,7 @@ ClassMethod LegacyDemo() As %Status
 		$$$ThrowOnError(..LegacyDashboardGrants())
 		New $NAMESPACE
 		Set $NAMESPACE = ..#LEGACYNS
-		$$$ThrowOnError($system.OBJ.LoadDir(..#LEGACYSRC, "ck-d", .tErrors, 1))
+		$$$ThrowOnError($system.OBJ.LoadDir(##class(AgenticProd.Paths).Dir("legacy/src/"), "ck-d", .tErrors, 1))
 		$$$ThrowOnError(##class(Legacy.Setup).Run())
 	} Catch ex {
 		Set tSC = ex.AsStatus()
@@ -561,14 +558,14 @@ ClassMethod CreateDashboardApp(pNamespace As %String) As %Status [ Private ]
 			Set tProps("Enabled") = 1
 			If tApp = ..#DASHAPP {
 				Set tProps("Description") = "AgenticProd dashboard page"
-				Set tProps("DispatchClass") = "", tProps("Path") = ..#DASHDIR, tProps("ServeFiles") = 3
+				Set tProps("DispatchClass") = "", tProps("Path") = ##class(AgenticProd.Paths).Dir("web/"), tProps("ServeFiles") = 3
 				// ServeFiles 3: static files go through the login and resource check (1 serves them to anyone)
 				// Recurse off, or /agenticprod/api would be served from DASHDIR too
 				Set tProps("Recurse") = 0
 			} ElseIf tApp = ..#DASHVENDOR {
 				// Own app so the page app can keep Recurse off; same login and resource as the page
 				Set tProps("Description") = "AgenticProd dashboard libraries (web/vendor)"
-				Set tProps("DispatchClass") = "", tProps("Path") = ..#DASHDIR_"vendor/", tProps("ServeFiles") = 3, tProps("Recurse") = 1
+				Set tProps("DispatchClass") = "", tProps("Path") = ##class(AgenticProd.Paths).Dir("web/vendor/"), tProps("ServeFiles") = 3, tProps("Recurse") = 1
 			} Else {
 				Set tProps("Description") = "AgenticProd dashboard API (read-only; settings writes need AgenticProd_Admin)"
 				Set tProps("DispatchClass") = "AgenticProd.UI.REST"

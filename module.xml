@@ -4,15 +4,22 @@
     <Module>
       <Name>iris-agentic-production</Name>
       <Version>1.0.0</Version>
-      <Description>Agentic Production: self-healing HL7 lab interface with an IRIS AI Hub triage agent</Description>
+      <Description>Agentic Production: build, test and govern AI Hub agents in any IRIS interoperability production. An IRIS for Health 2026.3 AI Hub agent triages failed messages and proposes a repair or code mapping; Triage checks it and applies it, asks a person (Workflow) or rejects it. Includes the HL7 lab demo production, the LEGACY demo namespace, a dashboard web app and an eval set.</Description>
+      <Keywords>AI Hub agent interoperability HL7 triage governance</Keywords>
       <Packaging>module</Packaging>
       <SourcesRoot>src</SourcesRoot>
       <Resource Name="AgenticProd.PKG"/>
-      <!-- LOINC subset, eval cases and dashboard page, for installs without the Docker mount -->
+      <!-- Files the code reads at run time. Copied under the manager directory; Setup records that
+           folder (AgenticProd.Paths) unless the repo is mounted at /home/irisowner/dev (Docker)
+           or the root parameter names another folder. -->
+      <Parameter Name="root" Value="" Description="Folder that holds kb/, eval/, web/, legacy/ and data/. Empty: /home/irisowner/dev when it holds the repo (Docker), else the copy under the manager directory. Example: zpm &quot;install iris-agentic-production -Droot=/data/agentic/&quot;"/>
       <FileCopy Name="kb/" Target="${mgrdir}agenticprod/kb/"/>
       <FileCopy Name="eval/" Target="${mgrdir}agenticprod/eval/"/>
       <FileCopy Name="web/" Target="${mgrdir}agenticprod/web/"/>
-      <Invoke Method="Run" Class="AgenticProd.Setup"/>
+      <FileCopy Name="legacy/" Target="${mgrdir}agenticprod/legacy/"/>
+      <Invoke Class="AgenticProd.Setup" Method="Run" CheckStatus="true">
+        <Arg>${root}</Arg>
+      </Invoke>
     </Module>
   </Document>
 </Export>

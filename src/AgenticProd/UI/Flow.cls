@@ -364,7 +364,7 @@ ClassMethod CasePool(pLive As %Boolean, pModel As %String) As %DynamicArray
 {
 	Set tPool = []
 	If pLive {
-		Set tFile = $ZSEARCH(##class(AgenticProd.Demo).#CASEDIR_"*.hl7")
+		Set tFile = $ZSEARCH(##class(AgenticProd.Demo).CaseDir()_"*.hl7")
 		While tFile '= "" {
 			Do tPool.%Push($PIECE(##class(%File).GetFilename(tFile), "-"))
 			Set tFile = $ZSEARCH("")

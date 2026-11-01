@@ -35,7 +35,7 @@ Property ApprovalTarget As Ens.DataType.ConfigName;
 Property AutoFixThreshold As %Numeric(MAXVAL = 1, MINVAL = 0) [ InitialExpression = 0.85 ];
 
 /// Folder for rejected messages and their reason files.
-Property RejectPath As %String(MAXLEN = 500) [ InitialExpression = "/home/irisowner/dev/data/rejected/" ];
+Property RejectPath As %String(MAXLEN = 500) [ InitialExpression = {##class(AgenticProd.Paths).Dir("data/rejected/")} ];
 
 /// Export the trace of each failed message over OTLP (see Telemetry.Trace). Spans are stored in
 /// Data.Span either way.

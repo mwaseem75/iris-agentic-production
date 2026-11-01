@@ -374,7 +374,7 @@ ClassMethod LoadCases(pList As %String, Output pCases, Output pCount As %Integer
 	Kill pCases
 	Set pCount = 0, tSC = $$$OK
 	Try {
-		Set tDir = ##class(AgenticProd.Demo).#CASEDIR
+		Set tDir = ##class(AgenticProd.Demo).CaseDir()
 		If pList = "all" {
 			Set tFile = $ZSEARCH(tDir_"*.expected.json")
 			While tFile '= "" {

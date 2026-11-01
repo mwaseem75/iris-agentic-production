@@ -2,8 +2,6 @@
 Class Legacy.Setup
 {
 
-Parameter DATADIR = "/home/irisowner/dev/data/legacy/";
-
 /// Folders the production reads and writes, under DATADIR.
 Parameter FOLDERS = "in,archive,lab,labels,ehr";
 
@@ -12,11 +10,12 @@ ClassMethod Run() As %Status
 	Set tSC = $$$OK
 	Try {
 		For tI = 1:1:$LENGTH(..#FOLDERS, ",") {
-			Set tDir = ..#DATADIR_$PIECE(..#FOLDERS, ",", tI)_"/"
+			Set tDir = ##class(AgenticProd.Paths).Dir("data/legacy/")_$PIECE(..#FOLDERS, ",", tI)_"/"
 			If '##class(%File).DirectoryExists(tDir), '##class(%File).CreateDirectoryChain(tDir) {
 				$$$ThrowStatus($$$ERROR($$$GeneralError, "cannot create "_tDir))
 			}
 		}
+		$$$ThrowOnError(##class(AgenticProd.Paths).ApplyToProduction("Legacy.OrdersProduction"))
 		$$$ThrowOnError(..SeedLabCodes())
 		$$$ThrowOnError(##class(Ens.Director).SetAutoStart("Legacy.OrdersProduction"))
 	} Catch ex {

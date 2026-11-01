@@ -5,7 +5,7 @@ Class Legacy.Operation.LabelPrinter Extends Ens.BusinessOperation
 
 Parameter INVOCATION = "Queue";
 
-Property LabelPath As %String(MAXLEN = 500) [ InitialExpression = "/home/irisowner/dev/data/legacy/labels/" ];
+Property LabelPath As %String(MAXLEN = 500) [ InitialExpression = {##class(AgenticProd.Paths).Dir("data/legacy/labels/")} ];
 
 Parameter SETTINGS = "LabelPath:Basic";
 
