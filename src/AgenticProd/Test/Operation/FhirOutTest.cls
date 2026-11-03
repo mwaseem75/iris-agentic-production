@@ -5,19 +5,10 @@ Class AgenticProd.Test.Operation.FhirOutTest Extends AgenticProd.Test.Case
 
 Parameter PROFILE = "http://hl7.org/fhir/us/core/StructureDefinition/us-core-observation-lab|3.1.0";
 
-Property Validator As %RegisteredObject;
-
-/// Skip reason is recorded once per test; plain IRIS has no HS.* classes.
-Method Fhir() As %Boolean
-{
-	Quit:##class(AgenticProd.Paths).FhirAvailable() 1
-	Do $$$AssertSkipped(##class(AgenticProd.Paths).#FHIRNOTE)
-	Quit 0
-}
+Property Validator As HS.FHIRServer.Util.ResourceValidator;
 
 Method OnBeforeAllTests() As %Status
 {
-	Quit:'##class(AgenticProd.Paths).FhirAvailable() $$$OK
 	$$$QuitOnError(##class(AgenticProd.Setup).SeedLabCodeMap())
 	Set tSC = ##class(AgenticProd.Operation.FhirOut).NewValidator("hl7.fhir.r4.core@4.0.1,hl7.fhir.us.core@3.1.0", .tValidator)
 	Set ..Validator = tValidator
@@ -26,7 +17,6 @@ Method OnBeforeAllTests() As %Status
 
 Method TestValidControl20()
 {
-	Quit:'..Fhir()
 	Do ..Bundle("20", .tBundle, .tMsg)
 	Do $$$AssertEquals(tMsg.GetValueAt("3:0"), "OBR", "source message keeps having no ORC")
 	Set tObs = ..First(tBundle, "Observation")
@@ -49,7 +39,6 @@ Method TestValidControl20()
 /// TriageRequest with Format FHIR.
 Method TestBrokenValueToTriage()
 {
-	Quit:'..Fhir()
 	Do ..Bundle("20", .tBundle, .tMsg, .tHeaderId)
 	Set tObs = ..First(tBundle, "Observation")
 	Set tObs.valueQuantity.value = "one-three-nine"
@@ -74,7 +63,6 @@ Method TestBrokenValueToTriage()
 /// After the reviewer approved GLU-01 -> 2345-7 (case 01 flow), the Observation carries that LOINC.
 Method TestApprovedMapping01()
 {
-	Quit:'..Fhir()
 	Set tHad = ##class(Ens.Util.FunctionSet).Lookup("LabCodeMap", "GLU-01")
 	Do ##class(Ens.Util.LookupTable).%UpdateValue("LabCodeMap", "GLU-01", "2345-7^Glucose [Mass/volume] in Serum or Plasma")
 	Do ..Bundle("01", .tBundle)

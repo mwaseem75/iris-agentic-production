@@ -225,7 +225,7 @@
     if (!small) n.appendChild(el("span", host || it.ai ? "AI HUB" : it.added ? "added by " + it.added : it.checks ? "checks around the agent" : "no AI Hub", "wb-tagpill" + (host || it.ai ? " hub" : it.added ? " added" : "")));
     var h = div("wb-nh"); h.appendChild(icon(host ? "robot" : (it.checks ? "shield-half" : TYPE_ICON[it.type] || "box")));
     var t = div("wb-nx"); t.appendChild(div("wb-nt", short(it.name)));
-    t.appendChild(div("wb-nk", host ? "Operation " + short(host.operation) + " · agent " + short(host.agentClass) : it.note || it.type + " · " + short(it["class"])));
+    t.appendChild(div("wb-nk", host ? "Operation " + short(host.operation) + " · agent " + short(host.agentClass) : it.type + " · " + short(it["class"])));
     h.appendChild(t); n.appendChild(h);
     if (!it.enabled) n.classList.add("wb-off");
     if (small) return n;

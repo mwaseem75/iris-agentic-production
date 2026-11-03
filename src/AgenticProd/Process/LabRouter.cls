@@ -50,7 +50,7 @@ Method OnRequest(pRequest As EnsLib.HL7.Message, Output pResponse As %Library.Pe
 			// A metric only: a failure to record it must not fail a message that was sent
 			Set tNote = ##class(AgenticProd.Data.SavedCall).Note(pRequest, ..%PrimaryRequestHeader.%Id())
 			If $$$ISERR(tNote) $$$LOGWARNING("SavedCall not recorded: "_$SYSTEM.Status.GetErrorText(tNote))
-			If ..FHIROutput, ##class(AgenticProd.Paths).FhirAvailable() Do ..FHIROut(pRequest, .tClass, .tText)  Set:tClass'="" tFormat = "FHIR"
+			If ..FHIROutput Do ..FHIROut(pRequest, .tClass, .tText)  Set:tClass'="" tFormat = "FHIR"
 		}
 		Quit:tClass=""
 		$$$TRACE("LabRouter to "_..TriageTarget_": "_tClass_" "_tText)

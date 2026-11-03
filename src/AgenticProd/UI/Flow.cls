@@ -151,7 +151,6 @@ ClassMethod Map(pNs As %String, pFrom As %String = "", pTo As %String = "", pInc
 	For i = 1:1:tProd.Items.Count() {
 		Set tItem = tProd.Items.GetAt(i), tN = tItem.Name, tU = $ZCONVERT(tN, "U"), tItems(tU) = tN
 		Do tOut.items.%Push({"name":(tN), "className":(tItem.ClassName), "lane":(..MapLane(tItem.ClassName)), "enabled":(''tItem.Enabled),
-			"note":($SELECT((tItem.ClassName = "AgenticProd.Operation.FhirOut") && '##class(AgenticProd.Paths).FhirAvailable(): ##class(AgenticProd.Paths).#FHIRNOTE, 1: "")),
 			"in":(+$GET(tIn(tU))), "out":(+$GET(tOutN(tU))), "errors":(+$GET(tErr(tU))), "queue":(+$GET(tQueue(tU)))})
 	}
 	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT SourceConfigName AS S, TargetConfigName AS T, COUNT(*) AS C, AVG(DATEDIFF('ms', TimeCreated, TimeProcessed)) AS Ms"
