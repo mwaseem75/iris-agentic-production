@@ -70,7 +70,7 @@ ClassMethod ApplyFhirAvailability(pProduction As %String) As %Status
 			If tItem.ClassName = "AgenticProd.Operation.FhirOut", tItem.Enabled {
 				Set tItem.Enabled = 0, tChanged = 1
 			}
-			Continue:(tItem.ClassName '= "AgenticProd.Process.LabRouter")
+			Continue:tItem.ClassName '= "AgenticProd.Process.LabRouter"
 			For j = 1:1:tItem.Settings.Count() {
 				Set tSetting = tItem.Settings.GetAt(j)
 				If tSetting.Name = "FHIROutput", tSetting.Value '= 0 Set tSetting.Value = 0, tChanged = 1
