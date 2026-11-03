@@ -1,4 +1,4 @@
-Include (Ensemble, HS.FHIRServer)
+Include Ensemble
 
 /// Simulated FHIR server (HIE). HL7 v2 ORU^R01 (already checked by LabRouter) -> SDA3 -> FHIR R4
 /// bundle with LOINC codings, validated structurally and against the lab profile. A valid bundle is
@@ -19,15 +19,23 @@ Property Packages As %String(MAXLEN = 500) [ InitialExpression = "hl7.fhir.r4.co
 /// Code system URI for LAB_SIM's own test codes (OBX-3 coding system L), kept as the second coding.
 Property LocalCodeSystem As %String(MAXLEN = 500) [ InitialExpression = "http://lab-sim.example/codes" ];
 
-Property Validator As HS.FHIRServer.Util.ResourceValidator [ Transient ];
+Property Validator As %RegisteredObject [ Transient ];
 
 /// OBX-8 flags that are also codes in v3-ObservationInterpretation, with their display.
 Parameter INTERPRETATIONS = "N:Normal,H:High,L:Low,A:Abnormal,HH:Critical high,LL:Critical low,AA:Critical abnormal";
 
 Parameter SETTINGS = "ObservationProfile:FHIR,Packages:FHIR,LocalCodeSystem:FHIR";
 
+/// External language server of the FHIR validator ($$$ValidatorELS in HS.FHIRServer.inc). The macro
+/// is not used so this class compiles on plain IRIS, which has no HS.* include.
+Parameter VALIDATORELS = "FHIR_Validation_Server";
+
 Method OnInit() As %Status
 {
+	If '##class(AgenticProd.Paths).FhirAvailable() {
+		$$$LOGWARNING(##class(AgenticProd.Paths).#FHIRNOTE)
+		Quit $$$OK
+	}
 	Set tSC = ..NewValidator(..Packages, .tValidator)
 	If $$$ISERR(tSC) Quit tSC
 	Set ..Validator = tValidator
@@ -37,7 +45,7 @@ Method OnInit() As %Status
 	If $$$ISERR(tSC) {
 		// On an item restart the old job's OnTearDown has just stopped the JVM and the gateway
 		// still points at its port; start it again and retry once
-		Do $SYSTEM.external.startServer($$$ValidatorELS)
+		Do $SYSTEM.external.startServer(..#VALIDATORELS)
 		Set tSC = ..Warm(tValidator, ..ObservationProfile)
 	}
 	If $$$ISERR(tSC) {
@@ -51,7 +59,8 @@ Method OnInit() As %Status
 Method OnTearDown() As %Status
 {
 	// The validator JVM is shared by the instance but only this host uses it; do not leave it idle
-	Do $SYSTEM.external.stopServer($$$ValidatorELS)
+	Quit:'##class(AgenticProd.Paths).FhirAvailable() $$$OK
+	Do $SYSTEM.external.stopServer(..#VALIDATORELS)
 	Quit $$$OK
 }
 
@@ -87,8 +96,8 @@ ClassMethod Build(pMsg As EnsLib.HL7.Message, Output pBundle As %DynamicObject, 
 	Set tSC = $$$OK
 	Try {
 		$$$ThrowOnError(..Enrich(pMsg, .tCopy))
-		$$$ThrowOnError(##class(HS.Gateway.HL7.HL7ToSDA3).GetSDA(tCopy, .tSDA))
-		Set pBundle = ##class(HS.FHIR.DTL.Util.API.Transform.SDA3ToFHIR).TransformStream(tSDA, "HS.SDA3.Container", "R4").bundle
+		$$$ThrowOnError($CLASSMETHOD("HS.Gateway.HL7.HL7ToSDA3", "GetSDA", tCopy, .tSDA))
+		Set pBundle = $CLASSMETHOD("HS.FHIR.DTL.Util.API.Transform.SDA3ToFHIR", "TransformStream", tSDA, "HS.SDA3.Container", "R4").bundle
 		Do ..AddLoinc(pBundle, pLocalSystem)
 		Do ..AddInterpretation(pBundle)
 	} Catch ex {
@@ -166,7 +175,7 @@ ClassMethod AddInterpretation(pBundle As %DynamicObject)
 /// Number of error/fatal issues in pBundle: base R4 structure for every resource, plus pProfile for
 /// each Observation that passed it. pOutcome is an OperationOutcome with those issues; pLines has
 /// one "Type[entry] expression: text" line per issue, "; "-separated.
-ClassMethod Validate(pValidator As HS.FHIRServer.Util.ResourceValidator, pBundle As %DynamicObject, pProfile As %String, Output pOutcome As %DynamicObject, Output pLines As %String) As %Integer
+ClassMethod Validate(pValidator, pBundle As %DynamicObject, pProfile As %String, Output pOutcome As %DynamicObject, Output pLines As %String) As %Integer
 {
 	Set pOutcome = {"resourceType":"OperationOutcome", "issue":[]}, pLines = ""
 	Set tIter = pBundle.entry.%GetIterator()
@@ -209,7 +218,7 @@ ClassMethod AddIssue(pOutcome As %DynamicObject, ByRef pLines As %String, pType 
 	Set pLines = pLines_$SELECT(pLines '= "": "; ", 1: "")_pType_" "_tIssue.expression.%Get(0)_": "_pText
 }
 
-ClassMethod NewValidator(pPackages As %String, Output pValidator As HS.FHIRServer.Util.ResourceValidator) As %Status
+ClassMethod NewValidator(pPackages As %String, Output pValidator) As %Status
 {
 	Set tSC = $$$OK
 	Try {
@@ -217,7 +226,7 @@ ClassMethod NewValidator(pPackages As %String, Output pValidator As HS.FHIRServe
 		For i = 1:1:$LENGTH(pPackages, ",") {
 			Set tList = tList_$LISTBUILD($ZSTRIP($PIECE(pPackages, ",", i), "<>W"))
 		}
-		Set pValidator = ##class(HS.FHIRServer.Util.ResourceValidator).%New(##class(HS.FHIRMeta.API).getInstance(tList))
+		Set pValidator = $CLASSMETHOD("HS.FHIRServer.Util.ResourceValidator", "%New", $CLASSMETHOD("HS.FHIRMeta.API", "getInstance", tList))
 	} Catch ex {
 		Set tSC = ex.AsStatus()
 	}
@@ -225,7 +234,7 @@ ClassMethod NewValidator(pPackages As %String, Output pValidator As HS.FHIRServe
 }
 
 /// One profile check on a minimal lab Observation, to start the Java validator.
-ClassMethod Warm(pValidator As HS.FHIRServer.Util.ResourceValidator, pProfile As %String) As %Status
+ClassMethod Warm(pValidator, pProfile As %String) As %Status
 {
 	Set tSC = $$$OK
 	Try {

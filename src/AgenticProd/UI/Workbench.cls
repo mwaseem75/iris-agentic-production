@@ -111,6 +111,9 @@ ClassMethod Production(pNs As %String, pName As %String) As %DynamicObject
 		Set tClass = tItem.ClassName
 		Set tRow = {"name":(tItem.Name), "class":(tClass), "type":(..TypeOf(tClass)), "category":(tItem.Category)}
 		Do tRow.%Set("enabled", ''tItem.Enabled, "boolean")
+		If (tClass = "AgenticProd.Operation.FhirOut"), '##class(AgenticProd.Paths).FhirAvailable() {
+			Set tRow.note = ##class(AgenticProd.Paths).#FHIRNOTE
+		}
 		// Plug-in namespaces may not map our classes, so the host is also recognised by name
 		Set tHost = (tClass = ..#HOSTCLASS) || ..IsHost(tClass)
 		Set tIsAI = ''tHost

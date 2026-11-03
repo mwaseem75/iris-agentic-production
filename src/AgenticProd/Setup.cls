@@ -90,6 +90,7 @@ ClassMethod Run(pRoot As %String = "") As %Status
 		$$$ThrowOnError(..MonitorSetup())
 		$$$ThrowOnError(..PortalFavorites())
 		$$$ThrowOnError(##class(AgenticProd.Paths).ApplyToProduction(##class(AgenticProd.Production).%ClassName(1)))
+		$$$ThrowOnError(##class(AgenticProd.Paths).ApplyFhirAvailability(##class(AgenticProd.Production).%ClassName(1)))
 		$$$ThrowOnError(..LegacyDemo())
 		// Setup runs at image build with IRIS about to stop, so starting it here would not last
 		$$$ThrowOnError(##class(Ens.Director).SetAutoStart("AgenticProd.Production"))
@@ -297,7 +298,7 @@ ClassMethod CreateAdminRole() As %Status [ Private ]
 	Set tSC = $$$OK
 	Try {
 		Set tProps("Description") = "AgenticProd Settings tab: change providers, keys, agents, budgets, prices"
-		Set tProps("Resources") = ..#ADMINRESOURCES
+		Set tProps("Resources") = ..Usable(..#ADMINRESOURCES)
 		Set tProps("GrantedRoles") = ..#DASHROLE
 		If ##class(Security.Roles).Exists(..#ADMINROLE) {
 			$$$ThrowOnError(##class(Security.Roles).Modify(..#ADMINROLE, .tProps))
@@ -327,10 +328,10 @@ ClassMethod MonitorSetup() As %Status
 		Set $NAMESPACE = "%SYS"
 		Set tDesc = "AgenticProd metrics for /api/monitor: read-only counts"
 		If ##class(Security.Roles).Exists(..#MONITORROLE) {
-			Set tProps("Description") = tDesc, tProps("Resources") = ..#MONITORRESOURCES
+			Set tProps("Description") = tDesc, tProps("Resources") = ..Usable(..#MONITORRESOURCES)
 			$$$ThrowOnError(##class(Security.Roles).Modify(..#MONITORROLE, .tProps))
 		} Else {
-			$$$ThrowOnError(##class(Security.Roles).Create(..#MONITORROLE, tDesc, ..#MONITORRESOURCES))
+			$$$ThrowOnError(##class(Security.Roles).Create(..#MONITORROLE, tDesc, ..Usable(..#MONITORRESOURCES)))
 		}
 		$$$ThrowOnError(##class(Security.Applications).Get("/api/monitor", .tApp))
 		// MatchRoles is ":role" (always granted) or "match:role", pieces after the first
@@ -442,6 +443,19 @@ ClassMethod LegacyDashboardGrants() As %Status
 	Set tRS = ##class(%SQL.Statement).%ExecDirect(, tSql)
 	Quit:tRS.%SQLCODE<0 $$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message_" ("_tSql_")")
 	Quit $$$OK
+}
+
+/// pList without the entries whose resource this instance lacks. Plain IRIS has no %DB_HSLIB or
+/// %DB_HSSYS, and a role cannot list a resource that does not exist. Call it in %SYS.
+ClassMethod Usable(pList As %String) As %String
+{
+	Set tOut = ""
+	For i = 1:1:$LENGTH(pList, ",") {
+		Set tEntry = $PIECE(pList, ",", i)
+		Continue:'##class(Security.Resources).Exists($PIECE(tEntry, ":"))
+		Set tOut = tOut_$SELECT(tOut = "": "", 1: ",")_tEntry
+	}
+	Quit tOut
 }
 
 /// The roles list the LEGACY database resources, so they must exist before AgentSecurity runs,
@@ -564,10 +578,10 @@ ClassMethod CreateDashboardApp(pNamespace As %String) As %Status [ Private ]
 		}
 		Set tDesc = "AgenticProd dashboard: read-only"
 		If ##class(Security.Roles).Exists(..#DASHROLE) {
-			Set tProps("Description") = tDesc, tProps("Resources") = ..#DASHRESOURCES
+			Set tProps("Description") = tDesc, tProps("Resources") = ..Usable(..#DASHRESOURCES)
 			$$$ThrowOnError(##class(Security.Roles).Modify(..#DASHROLE, .tProps))
 		} Else {
-			$$$ThrowOnError(##class(Security.Roles).Create(..#DASHROLE, tDesc, ..#DASHRESOURCES))
+			$$$ThrowOnError(##class(Security.Roles).Create(..#DASHROLE, tDesc, ..Usable(..#DASHRESOURCES)))
 		}
 		$$$ThrowOnError(..AddUserRole(..#REVIEWUSER, ..#DASHROLE))
 		For tApp = ..#DASHAPP, ..#DASHAPI, ..#DASHVENDOR {
@@ -631,10 +645,10 @@ ClassMethod CreateRoleAndUser(pNamespace As %String) As %Status [ Private ]
 		Set tDesc = "AgenticProd triage agent job: message storage, SELECT-only SQL"
 		If ##class(Security.Roles).Exists(..#AGENTROLE) {
 			Set tProps("Description") = tDesc
-			Set tProps("Resources") = ..#AGENTRESOURCES
+			Set tProps("Resources") = ..Usable(..#AGENTRESOURCES)
 			$$$ThrowOnError(##class(Security.Roles).Modify(..#AGENTROLE, .tProps))
 		} Else {
-			$$$ThrowOnError(##class(Security.Roles).Create(..#AGENTROLE, tDesc, ..#AGENTRESOURCES))
+			$$$ThrowOnError(##class(Security.Roles).Create(..#AGENTROLE, tDesc, ..Usable(..#AGENTRESOURCES)))
 		}
 		// Random password nobody keeps, and no %Service_* role: nobody can log in as this user.
 		// The agent job enters it with $SYSTEM.Security.Login from a privileged process.

@@ -1,4 +1,5 @@
-ARG IMAGE=irishealth-community:2026.3.0AI.154.0
+# Plain IRIS by default. IRIS for Health adds FHIR output: --build-arg IMAGE=irishealth-community:2026.3.0AI.154.0
+ARG IMAGE=iris-community:2026.3.0AI.154.0
 FROM $IMAGE
 
 WORKDIR /home/irisowner/dev

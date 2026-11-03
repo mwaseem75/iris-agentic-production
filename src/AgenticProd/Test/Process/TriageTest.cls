@@ -536,6 +536,7 @@ Method TestLearningLoop01()
 
 	Set tOutDir = "/home/irisowner/dev/data/out/"
 	Set tBefore = ..OutFiles(tOutDir, "MSG00001_*")
+	Set tFhir = ##class(AgenticProd.Paths).FhirAvailable()
 	Set tFHIRBefore = ..OutFiles("/home/irisowner/dev/data/out-fhir/", "MSG00001_*")
 	Set tTriage = ..Triage()
 	Set tTriage.TargetConfigName = "LabRouter"
@@ -556,8 +557,9 @@ Method TestLearningLoop01()
 		Do ##class(%File).Delete(tNew)
 	}
 	// FHIR output runs after the HL7 send, in the same LabRouter call; a cold validator takes ~35 s
+	If 'tFhir Do $$$AssertSkipped(##class(AgenticProd.Paths).#FHIRNOTE)
 	Set tFHIRDir = "/home/irisowner/dev/data/out-fhir/", tNew = ""
-	For i = 1:1:90 {
+	For i = 1:1:$SELECT(tFhir: 90, 1: 0) {
 		Set tAfter = ..OutFiles(tFHIRDir, "MSG00001_*")
 		Set tPtr = 0
 		While $LISTNEXT(tAfter, tPtr, tFile) {
@@ -566,7 +568,7 @@ Method TestLearningLoop01()
 		Quit:tNew'=""
 		Hang 0.5
 	}
-	If $$$AssertNotEquals(tNew, "", "resent message reached data/out-fhir") {
+	If tFhir, $$$AssertNotEquals(tNew, "", "resent message reached data/out-fhir") {
 		Set tStream = ##class(%Stream.FileCharacter).%New()
 		Do tStream.LinkToFile(tNew)
 		Set tBundle = ##class(%DynamicObject).%FromJSON(tStream)

@@ -45,6 +45,47 @@ ClassMethod Init(pRoot As %String = "") As %Status
 	Quit tSC
 }
 
+Parameter FHIRNOTE = "FHIR output: needs IRIS for Health";
+
+/// 1 when this instance can build FHIR bundles (IRIS for Health). Plain IRIS has no HS.* classes,
+/// so FhirOut, its validator and the FHIR tests are switched off there.
+ClassMethod FhirAvailable() As %Boolean
+{
+	Quit ##class(%Dictionary.CompiledClass).%ExistsId("HS.FHIR.DTL.Util.API.Transform.SDA3ToFHIR")
+		&& ##class(%Dictionary.CompiledClass).%ExistsId("HS.Gateway.HL7.HL7ToSDA3")
+}
+
+/// On plain IRIS: FhirOut disabled and LabRouter's FHIROutput off in production pProduction
+/// (current namespace). No-op on IRIS for Health.
+ClassMethod ApplyFhirAvailability(pProduction As %String) As %Status
+{
+	Quit:..FhirAvailable() $$$OK
+	Set tSC = $$$OK
+	Try {
+		Set tProd = ##class(Ens.Config.Production).LoadFromClass(pProduction)
+		If '$IsObject(tProd) $$$ThrowStatus($$$ERROR($$$GeneralError, "cannot open production "_pProduction))
+		Set tChanged = 0
+		For i = 1:1:tProd.Items.Count() {
+			Set tItem = tProd.Items.GetAt(i)
+			If tItem.ClassName = "AgenticProd.Operation.FhirOut", tItem.Enabled {
+				Set tItem.Enabled = 0, tChanged = 1
+			}
+			Continue:tItem.ClassName '= "AgenticProd.Process.LabRouter"
+			For j = 1:1:tItem.Settings.Count() {
+				Set tSetting = tItem.Settings.GetAt(j)
+				If tSetting.Name = "FHIROutput", tSetting.Value '= 0 Set tSetting.Value = 0, tChanged = 1
+			}
+		}
+		If tChanged {
+			$$$ThrowOnError(tProd.%Save())
+			$$$ThrowOnError(tProd.SaveToClass())
+		}
+	} Catch ex {
+		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
 /// Point the file paths of production pProduction (current namespace) at Root. The production
 /// classes carry the Docker paths; this is a no-op when Root is the Docker mount.
 ClassMethod ApplyToProduction(pProduction As %String) As %Status
