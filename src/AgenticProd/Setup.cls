@@ -75,6 +75,10 @@ ClassMethod Run(pRoot As %String = "") As %Status
 {
 	Set tSC = $$$OK
 	Try {
+		// Plain IRIS has no EnsLib.HL7; the lab flow cannot run without it
+		If '##class(%Dictionary.CompiledClass).%ExistsId("EnsLib.HL7.Message") {
+			$$$ThrowStatus($$$ERROR($$$GeneralError, "This app needs InterSystems IRIS for Health 2026.3.0AI build 154"))
+		}
 		$$$ThrowOnError(##class(AgenticProd.Paths).Init(pRoot))
 		$$$ThrowOnError(##class(AgenticProd.Data.PriceTable).Seed())
 		$$$ThrowOnError(..BackfillNamespace())
