@@ -6,7 +6,7 @@
 <title>Agentic Production</title>
 <link rel="stylesheet" href="vendor/tabler/tabler.min.css">
 <link rel="stylesheet" href="vendor/tabler/tabler-icons.min.css">
-<link rel="stylesheet" href="workbench.css?v=8.20.8">
+<link rel="stylesheet" href="workbench.css?v=8.20.18">
 <style>
 :root {
   --tblr-font-sans-serif: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -309,7 +309,8 @@ td.go { white-space: nowrap; }
         <div class="row align-items-center g-2">
           <div class="col">
             <div class="text-secondary" style="font-size:13px" id="crumb">Agentic Production</div>
-            <h2 class="page-title" id="ptitle">Overview</h2>
+            <div class="d-flex align-items-center gap-2"><h2 class="page-title" id="ptitle">Overview</h2><button type="button" class="title-info hidden" id="ptitle-info" title="About this page" aria-label="About this page"><i class="ti ti-info-circle"></i></button></div>
+            <div class="text-secondary hidden" style="font-size:14px" id="psub"></div>
           </div>
           <div class="col-auto d-flex flex-wrap align-items-center gap-3" id="hdr-ctl">
             <span id="hdr-eval-slot"><label class="form-check form-switch m-0" id="eval-toggle"><input class="form-check-input" type="checkbox" id="incl-eval"><span class="form-check-label">Include eval runs</span></label></span>
@@ -400,27 +401,30 @@ td.go { white-space: nowrap; }
             <p class="msg" id="burst-msg"></p>
           </div></div>
         </div>
-        <div class="card" data-info="Recent decisions">
-          <div class="card-header gap-2 flex-wrap">
-            <h3 class="card-title me-auto">Messages <span class="text-secondary fw-normal" style="font-size:14px" id="dec-count"></span> <span class="text-secondary fw-normal" style="font-size:14px">&middot; click a row to see its flow</span></h3>
-            <div class="input-icon" style="width:260px"><span class="input-icon-addon"><i class="ti ti-search"></i></span><input class="form-control" id="dec-q" placeholder="Control id or message"></div>
-            <select class="form-select" style="width:auto" id="dec-ns"><option value="">All productions</option></select>
-            <span id="msg-eval-slot"></span>
-            <select class="form-select" style="width:auto" id="dec-outcome">
-              <option value="">Any outcome</option><option value="applied">Applied</option><option value="approval">To a person</option>
+        <div class="card msg-card" data-info="Recent decisions">
+          <div class="msg-toolbar">
+            <div class="input-icon msg-search"><span class="input-icon-addon"><i class="ti ti-search"></i></span><input class="form-control" id="dec-q" placeholder="Search messages"></div>
+            <select class="form-select" id="dec-ns" aria-label="Production"><option value="">All productions</option></select>
+            <select class="form-select" id="dec-outcome" aria-label="Result">
+              <option value="">Any result</option><option value="applied">Applied</option><option value="approval">With a reviewer</option>
               <option value="rejected">Rejected</option><option value="resent">Resent</option><option value="other">Other</option>
             </select>
+            <select class="form-select" id="dec-problem" aria-label="Problem"><option value="">Any problem</option></select>
+            <select class="form-select" id="dec-time" aria-label="Time range"><option value="24h">Last 24 hours</option><option value="7d">Last 7 days</option><option value="all" selected>All</option></select>
+            <span id="msg-eval-slot" class="ms-auto"></span>
           </div>
           <p class="muted m-3 hidden" id="dec-note">No live traffic yet. Switch on "Include eval runs" to see eval messages.</p>
-          <div class="table-responsive">
-            <table class="table table-vcenter table-hover card-table">
-              <thead><tr><th>Time (UTC)</th><th>Message</th><th>Production</th><th>Problem</th><th>Agent proposed</th><th class="num">Confidence</th><th>Outcome</th><th>Now</th><th class="num opt">Cost</th><th class="opt">Model</th><th></th></tr></thead>
-              <tbody id="decisions"></tbody>
-            </table>
-          </div>
+          <table class="table table-vcenter table-hover card-table msg-table">
+            <colgroup><col style="width:12%"><col style="width:8%"><col style="width:10%"><col style="width:12%"><col style="width:11%"><col style="width:7%"><col style="width:14%"><col style="width:13%"><col style="width:13%"></colgroup>
+            <thead><tr>
+              <th class="sortable" data-sort="time">Time (UTC)</th><th class="sortable" data-sort="message">Message</th><th class="sortable" data-sort="production">Production</th>
+              <th class="sortable" data-sort="problem">Problem</th><th class="sortable" data-sort="proposal">Agent&#39;s proposal</th><th class="sortable num" data-sort="confidence">Confidence</th>
+              <th class="sortable" data-sort="result">Result</th><th class="sortable" data-sort="status">Status</th><th>Flow</th>
+            </tr></thead>
+            <tbody id="decisions"></tbody>
+          </table>
           <div class="card-footer d-flex align-items-center flex-wrap gap-2">
             <span class="text-secondary" id="dec-range"></span>
-            <select class="form-select form-select-sm" style="width:auto" id="dec-size"><option value="10">10 per page</option><option value="25">25 per page</option><option value="50">50 per page</option></select>
             <ul class="pagination m-0 ms-auto" id="dec-pages"></ul>
           </div>
         </div>
@@ -701,7 +705,8 @@ var selectedRun = null;
 var selectedDecision = null, lastStory = null;
 // One fetch feeds Overview and Messages; filtering and paging happen in the page
 var DEC_FETCH = 100;
-var decRows = [], decPage = 1, decSize = 10;
+var decRows = [], decPage = 1, decSize = 25;
+var decSort = { key: "time", dir: "desc" };
 // Options for charts whose box was hidden (other tab, closed details): drawn once it is shown
 var pending = {};
 var includeEval = false;
@@ -848,9 +853,9 @@ function setWindow(key, text) {
 function outcomeLabel(o) {
   if (!o) return "\u2014";
   if (o === "APPLIED") return "Applied";
-  if (o === "SENT_FOR_APPROVAL") return "Waiting for approval";
+  if (o === "SENT_FOR_APPROVAL") return "With a reviewer";
   if (o === "REJECTED") return "Rejected";
-  if (o.indexOf("DOWNGRADED:") === 0) return "Mapping proposed (downgraded)";
+  if (o.indexOf("DOWNGRADED:") === 0) return "Downgraded to review";
   if (o.indexOf("PROPOSED:") === 0) return "Mapping proposed";
   if (o.indexOf("ESCALAT") === 0) return "Escalated";
   if (o === "APPROVED") return "Approved";
@@ -872,6 +877,7 @@ var CARD_INFO = {
   mix: ["Outcome mix", "Final outcomes of triaged messages, grouped the same way as the status chips.", "Colours match the status chips used on the Messages tab."],
   start: ["Getting started", "Four steps to see the system work from start to finish.", "Sending a message or a burst needs an account that may edit settings. Replay runs use recorded agent answers, so they cost nothing."],
   "Send a burst": ["Send a burst", "Sends random evaluation cases as new messages so you can watch them move through the production.", "Replay mode costs nothing. Live mode calls the model and asks for confirmation first."],
+  "Library": ["Library", "Everything the agent can use, in one list: agents, tools, skills, policies, knowledge and the plain IRIS checks around them.", "Built-in items ship with the app. Yours are classes made from a template; you can edit them and add an agent to a production. Nothing here changes a production until you use Add to production."],
   "Recent decisions": ["Recent decisions", "Every message the agent has handled, newest first.", "Click a row or View flow to open its path, the agent's tool calls and the checks Triage ran."],
   "Eval runs": ["Eval runs", "Each run scores the agent against labelled test cases.", "Select a run to see every case, what the agent proposed and whether it matched."],
   "Providers": ["Providers & keys", "Model providers and API keys the agent can use.", "Keys are stored in the Wallet and shown only as set or not set."],
@@ -1005,14 +1011,68 @@ function renderDecisions(rows) {
   renderMessages();
 }
 
-// Search and outcome filter run on the fetched rows; the production filter is a server parameter
+// Search and the filters run on the fetched rows; the production filter is a server parameter
+function confidenceOf(d) {
+  var replay = !d.agentCalled && d.noAgentReason === "replay";
+  return !(d.agentCalled || replay) || d.Confidence == null ? null : Number(d.Confidence);
+}
+function proposalOf(d) { var a = d.AgentDecision || (d.agentCalled ? d.Decision : ""); return ACT_LABEL[a] || a || ""; }
+// Sort keys are the data-sort values of the header cells; anything else falls back to time
+function sortValue(d, key) {
+  switch (key) {
+    case "message": return msgName(d).toLowerCase();
+    case "production": return (d.Namespace || "").toLowerCase();
+    case "problem": return (EC_LABEL[d.ErrorClass] || d.ErrorClass || "").toLowerCase();
+    case "proposal": return proposalOf(d).toLowerCase();
+    case "confidence": return confidenceOf(d);
+    case "result": return outcomeLabel(d.Outcome).toLowerCase();
+    case "status": return (window.flowStatusLabel ? window.flowStatusLabel(d.ID) : "").toLowerCase();
+    default: return d.CreatedAt || "";
+  }
+}
+function sortedRows(rows) {
+  var k = decSort.key, sign = decSort.dir === "asc" ? 1 : -1;
+  return rows.map(function (d) { return { d: d, v: sortValue(d, k) }; }).sort(function (a, b) {
+    var ea = a.v === null || a.v === "", eb = b.v === null || b.v === "";
+    if (ea !== eb) return ea ? 1 : -1;
+    if (!ea && a.v !== b.v) return (a.v < b.v ? -1 : 1) * sign;
+    return b.d.ID - a.d.ID;
+  }).map(function (x) { return x.d; });
+}
+var TIME_MS = { "24h": 86400000, "7d": 7 * 86400000 };
 function filteredRows() {
   var q = document.getElementById("dec-q").value.trim().toLowerCase();
   var og = document.getElementById("dec-outcome").value;
-  return decRows.filter(function (d) {
-    return (!og || outcomeGroup(d.Outcome) === og) && (!q || msgName(d).toLowerCase().indexOf(q) >= 0);
+  var pr = document.getElementById("dec-problem").value;
+  var span = TIME_MS[document.getElementById("dec-time").value], since = span ? Date.now() - span : 0;
+  var rows = decRows.filter(function (d) {
+    if (since && (!d.CreatedAt || new Date(d.CreatedAt.replace(" ", "T").substring(0, 19) + "Z").getTime() < since)) return false;
+    return (!og || outcomeGroup(d.Outcome) === og) && (!pr || d.ErrorClass === pr) && (!q || msgName(d).toLowerCase().indexOf(q) >= 0);
+  });
+  return sortedRows(rows);
+}
+
+function drawSortHeads() {
+  Array.prototype.forEach.call(document.querySelectorAll(".msg-table th.sortable"), function (th) {
+    var on = th.dataset.sort === decSort.key, ic = th.querySelector("i");
+    if (!ic) { ic = el("i"); th.appendChild(ic); }
+    ic.className = on ? "ti ti-arrow-" + (decSort.dir === "asc" ? "up" : "down") : "";
+    th.setAttribute("aria-sort", on ? (decSort.dir === "asc" ? "ascending" : "descending") : "none");
   });
 }
+Array.prototype.forEach.call(document.querySelectorAll(".msg-table th.sortable"), function (th) {
+  th.addEventListener("click", function () {
+    var k = th.dataset.sort;
+    decSort = { key: k, dir: decSort.key === k && decSort.dir === "asc" ? "desc" : "asc" };
+    decPage = 1;
+    renderMessages();
+  });
+});
+Object.keys(EC_LABEL).forEach(function (k) {
+  var o = el("option", EC_LABEL[k]);
+  o.value = k;
+  document.getElementById("dec-problem").appendChild(o);
+});
 
 function renderMessages() {
   var body = document.getElementById("decisions");
@@ -1022,10 +1082,9 @@ function renderMessages() {
   if (decPage > pages) decPage = pages;
   var first = (decPage - 1) * decSize;
   var rows = all.slice(first, first + decSize);
-  document.getElementById("dec-count").textContent = "· " + (includeEval ? "live and eval" : "live");
+  drawSortHeads();
   document.getElementById("dec-range").textContent = all.length
-    ? "Showing " + (first + 1) + "–" + (first + rows.length) + " of " + num(all.length) + " matching" + (all.length < decRows.length ? " · " + num(decRows.length) + " loaded" : "")
-      + (decRows.length > DEC_FETCH - 1 ? " (newest " + DEC_FETCH + ")" : "")
+    ? "Showing " + (first + 1) + "-" + (first + rows.length) + " of " + num(all.length) + " messages" + (decRows.length >= DEC_FETCH ? " (newest " + DEC_FETCH + " loaded)" : "")
     : "No matching messages";
   renderPages(pages);
   rows.forEach(function (d) {
@@ -1038,30 +1097,29 @@ function renderMessages() {
     cell(tr, d.CreatedAt ? d.CreatedAt.substring(5, 16) : "", "text-secondary");
     cell(tr, msgName(d), "mono");
     cell(tr, d.Namespace ? tag(d.Namespace, "other") : "");
-    cell(tr, ecSpan(d.ErrorClass));
-    cell(tr, agentSpan(d));
-    // Without an agent run the logged confidence and cost are placeholders, not measurements;
-    // a replay logs the recorded run's confidence and costs nothing
-    var replay = !d.agentCalled && d.noAgentReason === "replay";
-    cell(tr, !(d.agentCalled || replay) || d.Confidence == null ? "" : Number(d.Confidence).toFixed(2), "num");
-    var td = cell(tr, outcomeTag(d.Outcome));
+    cell(tr, ecSpan(d.ErrorClass), "wrapok");
+    cell(tr, agentSpan(d), "wrapok");
+    // Without an agent run the logged confidence is a placeholder, not a measurement;
+    // a replay logs the recorded run's confidence
+    var conf = confidenceOf(d);
+    cell(tr, conf === null ? "" : conf.toFixed(2), "num");
+    var td = cell(tr, outcomeTag(d.Outcome), "wrapok");
     if (d.flagged && d.flagged.length) td.appendChild(tag("flagged", "bad"));
     if (d.fhirOut && d.fhirOut !== "valid") td.appendChild(tag("FHIR " + d.fhirOut, "bad"));
     td.title = [d.triageChanged ? "Triage changed the agent's proposal" : "",
       d.flagged && d.flagged.length ? "InjectionGuard flagged " + d.flagged.join(", ") : "",
       d.fhirOut ? "FHIR out: " + d.fhirOut : ""].filter(Boolean).join("; ");
-    cell(tr, "", "st");
-    cell(tr, costText(d), "num opt");
-    cell(tr, d.agentCalled ? d.Model : replay ? (d.Model || "—") + " (replay)" : "", "opt text-secondary");
+    cell(tr, "", "st wrapok");
     cell(tr, viewFlow(d, rowNs), "go");
     body.appendChild(tr);
   });
   if (window.flowDecorate) window.flowDecorate();
-  if (!rows.length) { var e = el("tr"); cell(e, "No decisions yet.", "muted").colSpan = 11; body.appendChild(e); }
+  if (!rows.length) { var e = el("tr"); cell(e, "No messages match.", "muted").colSpan = 9; body.appendChild(e); }
 }
 
 function viewFlow(d, rowNs) {
   var a = flowLink(d, rowNs);
+  a.className = "btn btn-sm";
   a.lastChild.textContent = " View flow";
   return a;
 }
@@ -1077,12 +1135,12 @@ function renderPages(pages) {
     li.appendChild(a);
     ul.appendChild(li);
   }
-  item("‹", decPage - 1, false, decPage <= 1);
+  item("Prev", decPage - 1, false, decPage <= 1);
   for (var i = 1; i <= pages; i++) {
     if (pages > 7 && i !== 1 && i !== pages && Math.abs(i - decPage) > 1) { if (Math.abs(i - decPage) === 2) item("…", i, false, true); continue; }
     item(String(i), i, i === decPage, false);
   }
-  item("›", decPage + 1, false, decPage >= pages);
+  item("Next", decPage + 1, false, decPage >= pages);
 }
 
 // Runs with fewer cases than this are smoke tests and stay behind "Show test runs"
@@ -1946,6 +2004,9 @@ document.getElementById("kill-btn").addEventListener("click", function () {
 });
 
 var TITLES = { overview: "Overview", wbnew: "Create an agent", wblib: "Library", wbprod: "Production map", messages: "Messages", trust: "Trust & evaluation", cost: "Cost", settings: "Settings" };
+var SUBS = { messages: "Every message the agent handled. Click a row to see its story." };
+var PAGE_INFO = { wblib: "Library" };
+document.getElementById("ptitle-info").addEventListener("click", function () { openHelp(this.dataset.help); });
 function showTab(name) {
   if (!document.getElementById("tab-" + name)) name = "overview";
   if (name === "settings") loadSettings();
@@ -1953,6 +2014,12 @@ function showTab(name) {
     a.classList.toggle("active", a.dataset.tab === name);
   });
   document.getElementById("ptitle").textContent = TITLES[name];
+  var sub = document.getElementById("psub");
+  sub.textContent = SUBS[name] || "";
+  sub.classList.toggle("hidden", !SUBS[name]);
+  var pinfo = document.getElementById("ptitle-info");
+  pinfo.classList.toggle("hidden", !PAGE_INFO[name]);
+  pinfo.dataset.help = PAGE_INFO[name] || "";
   Array.prototype.forEach.call(document.querySelectorAll(".tabpanel"), function (p) {
     p.classList.toggle("hidden", p.id !== "tab-" + name);
   });
@@ -1992,7 +2059,8 @@ document.getElementById("more").addEventListener("toggle", drawPending);
 function resetPage() { decPage = 1; renderMessages(); }
 document.getElementById("dec-q").addEventListener("input", resetPage);
 document.getElementById("dec-outcome").addEventListener("change", resetPage);
-document.getElementById("dec-size").addEventListener("change", function (ev) { decSize = +ev.target.value; resetPage(); });
+document.getElementById("dec-problem").addEventListener("change", resetPage);
+document.getElementById("dec-time").addEventListener("change", resetPage);
 document.getElementById("dec-ns").addEventListener("change", function (ev) {
   decNs = ev.target.value;
   decPage = 1;
@@ -2064,10 +2132,10 @@ setInterval(load, 30000);
     <details id="story-msg-box"><summary>Message (patient name, birth date, address and phone masked)</summary><pre id="story-msg"></pre></details>
   </div>
 </aside>
-<script src="flow.js?v=8.20.8"></script>
-<script src="workbench.js?v=8.20.8"></script>
-<script src="builder.js?v=8.20.8"></script>
-<script src="wizard.js?v=8.20.8"></script>
-<script src="addprod.js?v=8.20.8"></script>
+<script src="flow.js?v=8.20.18"></script>
+<script src="workbench.js?v=8.20.18"></script>
+<script src="builder.js?v=8.20.18"></script>
+<script src="wizard.js?v=8.20.18"></script>
+<script src="addprod.js?v=8.20.18"></script>
 </body>
 </html>

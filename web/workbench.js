@@ -5,7 +5,7 @@
   var panels = { lib: document.getElementById("wb-lib"), prod: document.getElementById("wb-prod") };
   if (!panels.lib || !panels.prod) return;
   var TAB = { lib: "wblib", prod: "wbprod" };
-  var started = false, lib = null, libType = "all", libQuery = "", mapData = null, mapSel = "", mapRes = null;
+  var started = false, lib = null, libType = "all", libQuery = "", libSource = "", libUsed = "", libSort = { key: "", dir: "asc" }, mapData = null, mapSel = "", mapRes = null;
 
   // Library groups in page order; key is the field in /workbench/library
   var GROUPS = [
@@ -14,7 +14,7 @@
     { key: "skills", type: "skill", title: "Skills", sub: "%AI.Agent.Skill · instructions and tools loaded when needed", icon: "puzzle", cls: "skill" },
     { key: "policies", type: "policy", title: "Policies", sub: "%AI.Policy · checked by AI Hub on every tool call", icon: "lock", cls: "pol" },
     { key: "knowledge", type: "knowledge", title: "Knowledge", sub: "%AI.RAG · IRIS vector search", icon: "database-search", cls: "kb" },
-    { key: "checks", type: "check", title: "Checks around the agent", sub: "plain IRIS code, not AI Hub · run after the answer", icon: "shield-half", cls: "chk" }
+    { key: "checks", type: "check", title: "Checks", sub: "plain IRIS code around the agent, not AI Hub · run after the answer", icon: "shield-half", cls: "chk" }
   ];
   var FILTERS = [["all", "All"], ["agent", "Agents"], ["tool", "Tools"], ["skill", "Skills"], ["policy", "Policies"], ["knowledge", "Knowledge"], ["check", "Checks"]];
   var KIND = { model: ["Model", "cpu", "#a78bfa"], toolset: ["ToolSet", "tool", "#60a5fa"], skill: ["Skill", "puzzle", "#c4b5fd"], knowledge: ["Knowledge", "database-search", "#34d399"], policy: ["Policy", "lock", "#f87171"] };
@@ -34,25 +34,22 @@
   function showSub(name) { if (window.showTab) window.showTab(TAB[name]); }
 
   // ---- library -------------------------------------------------------------------------------
-  var libBar = div("wb-bar"), libBody = div("wb-body"), libNote = div("wb-note");
+  var libHead = div("wb-lh"), libTabs = div("wb-tabs"), libBar = div("wb-bar"), libBody = div("wb-body"), libNote = div("wb-note");
   var search = el("input", null, "form-control wb-search");
-  search.placeholder = "Search agents, tools, skills, policies"; search.type = "search";
+  search.placeholder = "Search by name or class"; search.type = "search";
   search.addEventListener("input", function () { libQuery = search.value.toLowerCase(); renderLib(); });
-  var filt = div("btn-group");
-  FILTERS.forEach(function (f) {
-    var b = el("button", f[1], "btn btn-sm" + (f[0] === "all" ? " active" : "")); b.type = "button"; b.dataset.type = f[0];
-    b.addEventListener("click", function () {
-      libType = f[0];
-      Array.prototype.forEach.call(filt.children, function (c) { c.classList.toggle("active", c.dataset.type === libType); });
-      renderLib();
-    });
-    filt.appendChild(b);
-  });
-  var newBtn = el("button", null, "btn btn-primary btn-sm"); newBtn.type = "button"; newBtn.appendChild(icon("plus", "me-1")); newBtn.appendChild(document.createTextNode("New from template"));
+  function pickBox(label, options, set) {
+    var s = el("select", null, "form-select wb-pickbox"); s.setAttribute("aria-label", label);
+    options.forEach(function (o) { var op = el("option", o[1]); op.value = o[0]; s.appendChild(op); });
+    s.addEventListener("change", function () { set(s.value); renderLib(); });
+    return s;
+  }
+  var sourceBox = pickBox("Source", [["", "Any source"], ["builtin", "Built-in"], ["yours", "Yours"]], function (v) { libSource = v; });
+  var usedBox = pickBox("Used in", [["", "Used in: anywhere"], ["prod", "In production"], ["none", "Not in production"]], function (v) { libUsed = v; });
+  var newBtn = el("button", null, "btn btn-primary btn-sm ms-auto"); newBtn.type = "button"; newBtn.appendChild(icon("plus", "me-1")); newBtn.appendChild(document.createTextNode("New from template"));
   newBtn.addEventListener("click", function () { if (window.wbBuilder) window.wbBuilder.templates(); });
-  libBar.appendChild(search); libBar.appendChild(filt); libBar.appendChild(newBtn);
-  libBar.appendChild(div("wb-hint", "Every block is a real IRIS class. Open one to read its source."));
-  panels.lib.appendChild(libBar); panels.lib.appendChild(libNote); panels.lib.appendChild(libBody);
+  libBar.appendChild(search); libBar.appendChild(sourceBox); libBar.appendChild(usedBox); libBar.appendChild(newBtn);
+  panels.lib.appendChild(libTabs); panels.lib.appendChild(libBar); panels.lib.appendChild(libNote); panels.lib.appendChild(libBody);
 
   var drawer = div("wb-drawer hidden");
   document.body.appendChild(drawer);
@@ -63,55 +60,153 @@
       .catch(function (e) { libNote.textContent = "Could not load the Library: " + e.message; });
   }
 
-  function matches(item, g) {
-    if (libType !== "all" && libType !== g.type) return false;
-    if (!libQuery) return true;
-    var text = [item.name, item["class"], item.description, item.usedBy].join(" ").toLowerCase();
-    return text.indexOf(libQuery) >= 0;
+  // ---- row data ----
+  function isYours(item) { return String(item["class"]).indexOf("MyAI.") === 0; }
+  function usesOf(item, g) {
+    if (g.type === "agent") return item.toolsets + " toolset" + (item.toolsets === 1 ? "" : "s") + " · " + item.skills + " skill" + (item.skills === 1 ? "" : "s");
+    if (g.type === "tool" || g.type === "skill") { var n = (item.tools || []).length; return n + " tool" + (n === 1 ? "" : "s") + (g.type === "tool" ? (item.readOnly ? " · read-only" : " · can change data") : ""); }
+    if (g.type === "policy") return item.kind || "policy";
+    if (g.type === "knowledge") return "vector search";
+    return "plain IRIS";
+  }
+  function prodOf(item, g) {
+    if (g.type === "agent") {
+      var names = [];
+      if (item.hostedBy) names.push(item.hostedBy);
+      (item.installs || []).forEach(function (i) { names.push(i.owner + " (" + i.namespace + ")"); });
+      return names.join(", ");
+    }
+    return String(item.usedBy || "").replace(/^used by /, "");
+  }
+  function sortKey(item, g, k) {
+    switch (k) {
+      case "name": return String(item.name || "").toLowerCase();
+      case "class": return String(item["class"]).toLowerCase();
+      case "model": return g.type === "agent" ? String(item.model || "").toLowerCase() : "";
+      case "source": return isYours(item) ? "yours" : "built-in";
+      case "prod": return prodOf(item, g).toLowerCase();
+      default: return "";
+    }
   }
 
-  function card(item, g) {
-    var c = div("wb-card"); c.tabIndex = 0;
-    var h = div("wb-card-h");
-    var ic = div("wb-ic t-" + g.cls); ic.appendChild(icon(g.icon));
-    var t = div(); t.appendChild(div("wb-n", item.name)); t.appendChild(div("wb-c", item["class"]));
-    h.appendChild(ic); h.appendChild(t); c.appendChild(h);
-    c.appendChild(div("wb-d", tidy(item.description)));
-    if (item.tools && item.tools.length) c.appendChild(div("wb-d wb-tools", item.tools.join(" · ")));
-    var u = div("wb-u");
-    if (g.type === "tool") u.appendChild(el("span", item.readOnly ? "read-only" : "can change data", "wb-tag " + (item.readOnly ? "ro" : "rw")));
-    if (g.type === "agent") u.appendChild(document.createTextNode(item.model + " · " + item.toolsets + " toolset · " + item.skills + " skills" + (item.hostedBy ? " · used by operation " + item.hostedBy : "")));
-    else if (item.usedBy) u.appendChild(document.createTextNode((g.type === "tool" ? " " : "") + item.usedBy));
-    if (g.type === "check") u.insertBefore(el("span", "plain IRIS", "wb-tag"), u.firstChild);
-    c.appendChild(u);
-    if (g.type === "agent" && window.wbAddProd && window.wbAddProd.canAdd(item["class"])) c.appendChild(window.wbAddProd.cardBits(item, loadLib));
-    if (window.wbBuilder && window.wbBuilder.editable(item["class"])) u.insertBefore(el("span", "yours · editable", "wb-tag"), u.firstChild);
-    var open = function () {
-      var drawerOpen = function () { openDrawer(item, g); };
-      if (window.wbBuilder && window.wbBuilder.editable(item["class"]) && g.type !== "knowledge" && g.type !== "check") window.wbBuilder.edit(item["class"], drawerOpen);
-      else drawerOpen();
-    };
-    c.addEventListener("click", open);
-    c.addEventListener("keydown", function (e) { if (e.key === "Enter") open(); });
-    return c;
+  function matches(item, g) {
+    if (libType !== "all" && libType !== g.type) return false;
+    if (libSource && (libSource === "yours") !== isYours(item)) return false;
+    var p = prodOf(item, g);
+    if (libUsed === "prod" && !p) return false;
+    if (libUsed === "none" && p) return false;
+    if (!libQuery) return true;
+    return (String(item.name) + " " + item["class"]).toLowerCase().indexOf(libQuery) >= 0;
+  }
+
+  function act(label, ic, fn, cls, tip) {
+    var b = el("button", null, "btn btn-sm " + (cls || "")); b.type = "button";
+    if (ic) b.appendChild(icon(ic, label ? "me-1" : ""));
+    if (label) b.appendChild(document.createTextNode(label));
+    if (tip) { b.title = tip; b.setAttribute("aria-label", tip); }
+    b.addEventListener("click", function (e) { e.stopPropagation(); fn(b); });
+    return b;
+  }
+
+  function libRow(item, g) {
+    var tr = el("tr");
+    var yours = isYours(item), prod = prodOf(item, g);
+    var nm = el("td", null, "wb-c-name");
+    nm.appendChild(div("wb-n", item.name)); nm.appendChild(div("wb-d", tidy(item.description)));
+    nm.title = tidy(item.description);
+    tr.appendChild(nm);
+    tr.appendChild(el("td", item["class"], "wb-c-class"));
+    tr.appendChild(el("td", g.type === "agent" ? item.model : "—", "wb-c-model"));
+    var us = el("td", usesOf(item, g), "wb-c-uses"); us.title = item.tools && item.tools.length ? item.tools.join(" · ") : usesOf(item, g); tr.appendChild(us);
+    var sc = el("td"); sc.appendChild(el("span", yours ? "Yours" : "Built-in", "wb-srcb " + (yours ? "yours" : "builtin"))); tr.appendChild(sc);
+    var pd = el("td", prod || "—", "wb-c-prod"); pd.title = prod; tr.appendChild(pd);
+    var ac = el("td"), box = div("wb-acts");
+    var openSrc = function () { openDrawer(item, g); };
+    box.appendChild(act("View source", "", openSrc));
+    if (g.type === "agent" && window.wbAddProd && window.wbAddProd.canAdd(item["class"])) {
+      box.appendChild(act("Add to production", "", function () { window.wbAddProd.openFor(item, loadLib); }, "btn-outline-primary"));
+    }
+    if (yours && window.wbBuilder && window.wbBuilder.editable(item["class"]) && g.type !== "knowledge" && g.type !== "check") {
+      box.appendChild(act("", "pencil", function () { window.wbBuilder.edit(item["class"], openSrc); }, "btn-icon", "Edit"));
+    }
+    if (yours && g.type === "agent" && window.wbAddProd) {
+      (item.installs || []).forEach(function (i) {
+        box.appendChild(act("", "arrow-back-up", function (b) { window.wbAddProd.removeInstall(i, b, loadLib); }, "btn-icon btn-outline-danger", "Remove from " + i.namespace + " " + short(i.production)));
+      });
+    }
+    ac.appendChild(box); tr.appendChild(ac);
+    tr.addEventListener("click", openSrc);
+    return tr;
+  }
+
+  var COLS = [["name", "Name"], ["class", "Class"], ["model", "Model"], ["uses", "Uses"], ["source", "Source"], ["prod", "In production"], ["", "Actions"]];
+  var COLW = ["12%", "25%", "9%", "9%", "9%", "10%", "26%"];
+  function libTable(items, g) {
+    var t = el("table", null, "table table-vcenter card-table wb-table");
+    var cg = el("colgroup"); COLW.forEach(function (w) { var c = el("col"); c.style.width = w; cg.appendChild(c); }); t.appendChild(cg);
+    var tr = el("tr");
+    COLS.forEach(function (c) {
+      var th = el("th", c[1]);
+      if (c[0] && c[0] !== "uses") {
+        th.className = "sortable"; th.setAttribute("aria-sort", libSort.key === c[0] ? (libSort.dir === "asc" ? "ascending" : "descending") : "none");
+        if (libSort.key === c[0]) th.appendChild(icon("arrow-" + (libSort.dir === "asc" ? "up" : "down")));
+        th.addEventListener("click", function () {
+          libSort = { key: c[0], dir: libSort.key === c[0] && libSort.dir === "asc" ? "desc" : "asc" };
+          renderLib();
+        });
+      }
+      tr.appendChild(th);
+    });
+    var hd = el("thead"); hd.appendChild(tr); t.appendChild(hd);
+    var tb = el("tbody");
+    if (libSort.key) {
+      var sign = libSort.dir === "asc" ? 1 : -1;
+      items = items.map(function (i, n) { return { i: i, n: n, v: sortKey(i, g, libSort.key) }; }).sort(function (a, b) {
+        var ea = a.v === "", eb = b.v === "";
+        if (ea !== eb) return ea ? 1 : -1;
+        return a.v === b.v ? a.n - b.n : (a.v < b.v ? -1 : 1) * sign;
+      }).map(function (x) { return x.i; });
+    }
+    items.forEach(function (i) { tb.appendChild(libRow(i, g)); });
+    t.appendChild(tb);
+    return t;
+  }
+
+  function renderTabs() {
+    clear(libTabs);
+    var total = 0;
+    GROUPS.forEach(function (g) { total += (lib && lib[g.key] || []).length; });
+    [["all", "All", total]].concat(GROUPS.map(function (g) { return [g.type, g.title, (lib && lib[g.key] || []).length]; })).forEach(function (f) {
+      var b = el("button", null, "wb-tab" + (f[0] === libType ? " active" : "")); b.type = "button";
+      b.appendChild(document.createTextNode(f[1] + " "));
+      b.appendChild(el("span", String(f[2]), "wb-tabn"));
+      b.addEventListener("click", function () { libType = f[0]; renderLib(); });
+      libTabs.appendChild(b);
+    });
   }
 
   function renderLib() {
     clear(libBody);
     if (!lib) return;
+    renderTabs();
     var shown = 0;
     GROUPS.forEach(function (g) {
       var items = (lib[g.key] || []).filter(function (i) { return matches(i, g); });
       if (!items.length) return;
       shown += items.length;
-      var h = el("h4", null, "wb-h4"); h.appendChild(icon(g.icon));
-      h.appendChild(document.createTextNode(g.title)); h.appendChild(el("span", g.sub, "wb-ex"));
-      libBody.appendChild(h);
-      var grid = div("wb-grid");
-      items.forEach(function (i) { grid.appendChild(card(i, g)); });
-      libBody.appendChild(grid);
+      var box = div("card wb-sec");
+      var h = div("wb-sec-h"); h.appendChild(icon(g.icon));
+      h.appendChild(el("b", g.title)); h.appendChild(el("span", String(items.length), "wb-tabn")); h.appendChild(el("span", g.sub, "wb-ex"));
+      box.appendChild(h);
+      box.appendChild(libTable(items, g));
+      libBody.appendChild(box);
     });
     if (!shown) libBody.appendChild(div("wb-note", "Nothing matches."));
+  }
+
+  function resetLibFilters() {
+    libType = "all"; libQuery = ""; libSource = ""; libUsed = "";
+    search.value = ""; sourceBox.value = ""; usedBox.value = "";
   }
 
   function kv(label, value) {
@@ -442,8 +537,7 @@
   }
 
   function openInLibrary(c) {
-    libType = "all"; libQuery = "";
-    search.value = ""; Array.prototype.forEach.call(filt.children, function (b) { b.classList.toggle("active", b.dataset.type === "all"); });
+    resetLibFilters();
     showSub("lib");
     var find = function () {
       renderLib();

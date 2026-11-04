@@ -344,5 +344,5 @@
     }).catch(function (e) { S.busy = false; S.msg = e.message; drawFoot(); });
   }
 
-  window.wbAddProd = { open: open, canAdd: canAdd, cardBits: cardBits, installCards: installCards, state: function () { return S; } };
+  window.wbAddProd = { open: open, removeInstall: remove, openFor: function (item, reload) { open({ agentClass: item["class"], name: idOf(short(item["class"])), done: reload }); }, canAdd: canAdd, cardBits: cardBits, installCards: installCards, state: function () { return S; } };
 })();

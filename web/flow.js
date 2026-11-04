@@ -7,7 +7,7 @@
     APPROVED: ["Approved", "good"], REVIEW_APPLIED: ["Approved, applied", "good"], REVIEW_RESENT: ["Approved, resent", "good"],
     REVIEW_CLOSED: ["Approved, closed", "good"], REVIEW_RETURNED: ["Approved, returned", "good"], REVIEW_REJECTED: ["Review rejected", "bad"],
     REVIEW_BAD_LOINC: ["Bad LOINC", "bad"], REVIEW_FIX_FAILED: ["Fix failed", "bad"], APPLIED: ["Applied", "good"], RESENT: ["Resent", "good"],
-    REJECTED: ["Rejected", "bad"], waiting: ["Waiting", "warn"], OBSERVED: ["Observed", "other"], ERROR: ["Send failed", "bad"]
+    REJECTED: ["Rejected", "bad"], SENT_FOR_APPROVAL: ["With a reviewer", "warn"], waiting: ["Waiting", "warn"], OBSERVED: ["Observed", "other"], ERROR: ["Send failed", "bad"]
   };
   var POLL_MS = 2000, MAP_MS = 10000, STEP_MS = 1100;
   var SVGNS = "http://www.w3.org/2000/svg";
@@ -22,6 +22,8 @@
   function evalParam() { return "&eval=" + (evalOn() ? 1 : 0); }
   function fmtMs(ms) { return ms < 1000 ? ms + " ms" : (ms < 60000 ? (ms / 1000).toFixed(1) + " s" : Math.round(ms / 60000) + " min"); }
   function statusInfo(s) {
+    if (typeof s === "string" && s.indexOf("DOWNGRADED:") === 0) return ["Downgraded to review", "warn"];
+    if (typeof s === "string" && s.indexOf("PROPOSED:") === 0) return ["Mapping proposed", "warn"];
     return STATUS[s] || [String(s).replace(/^REVIEW_/, "Review ").replace(/_/g, " ").toLowerCase().replace(/^./, function (c) { return c.toUpperCase(); }), "other"];
   }
   function showError(e) { $("error").textContent = "Flow: " + e.message; $("error").classList.remove("hidden"); }
@@ -29,6 +31,8 @@
   // ---- live status for the rows ----
   function statusTag(s) { var si = statusInfo(s); return el("span", si[0], "tag t-" + si[1]); }
   function byId(id) { return msgs.filter(function (x) { return x.id === id; })[0]; }
+  // Plain status text of one message row, for the Messages table sort
+  window.flowStatusLabel = function (id) { var m = byId(id); return m ? statusInfo(m.status)[0] : ""; };
   window.flowDecorate = function () {
     Array.prototype.forEach.call(document.querySelectorAll("#decisions tr[data-id]"), function (tr) {
       var m = byId(+tr.dataset.id), td = tr.querySelector("td.st");
