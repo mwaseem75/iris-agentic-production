@@ -876,7 +876,7 @@ ClassMethod AgentStep(pLog As AgenticProd.Data.DecisionLog, ByRef pSecrets) As %
 			pLog.Reason [ "Daily token budget": "the daily token budget was used up",
 			pLog.Reason [ "agent gave no decision": "it gave no decision ("_$PIECE(..Mask(pLog.Reason, .pSecrets), "agent gave no decision: ", 2)_")",
 			1: "no agent run is recorded for this message")
-		Do tStep.%Set("text", "The agent was not used: "_tWhy_". Triage sent the message to a person instead.")
+		Do tStep.%Set("text", "The agent was not used: "_tWhy_". Triage sent the message to a human instead.")
 		Quit tStep
 	}
 	Set tProposal = $SELECT(tUsage.DecisionJSON '= "": ##class(%DynamicObject).%FromJSON(tUsage.DecisionJSON), 1: {})
@@ -929,7 +929,7 @@ ClassMethod GroundingStep(pLog As AgenticProd.Data.DecisionLog, ByRef pSecrets) 
 		Do tStep.%Set("text", "Triage traced every claim in the proposal to the message, this run's tool results or the LOINC knowledge base ("_tStep.checks.%Size()_" check"_$SELECT(tStep.checks.%Size()=1: "", 1: "s")_").")
 	} Else {
 		Do tStep.%Set("status", $SELECT(tGround.strictness = "warn": "warned", 1: "caught"))
-		Do tStep.%Set("text", "Some claims could not be traced ("_$TRANSLATE(tGround.failed, ",", " ")_"). "_$SELECT(tGround.strictness = "warn": "Grounding is in warn mode, so this was recorded and shown to the reviewer only.", 1: "Grounding is enforced, so the proposal was not acted on and went to a person."))
+		Do tStep.%Set("text", "Some claims could not be traced ("_$TRANSLATE(tGround.failed, ",", " ")_"). "_$SELECT(tGround.strictness = "warn": "Grounding is in warn mode, so this was recorded and shown to the human reviewer only.", 1: "Grounding is enforced, so the proposal was not acted on and went to a human."))
 	}
 	Quit tStep
 }
@@ -952,19 +952,19 @@ ClassMethod TriageText(pLog As AgenticProd.Data.DecisionLog, pOutcome As %String
 		Quit "Observe mode: Triage checked the proposal (result "_tWould_") and logged it, but sent, resent, rejected and asked nothing. The message is still where the production left it."
 	}
 	If $EXTRACT(pOutcome, 1, 9) = "PROPOSED:" {
-		Quit "Propose mode: Triage would have done "_$EXTRACT(pOutcome, 10, *)_" on its own; it sent the proposal to a reviewer instead."
+		Quit "Propose mode: Triage would have done "_$EXTRACT(pOutcome, 10, *)_" on its own; it sent the proposal to a human reviewer instead."
 	}
 	Set tAction = $PIECE(pOutcome, ":", 2)
 	If $EXTRACT(pOutcome, 1, 11) = "DOWNGRADED:" {
 		Set tWhy = $PIECE($PIECE($EXTRACT(pLog.Reason, 17, *), ": ", 2, *), " (agent: ")
-		Quit "Triage did not accept "_tAction_": "_$SELECT(tWhy '= "": ..Mask(tWhy, .pSecrets), 1: "the action matrix does not allow it")_". It turned the proposal into ESCALATE and sent it to a person."
+		Quit "Triage did not accept "_tAction_": "_$SELECT(tWhy '= "": ..Mask(tWhy, .pSecrets), 1: "the action matrix does not allow it")_". It turned the proposal into ESCALATE and sent it to a human."
 	}
 	Quit:pOutcome="APPLIED" "Triage re-checked the fix itself (validation passed, confidence above the threshold, a whitelisted change, no patient identity fields) and sent a fixed copy on. The original message is unchanged."
 	Quit:pOutcome="RESENT" "RESEND is allowed for a TRANSIENT error that was not resent before, so Triage resent the original message."
 	Quit:pOutcome="REJECTED" "REJECT is allowed only for STRUCTURE_ERROR or ROUTING, which only the sender can fix, so Triage returned the message to the sender."
 	If $EXTRACT(pOutcome, 1, 6) = "ERROR:" Quit "Triage chose "_tAction_" but could not send the result; the message is still failed."
-	Quit:pLog.Decision="MAP_CODE" "A new code mapping is never applied automatically: Triage sent an approval task to a reviewer."
-	Quit "The message needs a person: Triage sent an approval task to a reviewer."
+	Quit:pLog.Decision="MAP_CODE" "A new code mapping is never applied automatically: Triage sent an approval task to a human reviewer."
+	Quit "The message needs a human: Triage sent an approval task to a human reviewer."
 }
 
 /// The reviewer's answer, "waiting" when a task is open, or that no review was needed.
@@ -974,12 +974,12 @@ ClassMethod ReviewStep(pLog As AgenticProd.Data.DecisionLog, pTriageOutcome As %
 	Set tAsked = (pTriageOutcome = "SENT_FOR_APPROVAL") || ($EXTRACT(pTriageOutcome, 1, 11) = "DOWNGRADED:") || ($EXTRACT(pTriageOutcome, 1, 9) = "PROPOSED:")
 	If pLog.ReviewedAt = "" {
 		Do tStep.%Set("status", $SELECT(tAsked: "waiting", 1: "none"))
-		Do tStep.%Set("text", $SELECT(tAsked: "Waiting for a reviewer in the Workflow inbox.", 1: "No review needed."))
+		Do tStep.%Set("text", $SELECT(tAsked: "Human approval required in the Workflow inbox.", 1: "No review needed."))
 		Quit tStep
 	}
 	If pLog.Reviewer = "eval" {
 		Do tStep.%Set("status", "closed")
-		Do tStep.%Set("text", "Closed by the eval runner at "_pLog.ReviewedAt_" (UTC); not reviewed by a person.")
+		Do tStep.%Set("text", "Closed by the eval runner at "_pLog.ReviewedAt_" (UTC); not reviewed by a human.")
 		Quit tStep
 	}
 	Set tWhat = $CASE(pLog.Outcome,

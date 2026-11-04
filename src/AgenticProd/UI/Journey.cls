@@ -206,7 +206,7 @@ ClassMethod Build(pLog As AgenticProd.Data.DecisionLog, pNs As %String, pItems A
 		Do:tReviewed="" tLast.%Set("open", 1, "boolean")
 		Set tWho = $SELECT(pLog.Reviewer '= "": pLog.Reviewer, 1: "the reviewer")
 		Set tWaitMs = ..Diff(tAt, tEnd)
-		Do:tWaitMs>..#LONGWAITMS tLast.%Set("waitLabel", $SELECT(tReviewed = "": "waiting "_..Human(tWaitMs)_" so far for the reviewer", 1: "waited "_..Human(tWaitMs)_" for "_tWho))
+		Do:tWaitMs>..#LONGWAITMS tLast.%Set("waitLabel", $SELECT(tReviewed = "": "waiting "_..Human(tWaitMs)_" so far for human approval", 1: "waited "_..Human(tWaitMs)_" for "_tWho))
 	}
 
 	// learning: the approved mapping written to the lookup table

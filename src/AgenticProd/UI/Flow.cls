@@ -315,7 +315,7 @@ ClassMethod Burst(pBody As %DynamicObject, pCanEdit As %Boolean, pDryRun As %Boo
 	Set tN = $SELECT(pBody.%Get("n") = "": ..#BURSTDEFAULT, 1: pBody.%Get("n"))
 	Quit:(tN'?1.N)||(tN<1)||(tN>..#BURSTMAX) ..Refuse(400, "n must be a whole number from 1 to "_..#BURSTMAX)
 	Quit:..CheckNs(pBody.%Get("ns"))'="IRISAPP" ..Refuse(400, "Bursts go to IRISAPP's LabFileIn only")
-	Quit:pAgent.killSwitch ..Refuse(409, "The AI kill switch is on; every failed message would go to a person")
+	Quit:pAgent.killSwitch ..Refuse(409, "The AI kill switch is on; every failed message would go to a human")
 	// a replay burst needs no mode: the agent replays its own control IDs while it stays live
 	Quit:tLive&&(pAgent.mode'="live") ..Refuse(409, "The agent is in "_pAgent.mode_" mode; change it in Settings to send a live burst")
 	If tLive {

@@ -7,7 +7,7 @@
     APPROVED: ["Approved", "good"], REVIEW_APPLIED: ["Approved, applied", "good"], REVIEW_RESENT: ["Approved, resent", "good"],
     REVIEW_CLOSED: ["Approved, closed", "good"], REVIEW_RETURNED: ["Approved, returned", "good"], REVIEW_REJECTED: ["Review rejected", "bad"],
     REVIEW_BAD_LOINC: ["Bad LOINC", "bad"], REVIEW_FIX_FAILED: ["Fix failed", "bad"], APPLIED: ["Applied", "good"], RESENT: ["Resent", "good"],
-    REJECTED: ["Rejected", "bad"], SENT_FOR_APPROVAL: ["With a reviewer", "warn"], waiting: ["Waiting", "warn"], OBSERVED: ["Observed", "other"], ERROR: ["Send failed", "bad"]
+    REJECTED: ["Rejected", "bad"], SENT_FOR_APPROVAL: ["Human review", "warn"], waiting: ["Waiting", "warn"], OBSERVED: ["Observed", "other"], ERROR: ["Send failed", "bad"]
   };
   var POLL_MS = 2000, MAP_MS = 10000, STEP_MS = 1100;
   var SVGNS = "http://www.w3.org/2000/svg";
@@ -462,7 +462,7 @@
       var reached = hs && J.steps.indexOf(hs) <= cur, txt = "";
       if (reached) {
         var wl = hs.waitLabel || "", who = /for (.+)$/.exec(wl), wait = wl.replace(/ for .*$/, "");
-        txt = (hs.status === "wait" ? "waiting for the reviewer" : hs.status === "bad" ? "rejected by " + (who ? who[1] : "reviewer") : "approved by " + (who ? who[1] : "reviewer")) + (wait ? "\n" + wait : "");
+        txt = (hs.status === "wait" ? "waiting for human approval" : hs.status === "bad" ? "rejected by " + (who ? who[1] : "reviewer") : "approved by " + (who ? who[1] : "reviewer")) + (wait ? "\n" + wait : "");
       }
       setSub("out:human", txt);
     }

@@ -4,11 +4,11 @@
 // send from the dashboard script.
 (function () {
   var WAYS = [
-    ["failure", "alert-triangle", "When a message fails", "We watch the items you tick. Failures go to the agent, its proposal to a person.", "no code", "#fee2e2", "#b91c1c"],
+    ["failure", "alert-triangle", "When a message fails", "We watch the items you tick. Failures go to the agent, its proposal to a human.", "no code", "#fee2e2", "#b91c1c"],
     ["process", "code", "From my own process", "Your BPL or ObjectScript calls the agent when you decide.", "", "#e0f2fe", "#0369a1"],
     ["rule", "arrows-split", "From a routing rule", "Add the agent as a target; matching messages go to it.", "", "#ecfdf3", "#15803d"]
   ];
-  var MODES = [["observe", "Explain only"], ["propose", "Propose, a person approves"], ["act", "Fix safe cases"]];
+  var MODES = [["observe", "Explain only"], ["propose", "Propose, a human approves"], ["act", "Fix safe cases"]];
   var NEWROLE = "__new__";
   var S = null, root = null, planSeq = 0, planTimer = null, onDone = null;
 
@@ -211,7 +211,7 @@
       var b = btn(m[1], S.mode === m[0] ? "active" : "", null, function () { S.mode = m[0]; Array.prototype.forEach.call(seg.children, function (c, i) { c.classList.toggle("active", MODES[i][0] === S.mode); }); queuePlan(); });
       seg.appendChild(b);
     });
-    a.appendChild(seg); a.appendChild(div("wb-note", "Start with Propose. Fix safe cases only applies whitelisted fixes; everything else still goes to a person."));
+    a.appendChild(seg); a.appendChild(div("wb-note", "Start with Propose. Fix safe cases only applies whitelisted fixes; everything else still goes to a human."));
     var b2 = div(); b2.appendChild(lbl(5, "Who approves?"));
     var rs = el("select", null, "form-select");
     var on = el("option", "New role"); on.value = NEWROLE; rs.appendChild(on);

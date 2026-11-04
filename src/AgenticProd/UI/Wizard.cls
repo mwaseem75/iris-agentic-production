@@ -90,9 +90,9 @@ ClassMethod NeedsContract(pStarter As %String) As %Boolean
 ClassMethod Starters() As %DynamicArray
 {
 	Quit [
-		{"id":"fix", "title":"Fix failed messages", "text":"Find why a message failed and propose a fix. A person approves.", "icon":"first-aid-kit", "name":"Message fixer",
+		{"id":"fix", "title":"Fix failed messages", "text":"Find why a message failed and propose a fix. A human approves.", "icon":"first-aid-kit", "name":"Message fixer",
 			"toolsets":["AgenticProd.Tools.Base"], "skills":["AgenticProd.Skill.HL7Repair","AgenticProd.Skill.CodeMapping"], "protectPid":true, "contract":1,
-			"does":["Find why a message failed","Propose a fix; a person approves"],
+			"does":["Find why a message failed","Propose a fix; a human approves"],
 			"instructions":("You look at messages that failed in this production."_$CHAR(10)_"1. Read the error first, then the message."_$CHAR(10)_"2. Load a skill when the error needs one."_$CHAR(10)_"3. Never change patient identity. If unsure, escalate."_$CHAR(10)_"Answer with one decision.")},
 		{"id":"explain", "title":"Explain failures", "text":"Write a plain explanation for the support team. Changes nothing.", "icon":"message-question", "name":"Failure explainer",
 			"toolsets":["AgenticProd.Tools.Base"], "skills":[], "protectPid":true, "contract":1,

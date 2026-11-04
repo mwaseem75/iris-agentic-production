@@ -6,8 +6,8 @@
 <title>Agentic Production</title>
 <link rel="stylesheet" href="vendor/tabler/tabler.min.css">
 <link rel="stylesheet" href="vendor/tabler/tabler-icons.min.css">
-<link rel="stylesheet" href="workbench.css?v=8.20.32">
-<link rel="stylesheet" href="layout.css?v=8.20.32">
+<link rel="stylesheet" href="workbench.css?v=8.20.34">
+<link rel="stylesheet" href="layout.css?v=8.20.34">
 <style>
 :root {
   --tblr-font-sans-serif: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -40,7 +40,7 @@ body { background: var(--bg); font-size: 15px; }
 @media (max-width: 991.98px) { .navbar-vertical .navbar-nav { flex-direction: row; flex-wrap: wrap; } .side-foot { margin-top: 0; } }
 
 /* page */
-.page-header { margin: 0; padding: 20px 0 8px; }
+.page-header { margin: 0 !important; padding: 16px 0 8px; }
 .page-title { font-size: 24px; }
 .card { border-radius: 12px; border: 1px solid var(--line); box-shadow: 0 1px 2px rgba(16,24,40,.04); }
 .card-title { font-size: 17px; font-weight: 600; }
@@ -54,6 +54,13 @@ body { background: var(--bg); font-size: 15px; }
 .kpi .hint { color: var(--muted); font-size: 13px; }
 .kpi .avatar { width: 48px; height: 48px; border-radius: 12px; font-size: 26px; flex: none; }
 .kpi .progress { margin-top: 8px; }
+.kpi .hint { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.6em; }
+.kpi .kpi-text { min-width: 0; }
+.kpi-link { display: block; color: inherit; text-decoration: none; cursor: pointer; transition: transform .15s ease, box-shadow .15s ease; }
+.kpi-link:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(16,24,40,.10); color: inherit; }
+.kpi-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.kpi-go { margin-top: 6px; font-size: 12px; color: var(--accent); }
+@media (prefers-reduced-motion: reduce) { .kpi-link { transition: none; } .kpi-link:hover { transform: none; } }
 .step-num { width: 30px; height: 30px; border-radius: 50%; background: var(--info-bg); color: #1a5fd0; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex: none; }
 .check-row { display: flex; align-items: center; padding: 12px 0; border-bottom: 1px solid #eef1f5; }
 .check-row:last-child { border-bottom: 0; }
@@ -324,8 +331,8 @@ td.go { white-space: nowrap; }
           </div>
         </div>
       </div>
-      <p class="info-banner hidden" id="nokey-banner" role="status"><span>No API key is set. Failures go to a person, or use replay mode. Add a key in Settings.</span><button type="button" class="btn-close" id="nokey-close" aria-label="Dismiss"></button></p>
-      <p class="kill-banner hidden" id="kill-banner" role="alert">AI kill switch is ON: every failed message goes to a person, no LLM call. Turn it off on the Settings tab.</p>
+      <p class="info-banner hidden" id="nokey-banner" role="status"><span>No API key is set. Failures go to a human, or use replay mode. Add a key in Settings.</span><button type="button" class="btn-close" id="nokey-close" aria-label="Dismiss"></button></p>
+      <p class="kill-banner hidden" id="kill-banner" role="alert">AI kill switch is ON: every failed message goes to a human, no LLM call. Turn it off on the Settings tab.</p>
       <p class="err hidden" id="error"></p>
 
       <!-- Workbench -->
@@ -341,7 +348,7 @@ td.go { white-space: nowrap; }
               <div class="col-12 col-xl-2"><div class="fw-bold" style="font-size:16px">Getting started</div><div class="sub-text">See the agent work in 4 steps</div></div>
               <div class="col-6 col-xl"><div class="d-flex gap-2"><span class="step-num">1</span><div><div class="fw-semibold">Send a broken lab result</div><button type="button" class="btn btn-sm btn-primary mt-1" id="gs-1">Send case 01</button></div></div></div>
               <div class="col-6 col-xl"><div class="d-flex gap-2"><span class="step-num">2</span><div><div class="fw-semibold">Watch the agent</div><button type="button" class="linkbtn" id="gs-2">View flow &rarr;</button></div></div></div>
-              <div class="col-6 col-xl"><div class="d-flex gap-2"><span class="step-num">3</span><div><div class="fw-semibold">Approve as a reviewer</div><a id="gs-3" target="_blank" rel="noopener" style="font-size:13px">Workflow inbox &rarr;</a></div></div></div>
+              <div class="col-6 col-xl"><div class="d-flex gap-2"><span class="step-num">3</span><div><div class="fw-semibold">Approve as a human reviewer</div><a id="gs-3" target="_blank" rel="noopener" style="font-size:13px">Workflow inbox &rarr;</a></div></div></div>
               <div class="col-6 col-xl"><div class="d-flex gap-2"><span class="step-num">4</span><div><div class="fw-semibold">Send a burst</div><button type="button" class="linkbtn" id="gs-4">8 random cases &rarr;</button></div></div></div>
             </div>
             <p class="msg mb-0" id="gs-msg"></p>
@@ -349,18 +356,18 @@ td.go { white-space: nowrap; }
         </div>
 
         <div class="row row-cards mb-3">
-          <div class="col-sm-6 col-xl-3" data-info="health"><div class="card kpi"><div class="card-body d-flex gap-3">
+          <div class="col-sm-6 col-xl-3 d-flex" data-info="health"><a class="card kpi kpi-link w-100" href="#messages" data-kpi-tab="messages" data-kpi-filter=""><div class="card-body d-flex gap-3">
             <span class="avatar bg-blue-lt"><i class="ti ti-messages"></i></span>
-            <div><div class="label">Messages triaged</div><div class="value" id="k-triaged">&mdash;</div><div class="hint" id="k-triaged-h"></div></div></div></div></div>
-          <div class="col-sm-6 col-xl-3"><div class="card kpi"><div class="card-body d-flex gap-3">
+            <div class="kpi-text"><div class="label">Messages triaged</div><div class="value" id="k-triaged">&mdash;</div><div class="hint" id="k-triaged-h"></div><div class="kpi-go">View details <i class="ti ti-arrow-right"></i></div></div></div></a></div>
+          <div class="col-sm-6 col-xl-3 d-flex"><a class="card kpi kpi-link w-100" href="#messages" data-kpi-tab="messages" data-kpi-filter="applied"><div class="card-body d-flex gap-3">
             <span class="avatar bg-green-lt"><i class="ti ti-wand"></i></span>
-            <div><div class="label">Fixed automatically</div><div class="value" id="k-fixed">&mdash;</div><div class="hint">whitelisted fixes only</div></div></div></div></div>
-          <div class="col-sm-6 col-xl-3"><div class="card kpi"><div class="card-body d-flex gap-3">
+            <div class="kpi-text"><div class="label">Fixed automatically</div><div class="value" id="k-fixed">&mdash;</div><div class="hint">whitelisted fixes only</div><div class="kpi-go">View details <i class="ti ti-arrow-right"></i></div></div></div></a></div>
+          <div class="col-sm-6 col-xl-3 d-flex"><a class="card kpi kpi-link w-100" href="#messages" data-kpi-tab="messages" data-kpi-filter="open"><div class="card-body d-flex gap-3">
             <span class="avatar bg-orange-lt"><i class="ti ti-user-check"></i></span>
-            <div><div class="label">Waiting for a person</div><div class="value" id="k-waiting">&mdash;</div><div class="hint" id="k-waiting-h"></div></div></div></div></div>
-          <div class="col-sm-6 col-xl-3" data-info="trust"><div class="card kpi" id="k-unsafe-card"><div class="card-body d-flex gap-3">
+            <div class="kpi-text"><div class="label">Human approval required</div><div class="value" id="k-waiting">&mdash;</div><div class="hint" id="k-waiting-h"></div><div class="kpi-go">View details <i class="ti ti-arrow-right"></i></div></div></div></a></div>
+          <div class="col-sm-6 col-xl-3 d-flex" data-info="trust"><a class="card kpi kpi-link w-100" href="#trust" id="k-unsafe-card" data-kpi-tab="trust" data-kpi-filter=""><div class="card-body d-flex gap-3">
             <span class="avatar bg-green text-white"><i class="ti ti-shield-check"></i></span>
-            <div><div class="label">Unsafe actions</div><div class="value" id="k-unsafe">&mdash;</div><div class="hint">nothing applied against the rules</div></div></div></div></div>
+            <div class="kpi-text"><div class="label">Unsafe actions</div><div class="value" id="k-unsafe">&mdash;</div><div class="hint">nothing applied against the rules</div><div class="kpi-go">View details <i class="ti ti-arrow-right"></i></div></div></div></a></div>
         </div>
 
         <div class="row row-cards">
@@ -412,9 +419,10 @@ td.go { white-space: nowrap; }
             <div class="input-icon msg-search"><span class="input-icon-addon"><i class="ti ti-search"></i></span><input class="form-control" id="dec-q" placeholder="Search messages"></div>
             <select class="form-select" id="dec-ns" aria-label="Production"><option value="">All productions</option></select>
             <select class="form-select" id="dec-outcome" aria-label="Result">
-              <option value="">Any result</option><option value="applied">Fixed automatically</option><option value="approval">Sent to a reviewer</option>
+              <option value="">Any result</option><option value="applied">Fixed automatically</option><option value="approval">Human review</option>
               <option value="rejected">Rejected</option><option value="resent">Resent</option><option value="other">Other</option>
             </select>
+            <select class="form-select" id="dec-status" aria-label="Status"><option value="">Any status</option><option value="Open">Open (human review pending)</option><option value="Approved">Approved</option><option value="Closed">Closed</option></select>
             <select class="form-select" id="dec-problem" aria-label="Problem"><option value="">Any problem</option></select>
             <select class="form-select" id="dec-time" aria-label="Time range"><option value="24h">Last 24 hours</option><option value="7d">Last 7 days</option><option value="all" selected>All</option></select>
             <span id="msg-eval-slot" class="ms-auto"></span>
@@ -607,7 +615,7 @@ td.go { white-space: nowrap; }
                     <div class="col-md-6"><label class="form-label">AUTO_FIX confidence threshold</label><input class="form-control" name="AutoFixThreshold" type="number" min="0" max="1" step="0.01" required></div>
                     <div class="col-md-6"><label class="form-label">Grounding check</label><select class="form-select" name="GroundingStrictness"><option value="enforce">enforce: ungrounded = ESCALATE</option><option value="warn">warn: record and show only</option><option value="off">off</option></select></div>
                     <div class="col-12"><label class="form-label">AUTO_FIX per problem type</label><div class="checks" id="set-autofix"></div>
-                      <div class="sub-text">Off: Triage sends that class's AUTO_FIX proposals to a person ("auto-fix disabled in Settings"). Identity issue is never auto-fixed.</div></div>
+                      <div class="sub-text">Off: Triage sends that class's AUTO_FIX proposals to a human ("auto-fix disabled in Settings"). Identity issue is never auto-fixed.</div></div>
                     <div class="col-12 edit-only"><button type="submit" class="btn btn-primary">Apply</button></div>
                   </div></form>
                   <p class="msg" id="m-guard"></p>
@@ -685,7 +693,7 @@ td.go { white-space: nowrap; }
                 <div class="card-header"><h3 class="card-title">Kill switch</h3></div>
                 <div class="card-body">
                   <div class="kill" id="kill">
-                    <div><strong>AI kill switch</strong> <span id="kill-state"></span><br><span class="muted">On: every failed message goes to a person, no LLM call.</span></div>
+                    <div><strong>AI kill switch</strong> <span id="kill-state"></span><br><span class="muted">On: every failed message goes to a human, no LLM call.</span></div>
                     <span class="spacer"></span>
                     <button type="button" class="danger edit-only" id="kill-btn"></button>
                   </div>
@@ -706,7 +714,7 @@ td.go { white-space: nowrap; }
 <script>
 "use strict";
 var COLORS = { applied: "#2e9e62", approval: "#d99a1e", rejected: "#c8463d", resent: "#3b7dd8", other: "#8a94a3" };
-var GROUP_LABEL = { applied: "Applied", approval: "To a person", rejected: "Rejected", resent: "Resent", other: "Other" };
+var GROUP_LABEL = { applied: "Applied", approval: "Human review", rejected: "Rejected", resent: "Resent", other: "Other" };
 var charts = {};
 var traceUrl = "";
 var selectedRun = null;
@@ -813,7 +821,7 @@ function renderSummary(s, m) {
   put("ai-per", "· " + money(s.costPerMessage) + " per message");
   var bar = document.getElementById("ai-budget-bar");
   put("ai-budget-t", !s.dailyTokenBudget ? "no daily budget" : s.tokensPercent + "% of " + num(s.dailyTokenBudget)
-    + (s.overBudget ? " — over budget: new messages go to a person" : ""));
+    + (s.overBudget ? " — over budget: new messages go to a human" : ""));
   // Bar width is capped at 100%; the text carries the real figure
   bar.style.width = s.dailyTokenBudget ? Math.min(100, s.tokensToday / s.dailyTokenBudget * 100).toFixed(1) + "%" : "0";
   bar.classList.toggle("bg-red", !!s.overBudget);
@@ -826,7 +834,7 @@ function renderSummary(s, m) {
     ["ti-target-arrow", "orange", "Ungrounded claims caught", num(s.groundingPassed) + " decisions passed the grounding gate", s.groundingCaught],
     ["ti-alert-octagon", "red", "Injection flagged", "instruction-like text in a message", s.injectionFlagged],
     ["ti-arrows-exchange", "blue", "Changed by Triage", "agent proposal not applied as sent", s.changedByTriage],
-    ["ti-brain", "purple", "Mappings learned", "approved by a reviewer · revocable", s.mappingsLearned]
+    ["ti-brain", "purple", "Mappings learned", "approved by a human reviewer · revocable", s.mappingsLearned]
   ];
   document.getElementById("safety-list").replaceChildren.apply(document.getElementById("safety-list"), rows.map(function (r) {
     var d = el("div", null, "check-row");
@@ -861,7 +869,7 @@ function setWindow(key, text) {
 function outcomeLabel(o) {
   if (!o) return "\u2014";
   if (o === "APPLIED") return "Fixed automatically";
-  if (o === "SENT_FOR_APPROVAL") return "Sent to a reviewer";
+  if (o === "SENT_FOR_APPROVAL") return "Human review";
   if (o === "REJECTED") return "Rejected";
   if (o.indexOf("DOWNGRADED:") === 0) return "Downgraded to review";
   if (o.indexOf("PROPOSED:") === 0) return "Mapping proposed";
@@ -892,8 +900,8 @@ function outcomeTag(o) {
 
 // ---- cards: Info link and footer link, built from data-info / data-foot ----
 var CARD_INFO = {
-  health: ["Production health", "Counts of failed messages the agent has triaged and what happened to them: fixed automatically, sent to a person, or rejected.", "Only whitelisted, meaning-preserving fixes are applied automatically. Everything else waits for a reviewer."],
-  trust: ["Trust & safety", "These numbers show where the deterministic Triage step overruled or checked the agent.", "Grounding catches claims the agent could not trace to the message, its tool results or the LOINC knowledge base. A reviewer approves every learned mapping."],
+  health: ["Production health", "Counts of failed messages the agent has triaged and what happened to them: fixed automatically, sent to a human, or rejected.", "Only whitelisted, meaning-preserving fixes are applied automatically. Everything else waits for human approval."],
+  trust: ["Trust & safety", "These numbers show where the deterministic Triage step overruled or checked the agent.", "Grounding catches claims the agent could not trace to the message, its tool results or the LOINC knowledge base. A human reviewer approves every learned mapping."],
   aicost: ["AI cost", "Spend on LLM calls today, the cost of one message and the share of the daily token budget used.", "Replays and learned mappings cost nothing. Go to the Cost tab for the month, the forecast and the savings."],
   recent: ["Recent decisions", "The newest messages the agent looked at, with the final outcome after Triage.", "Use View flow to see the path of one message step by step, including tool calls and the guardrail checks."],
   mix: ["Outcome mix", "Final outcomes of triaged messages, grouped the same way as the status chips.", "Colours match the status chips used on the Messages tab."],
@@ -905,9 +913,9 @@ var CARD_INFO = {
   "Providers": ["Providers & keys", "Model providers and API keys the agent can use.", "Keys are stored in the Wallet and shown only as set or not set."],
   "Agents": ["Agents", "Settings of the triage agent: model, temperature and limits.", "The instructions are read-only here; they live in the agent class."],
   "Guardrails": ["Guardrails", "Switches for the checks that run after the agent and before Triage acts.", "Injection and grounding checks can only make the outcome safer, never less safe."],
-  "Budgets": ["Budgets & mode", "Daily token budget, replay or live mode and the kill switch.", "When the budget is used up or the kill switch is on, every failed message goes to a person."],
+  "Budgets": ["Budgets & mode", "Daily token budget, replay or live mode and the kill switch.", "When the budget is used up or the kill switch is on, every failed message goes to a human."],
   "Prices": ["Prices", "Token prices per model, used to compute every cost figure.", "Change a price and later cost figures use it; recorded runs keep the price they were made with."],
-  "Productions": ["Productions", "Which productions have the AI plug-in enabled.", "Turning a production off sends its failures to a person without calling the agent."],
+  "Productions": ["Productions", "Which productions have the AI plug-in enabled.", "Turning a production off sends its failures to a human without calling the agent."],
   "Memory": ["Memory", "Code mappings learned from reviewer approvals.", "A learned mapping answers the same code next time without an LLM call. You can revoke one at any time."],
   "Change log": ["Change log", "Who changed which setting and when.", "The last 50 changes are shown."],
   "Agent metrics": ["Agent metrics", "Charts of outcomes, tokens, latency and tool use for recent agent runs.", "Open More metrics for hourly mix, tool timings and validation results."]
@@ -1064,10 +1072,11 @@ function filteredRows() {
   var q = document.getElementById("dec-q").value.trim().toLowerCase();
   var og = document.getElementById("dec-outcome").value;
   var pr = document.getElementById("dec-problem").value;
+  var st = document.getElementById("dec-status").value;
   var span = TIME_MS[document.getElementById("dec-time").value], since = span ? Date.now() - span : 0;
   var rows = decRows.filter(function (d) {
     if (since && (!d.CreatedAt || new Date(d.CreatedAt.replace(" ", "T").substring(0, 19) + "Z").getTime() < since)) return false;
-    return (!og || outcomeGroup(d.Outcome) === og) && (!pr || d.ErrorClass === pr) && (!q || msgName(d).toLowerCase().indexOf(q) >= 0);
+    return (!og || outcomeGroup(d.Outcome) === og) && (!pr || d.ErrorClass === pr) && (!st || stateOf(d)[0] === st) && (!q || msgName(d).toLowerCase().indexOf(q) >= 0);
   });
   return sortedRows(rows);
 }
@@ -1375,7 +1384,7 @@ function renderSpans(st) {
   });
 }
 
-// Timeline colour by step: the agent and its tools, the person, the rest
+// Timeline colour by step: the agent and its tools, the human, the rest
 function spanColor(name) {
   if (name === "agent run" || name.indexOf("execute_tool") === 0) return COLORS.resent;
   if (name === "workflow review") return COLORS.approval;
@@ -1419,9 +1428,9 @@ function renderMetrics(m) {
   var ap = m.approval;
   document.getElementById("met-tiles").replaceChildren(
     tile("Approval wait", ap.answered ? secs(ap.p50Seconds) + " p50" : "—", ap.answered ? secs(ap.p95Seconds) + " p95, " + num(ap.answered) + " answered" : "no answered tasks"),
-    tile("Waiting for a reviewer", num(ap.waiting), ap.oldestWaitingSeconds == null ? "none open" : "oldest " + secs(ap.oldestWaitingSeconds)),
+    tile("Human approval required", num(ap.waiting), ap.oldestWaitingSeconds == null ? "none open" : "oldest " + secs(ap.oldestWaitingSeconds)),
     tile("Learned mappings", num(m.learnedMappings), "distinct local codes"),
-    tile("Unsafe proposals blocked", num(m.unsafeBlocked), "changed by Triage, sent to a person")
+    tile("Unsafe proposals blocked", num(m.unsafeBlocked), "changed by Triage, sent to a human")
   );
 
   var groups = ["applied", "approval", "rejected", "resent", "other"];
@@ -2030,7 +2039,7 @@ document.getElementById("kill-btn").addEventListener("click", function () {
   btn.disabled = true;
   say("m-kill", on ? "Stopping the AI…" : "Turning the AI back on…", true);
   send("POST", "api/settings/kill-switch", { on: on }).then(function (r) {
-    say("m-kill", r.note || (on ? "Kill switch on: failures go to a person." : "Kill switch off: the agent triages again."), !r.note);
+    say("m-kill", r.note || (on ? "Kill switch on: failures go to a human." : "Kill switch off: the agent triages again."), !r.note);
     loadSettings();
   }).catch(function (e) { say("m-kill", e.message); }).then(function () { btn.disabled = false; });
 });
@@ -2134,6 +2143,21 @@ function resetPage() { decPage = 1; renderMessages(); }
 document.getElementById("dec-q").addEventListener("input", resetPage);
 document.getElementById("dec-outcome").addEventListener("change", resetPage);
 document.getElementById("dec-problem").addEventListener("change", resetPage);
+document.getElementById("dec-status").addEventListener("change", resetPage);
+Array.prototype.forEach.call(document.querySelectorAll("a.kpi-link"), function (a) {
+  a.addEventListener("click", function (e) {
+    e.preventDefault();
+    var f = a.dataset.kpiFilter, tab = a.dataset.kpiTab;
+    if (tab === "messages") {
+      document.getElementById("dec-outcome").value = f === "applied" ? "applied" : "";
+      document.getElementById("dec-status").value = f === "open" ? "Open" : "";
+      document.getElementById("dec-q").value = "";
+      document.getElementById("dec-problem").value = "";
+      resetPage();
+    }
+    showTab(tab);
+  });
+});
 document.getElementById("dec-time").addEventListener("change", resetPage);
 document.getElementById("dec-ns").addEventListener("change", function (ev) {
   decNs = ev.target.value;
@@ -2206,10 +2230,10 @@ setInterval(load, 30000);
     <details id="story-msg-box"><summary>Message (patient name, birth date, address and phone masked)</summary><pre id="story-msg"></pre></details>
   </div>
 </aside>
-<script src="flow.js?v=8.20.32"></script>
-<script src="workbench.js?v=8.20.32"></script>
-<script src="builder.js?v=8.20.32"></script>
-<script src="wizard.js?v=8.20.32"></script>
-<script src="addprod.js?v=8.20.32"></script>
+<script src="flow.js?v=8.20.34"></script>
+<script src="workbench.js?v=8.20.34"></script>
+<script src="builder.js?v=8.20.34"></script>
+<script src="wizard.js?v=8.20.34"></script>
+<script src="addprod.js?v=8.20.34"></script>
 </body>
 </html>

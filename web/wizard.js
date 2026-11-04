@@ -273,7 +273,7 @@
     var db = el("input", null, "form-control form-control-sm d-inline-block wz-num"); db.type = "number"; db.min = 0; db.step = "0.05"; db.value = S.dailyBudget; db.disabled = !S.budgetOn;
     db.addEventListener("input", function () { S.dailyBudget = db.value; drawSummary(); });
     line.appendChild(ms); line.appendChild(document.createTextNode(" steps per message · max $")); line.appendChild(db);
-    line.appendChild(document.createTextNode(" per day, then send to a person."));
+    line.appendChild(document.createTextNode(" per day, then send to a human."));
     line.appendChild(div("wb-help", "The step limit applies to every run. The daily amount is enforced when a production hosts the agent (next step)."));
     c.body.appendChild(list); root.appendChild(c); root.appendChild(nav(true, true, "Next: try & save"));
   }
