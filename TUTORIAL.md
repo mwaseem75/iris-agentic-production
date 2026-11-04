@@ -6,6 +6,20 @@ The app: a lab sends HL7 v2 results. When a message fails, an AI Hub agent reads
 
 All facts about AI Hub below were checked on the early access **build 154**. AI Hub is pre-release, so names may change. Class names in this text drop the `AgenticProd.` prefix where it is clear (`Tools.Base` = `AgenticProd.Tools.Base`).
 
+**What you will learn**
+
+| Section | Topic |
+|---|---|
+| 1–2 | What AI Hub gives you, and your first agent call |
+| 3–5 | A declarative agent, tools, skills |
+| 6 | Running the agent inside a business operation |
+| 7 | Safety: policies, a restricted user, a deterministic decision-maker, grounding, memory |
+| 8–9 | RAG knowledge base, human in the loop, a learning loop |
+| 10–11 | Measuring it, Config Store and Wallet |
+| 12 | Adding an agent to a production you already have (the Workbench) |
+| 13 | Build 154 notes |
+| 14 | Where to go next |
+
 ## 1. What AI Hub gives you
 
 **`%AI.Agent`.** An agent class. You subclass it, set the provider, model and API key as parameters, and write the instructions in an XData block. At run time you create a session and call `Chat()`. The agent runs the tool loop for you: the model asks for a tool, AI Hub calls your ObjectScript method, sends back the result, and repeats until the model answers.
@@ -24,7 +38,7 @@ All facts about AI Hub below were checked on the early access **build 154**. AI 
 
 ## 2. Setup
 
-You need Docker and the AI Hub early access image, build 154. Load it and give it the tag the [`Dockerfile`](Dockerfile) expects:
+You need Docker and the AI Hub early access image, build 154. Use the **IRIS for Health** image (`irishealth-community`), not plain `iris-community`: this app needs the HL7 classes (`EnsLib.HL7`), and setup stops with a clear message if they are missing. Load it and give it the tag the [`Dockerfile`](Dockerfile) expects:
 
 ```bash
 docker load -i irishealth-community-2026.3.0AI.154.0-docker.tar.gz
@@ -233,7 +247,7 @@ Without a key, run the unit tests, which use a stub agent: `do ##class(%UnitTest
 
 ## 7. Safety
 
-The agent proposes. It does not act. Four layers make sure of that.
+The agent proposes. It does not act. Several layers make sure of that. One thing to know first: AI Hub gives you **policies** (who may call which tool, and a log of every call). The other guards in this section (the injection scan, the grounding check, the ambiguity check, the budgets) are not AI Hub features. They are plain IRIS code around the agent, and the same ideas work with any agent framework.
 
 **Authorization policy.** [`Policy/ReadOnly.cls`](src/AgenticProd/Policy/ReadOnly.cls) hides and denies any tool marked as needing authorization:
 
@@ -254,6 +268,8 @@ Method %CanExecute(toolref As %String, call As %DynamicObject, metadata As %Dyna
 $$$ThrowOnError(tAgent.ToolManager.SetAuthPolicy(##class(AgenticProd.Policy.ReadOnly).%New()))
 $$$ThrowOnError(tAgent.ToolManager.SetAuditPolicy(tAudit))
 ```
+
+Policies can be attached in two places: on the whole tool manager (`SetAuthPolicy`, `SetAuditPolicy`, as above) and on a single ToolSet class. A call has to be allowed by both. The agent operation keeps an agent class's own policies when it names them, and adds the default ones only when it does not, so an agent you build can bring stricter rules. When the class names its own audit policy, the operation still sets the message header and session on it, otherwise its `Data.ToolCall` rows cannot be joined to the run.
 
 **A restricted IRIS user.** The agent job does not run as `SuperUser`. `OnInit()` switches the job to `agentic_agent` and fails closed if it cannot:
 
@@ -351,13 +367,19 @@ do ##class(AgenticProd.Demo).SendCase("01", "MSG90001")
 
 `Eval.Runner.Run()` sends each case through the real production and scores the agent's proposal and Triage's final outcome separately. The key number is `unsafe_final`: how often the system *carried out* a `must_not` decision. Results go to `Data.EvalRun` and `Data.EvalResult`.
 
+The final run of this repo, with `gpt-4o-mini` on all 60 cases: the agent's proposal was acceptable in 98%, the system's final outcome in 100%, 87% matched the expected decision exactly, and **no unsafe decision was carried out**. It cost $0.08 in total. The point of the two scores is visible here: one case where the model proposed something questionable (a prompt-injection attempt) was still caught by Triage, so the final outcome was safe.
+
 **Replay mode.** Every live run stores its decision in `Data.Usage`. With the agent operation's `Mode` setting on `replay`, it returns the recorded decision for the same case and model instead of calling the LLM. Demos and tests cost nothing and need no key.
 
 **Tokens and cost.** One `Data.Usage` row per agent run, from `GetStats()`, priced from `Data.PriceTable`.
 
 **Spans.** `Telemetry.Trace` writes one trace per failed message to `Data.Span`: router check, agent run, each tool call, the Triage decision and the review. The dashboard shows them as a timeline. Turn on `TracingEnabled` on the Triage item to also export them over OTLP (`docker compose --profile observability up -d` starts a collector and Jaeger).
 
-**Try it:** replay the recorded evaluation, then open the dashboard at http://localhost:52773/agenticprod/AgenticProd.UI.Home.cls:
+**The dashboard** at http://localhost:52773/agenticprod/dashboard.html (log in as `SuperUser` / `SYS`, or `reviewer` / `Review-Demo-2026` for a read-only view) shows all of this: Overview (KPIs and charts), Messages (every decision, filters, sorting, and a flow view per message), Trust & evaluation (eval runs, unsafe outcomes, grounding failures) and Cost (spend per model and day against the budget).
+
+![Trust and evaluation tab](images/trust.png)
+
+**Try it:** replay the recorded evaluation, then open the dashboard:
 
 ```objectscript
 do ##class(AgenticProd.Eval.Runner).Run("gpt-4o-mini", "replay demo", "all", "replay")
@@ -390,7 +412,68 @@ The Settings page never returns a key, only "set" or "not set", and every change
 
 **Try it:** open the dashboard as `SuperUser`, go to **Settings → Providers & keys**, add a provider and press **Test connection** (one tiny call). Then look at the **Change log**.
 
-## 12. Build 154 notes
+## 12. Adding an agent to a production you already have
+
+Everything so far built a production around an agent. Most people have it the other way round: a production that already runs, and a wish to add AI Hub to it without rewriting anything. The **AI Hub Workbench** (a group in the dashboard sidebar) does this in four steps, and every step is plain IRIS code you can read.
+
+**1. See what you have.** The **Library** lists the AI Hub parts in a namespace by reading the real classes: agents (`%AI.Agent`), toolsets (`%AI.ToolSet`), skills (`%AI.Agent.Skill`) and policies. Nothing is stored apart from the classes, so the list is always what is installed.
+
+![The Library](images/workbench-library.png)
+
+**2. Create from a template.** The builders write ordinary classes in a package called `MyAI`: a tool (a SELECT-only SQL query with a description the model reads), a skill, a policy, or a whole agent. The agent wizard adds a fixed `## Output` section to the instructions, so the agent always answers with the decision JSON of section 3. Without it, Triage could not read the answer. Generated SQL tools are SELECT-only and the builders are for administrators only.
+
+**3. Test before you add.** Tools and policies are tested directly, with no LLM call, so a test costs $0. The wizard's last step can make one live call, after it shows the price and you confirm it.
+
+![The create-an-agent wizard](images/workbench-wizard.png)
+
+**4. Add it to a production.** `Plugin.AddAgent` has three calls: `Plan` (lists what would be added and changes nothing), `Apply` and `Remove`. There are three ways in:
+
+- **When a message fails.** Adds a Sentinel that watches the items you choose, a check process, an `EnsLib.Workflow.Operation` role, and the agent host.
+- **From your own process.** Adds the agent host only, and shows ObjectScript and BPL that call it.
+- **From a routing rule.** Adds the agent host only, and shows the rule text.
+
+The **agent host** is the same business operation as before, `Operation.Agent`. Its `AgentClass` setting names which agent to run, so one operation class hosts any agent:
+
+```objectscript
+Property AgentClass As %String(MAXLEN = 128) [ InitialExpression = "AgenticProd.Agent.TriageAgent" ];
+...
+Set pAgent = $CLASSMETHOD(..AgentClass, "%New")
+```
+
+The **Sentinel** is a custom inbound adapter. A normal adapter polls a folder or a port; this one polls the production's own message headers, the way [`Plugin/SentinelAdapter.cls`](src/AgenticProd/Plugin/SentinelAdapter.cls) does:
+
+```objectscript
+Class AgenticProd.Plugin.SentinelAdapter Extends Ens.InboundAdapter
+{
+Property WatchItems As %String(MAXLEN = 2000);
+Property SettleSeconds As %Integer(MINVAL = 0) [ InitialExpression = 10 ];
+Property MaxPerPoll As %Integer(MINVAL = 1) [ InitialExpression = 5 ];
+...
+```
+
+Some details that matter in a real production:
+
+- **It starts from "now".** On first start the high-water marks go to the newest header, so an old backlog never becomes a burst of agent calls.
+- **It waits.** A header must be a few seconds old, and a message still being retried by an operation holds the scan back, so a failure that comes later is not missed.
+- **It never feeds itself.** Items with the plug-in's own prefix are skipped, so a failing agent cannot trigger the agent.
+- **It limits the rate.** At most five failed sessions per poll.
+
+**Modes.** The check process runs in `observe` (the agent runs, the outcome is logged, nothing is sent), `propose` (tasks go to the Workflow inbox) or `act` (the checked decision is carried out). Start with `observe`.
+
+**Safe to add and remove.** Plan refuses any item name that already exists, and `Apply` never changes or restarts an existing item. Every added item is written to `Data.PluginItem` with an owner, so `Remove` takes out exactly those. If the agent's package is not visible in the target namespace, the plan includes a package mapping and applies it. The Workflow role and its tasks stay after a remove, as the record of what people decided.
+
+**The production map.** A read-only picture of a production: services, processes and operations in lanes, with links built from item targets, routing-rule targets and the real message pairs. Items that host an agent carry an AI HUB badge.
+
+![The production map](images/production-map.png)
+
+**Try it:**
+
+1. In the dashboard, open **Workbench → Create an agent** and build an agent from the "Explain failures" template.
+2. Send the failing samples in `legacy/samples` to the LEGACY namespace (see the [README](README.md#legacy-demo-production)).
+3. Open **Library**, click **Add to production**, choose `LEGACY` and **When a message fails**, mode `observe`, apply.
+4. Send the samples again and watch **Messages**. Then **Remove** and check the production map.
+
+## 13. Build 154 notes
 
 These are facts and workarounds found while building this app, **as of build 154**. Check them again on newer builds.
 
@@ -414,10 +497,10 @@ These are facts and workarounds found while building this app, **as of build 154
 
 **Try it:** search the code for `build 154` to see each workaround where it is used.
 
-## 13. Where to go next
+## 14. Where to go next
 
 - **FHIR.** Valid results already go out as FHIR R4 (`Operation.FhirOut`). The next step is a `Tools.FHIR` class with its own `validate_fix` and a `FHIRRepair` skill. The core does not change: error classes and decisions are format-neutral, and Triage looks up the fix checker per format in its `CHECKERS` parameter.
-- **Any production.** Next on the roadmap: enabling the triage agent on an existing production that was never built for AI, starting in observe-only mode.
+- **Your own production.** Section 12 shows how to add an agent to a production that was never built for AI. Start with a copy, in `observe` mode.
 - **Other formats.** X12 or JSON would follow the same pattern: a tool class with masking and a fix checker, a skill with instructions, one line in `CHECKERS`.
 - **AI Hub docs.** The [AI Hub EAP repo](https://github.com/intersystems-community/ai-hub-eap), the [ObjectScript SDK Guide](https://github.com/intersystems-community/ai-hub-eap/blob/master/ObjectScript_SDK_Guide.md) and [Advanced features](https://github.com/intersystems-community/ai-hub-eap/blob/master/ObjectScript_SDK_Advanced.md).
 - **Template.** [ai-hub-dev-template](https://github.com/intersystems-community/ai-hub-dev-template), the starting point for this repo.
