@@ -4,10 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Agentic Production</title>
+<script>
+// Apply the saved theme before the CSS renders so the page does not flash white
+(function () {
+  var t = null;
+  try { t = localStorage.getItem("agenticprod-theme"); } catch (e) {}
+  if (t !== "dark" && t !== "light") t = window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  document.documentElement.setAttribute("data-bs-theme", t);
+})();
+</script>
 <link rel="stylesheet" href="vendor/tabler/tabler.min.css">
 <link rel="stylesheet" href="vendor/tabler/tabler-icons.min.css">
-<link rel="stylesheet" href="workbench.css?v=8.20.34">
-<link rel="stylesheet" href="layout.css?v=8.20.34">
+<link rel="stylesheet" href="workbench.css?v=8.20.35">
+<link rel="stylesheet" href="layout.css?v=8.20.35">
 <style>
 :root {
   --tblr-font-sans-serif: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -18,7 +27,27 @@
   --bar: #206bc4; --bar-bg: #e4e8ee;
   /* Outcome groups: same colours in tags, the decision mix and the timeline */
   --c-applied: #2e9e62; --c-approval: #d99a1e; --c-rejected: #c8463d; --c-resent: #3b7dd8; --c-other: #8a94a3;
+  /* Surfaces, text and tints that the dark theme swaps */
+  --surface-2: #f8fafc; --hover: #f6f7f9; --line-soft: #eef1f5; --text-2: #475467; --faint: #98a2b3; --info-fg: #1a5fd0;
+  --purple-bg-soft: #faf5ff; --purple-bg: #f3e8ff; --purple-fg: #7c3aed; --purple-fg2: #6d28d9; --purple-bd: #c4b5fd;
+  --sky-bg: #e0f2fe; --sky-fg: #0369a1; --red-bg: #fee2e2; --red-fg: #b91c1c; --red-bd: #fecaca;
+  --green-bg: #e7f6ec; --green-fg: #15803d; --green-bd: #bbf7d0; --amber-bg: #fffbeb; --amber-bd: #fde68a;
 }
+/* Dark theme: Tabler's own variables for surface, text and border, our tokens for the rest */
+:root[data-bs-theme="dark"] {
+  color-scheme: dark;
+  --bg: var(--tblr-bg-surface-secondary); --panel: var(--tblr-bg-surface); --text: var(--tblr-body-color); --line: var(--tblr-border-color);
+  --muted: #9aa7b8; --accent: #5aa9f5; --good: #5fd08b; --warn: #f0b34a; --bad: #f58b83;
+  --good-bg: #14301f; --warn-bg: #3a2e12; --bad-bg: #3a1c1f; --info-bg: #172a45; --bar: #5aa9f5; --bar-bg: #2a3648;
+  --surface-2: color-mix(in srgb, var(--tblr-bg-surface) 88%, #fff); --hover: color-mix(in srgb, var(--tblr-bg-surface) 93%, #fff);
+  --line-soft: var(--tblr-border-color); --text-2: #b4bfce; --faint: #7f8da3; --info-fg: #8ebcf7;
+  --purple-bg-soft: #251f3d; --purple-bg: #2d2450; --purple-fg: #b9a0fb; --purple-fg2: #c9b8fc; --purple-bd: #5b4a9a;
+  --sky-bg: #12324c; --sky-fg: #7cc4ef; --red-bg: #3d1f23; --red-fg: #f58b83; --red-bd: #6b2a2d;
+  --green-bg: #14301f; --green-fg: #5fd08b; --green-bd: #25663f; --amber-bg: #3a2e12; --amber-bd: #6b5420;
+}
+:root[data-bs-theme="dark"] .kill-banner { background: #b42318; }
+:root[data-bs-theme="dark"] .card, :root[data-bs-theme="dark"] .modal-content { box-shadow: none; }
+.theme-btn { width: 38px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 18px; }
 body { background: var(--bg); font-size: 15px; }
 /* !important: Tabler utility classes set display too */
 .hidden { display: none !important; }
@@ -44,7 +73,7 @@ body { background: var(--bg); font-size: 15px; }
 .page-title { font-size: 24px; }
 .card { border-radius: 12px; border: 1px solid var(--line); box-shadow: 0 1px 2px rgba(16,24,40,.04); }
 .card-title { font-size: 17px; font-weight: 600; }
-.card-header { border-bottom: 1px solid #eef1f5; }
+.card-header { border-bottom: 1px solid var(--line-soft); }
 .card-actions { display: flex; align-items: center; gap: 10px; font-size: 13px; }
 .card-actions .win { color: var(--muted); }
 .card-actions .info { border: 0; background: transparent; padding: 0; color: var(--accent); font-size: 18px; line-height: 1; cursor: pointer; }
@@ -61,13 +90,13 @@ body { background: var(--bg); font-size: 15px; }
 .kpi-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .kpi-go { margin-top: 6px; font-size: 12px; color: var(--accent); }
 @media (prefers-reduced-motion: reduce) { .kpi-link { transition: none; } .kpi-link:hover { transform: none; } }
-.step-num { width: 30px; height: 30px; border-radius: 50%; background: var(--info-bg); color: #1a5fd0; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex: none; }
-.check-row { display: flex; align-items: center; padding: 12px 0; border-bottom: 1px solid #eef1f5; }
+.step-num { width: 30px; height: 30px; border-radius: 50%; background: var(--info-bg); color: var(--info-fg); font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.check-row { display: flex; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line-soft); }
 .check-row:last-child { border-bottom: 0; }
 .check-row .num { font-size: 22px; font-weight: 700; min-width: 56px; text-align: right; }
 .check-row .num.good { color: #2fb344; }
 .sub-text { color: var(--muted); font-size: 13px; }
-.table thead th { font-size: 12px; text-transform: none; letter-spacing: 0; color: var(--muted); background: #f8fafc; font-weight: 600; }
+.table thead th { font-size: 12px; text-transform: none; letter-spacing: 0; color: var(--muted); background: var(--surface-2); font-weight: 600; }
 .table td { font-size: 14px; vertical-align: middle; white-space: nowrap; }
 .table td.wrap-cell { white-space: normal; }
 .table td.num, .table th.num { text-align: right; }
@@ -90,8 +119,8 @@ tr.click:hover > td, tr.sel > td { background: var(--info-bg); }
 .t-good { background: var(--good-bg); color: var(--good); }
 .t-warn { background: var(--warn-bg); color: var(--warn); }
 .t-bad { background: var(--bad-bg); color: var(--bad); }
-.t-info { background: var(--info-bg); color: #1a5fd0; }
-.t-other { background: #eef1f5; color: #475467; }
+.t-info { background: var(--info-bg); color: var(--info-fg); }
+.t-other { background: var(--surface-2); color: var(--text-2); }
 
 /* tiles (compact figures in the metrics row) */
 .tile { padding: 0 20px; min-width: 120px; flex: 1 1 130px; border-left: 1px solid var(--line); }
@@ -105,9 +134,9 @@ tr.click:hover > td, tr.sel > td { background: var(--info-bg); }
 
 /* settings */
 .settings-nav .list-group-item { border: 0; border-radius: 8px !important; font-size: 15px; padding: 10px 14px; cursor: pointer; }
-.settings-nav .list-group-item.active { background: var(--info-bg); color: #1a5fd0; font-weight: 600; }
+.settings-nav .list-group-item.active { background: var(--info-bg); color: var(--info-fg); font-weight: 600; }
 .fl { font-size: 12px; color: var(--muted); font-weight: 500; }
-.form-label { font-weight: 500; color: #344054; }
+.form-label { font-weight: 500; color: var(--text-2); }
 .kill { border: 2px solid var(--bad) !important; border-radius: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 14px; }
 .kill.on { background: var(--bad-bg); }
 .checks { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 6px 0; }
@@ -124,21 +153,21 @@ h3.sub { font-size: 13px; margin: 16px 0 4px; font-weight: 650; color: var(--mut
 .info-banner.hidden { display: none; }
 
 /* controls the scripts build without Tabler classes */
-button:not([class*="btn"]):not(.linkbtn):not(.value):not(.info) { display: inline-block; padding: .25rem .7rem; font: inherit; font-size: 13px; border: 1px solid var(--tblr-border-color, #dce1e7); border-radius: 8px; background: #fff; color: var(--text); cursor: pointer; }
+button:not([class*="btn"]):not(.linkbtn):not(.value):not(.info) { display: inline-block; padding: .25rem .7rem; font: inherit; font-size: 13px; border: 1px solid var(--tblr-border-color, var(--line)); border-radius: 8px; background: var(--panel); color: var(--text); cursor: pointer; }
 button:not([class*="btn"]):hover { border-color: var(--accent); }
 button.primary { background: var(--accent) !important; border-color: var(--accent) !important; color: #fff !important; }
 button.danger { color: var(--bad); border-color: var(--bad); }
 button:disabled { opacity: .5; cursor: default; }
 .linkbtn { background: none; border: 0; padding: 0; color: var(--accent); font-size: 13px; cursor: pointer; }
 .linkbtn:hover { text-decoration: underline; }
-.card input:not([type=checkbox]):not([type=radio]):not(.form-control), .card select:not(.form-select) { font: inherit; font-size: 14px; padding: .3rem .6rem; border: 1px solid var(--tblr-border-color, #dce1e7); border-radius: 8px; background: #fff; color: var(--text); min-width: 0; }
+.card input:not([type=checkbox]):not([type=radio]):not(.form-control), .card select:not(.form-select) { font: inherit; font-size: 14px; padding: .3rem .6rem; border: 1px solid var(--tblr-border-color, var(--line)); border-radius: 8px; background: var(--panel); color: var(--text); min-width: 0; }
 td input { width: 100%; min-width: 70px; }
 details > summary { cursor: pointer; color: var(--accent); }
 details pre { font: 12px/1.4 ui-monospace, Consolas, monospace; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; overflow-x: auto; margin: 8px 0 0; }
 #burst-box label { display: inline-block; margin: 0 10px 8px 0; }
 #burst-box input[type=number] { width: 64px; }
 #help-back { position: fixed; inset: 0; background: rgba(0,0,0,.25); z-index: 1100; }
-#help-panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(380px, 100vw); background: #fff; border-left: 1px solid var(--line); box-shadow: -4px 0 18px rgba(0,0,0,.15); z-index: 1101; padding: 24px; overflow-y: auto; }
+#help-panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(380px, 100vw); background: var(--panel); border-left: 1px solid var(--line); box-shadow: -4px 0 18px rgba(0,0,0,.15); z-index: 1101; padding: 24px; overflow-y: auto; }
 #help-panel h2 { font-size: 18px; }
 #help-panel p { margin: 0 0 12px; }
 
@@ -326,6 +355,7 @@ td.go { white-space: nowrap; }
           <div class="col-auto d-flex flex-wrap align-items-center gap-3" id="hdr-ctl">
             <span id="hdr-eval-slot"><label class="form-check form-switch m-0" id="eval-toggle"><input class="form-check-input" type="checkbox" id="incl-eval"><span class="form-check-label">Include eval runs</span></label></span>
             <span class="text-secondary" style="font-size:13px" id="updated"></span>
+            <button class="btn theme-btn" type="button" id="theme-toggle" aria-label="Switch to dark theme" title="Switch to dark theme"><i class="ti ti-moon"></i></button>
             <button class="btn" type="button" id="refresh"><i class="ti ti-refresh me-1"></i>Refresh</button>
             <button class="btn btn-primary" type="button" id="hdr-burst"><i class="ti ti-send me-1"></i>Send a burst</button>
           </div>
@@ -1347,7 +1377,9 @@ function renderStory(st) {
 }
 
 // Waterfall: an invisible bar up to the span's start, then its duration, on one time axis
+var lastStory = null;
 function renderSpans(st) {
+  lastStory = st;
   var box = document.getElementById("story-spans");
   document.getElementById("story-trace").textContent = st.traceId ? "(trace " + st.traceId + ")" : "";
   if (!st.spans.length) {
@@ -1393,15 +1425,29 @@ function spanColor(name) {
 
 function esc(t) { return String(t).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
 
+function themeName() { return document.documentElement.getAttribute("data-bs-theme") === "dark" ? "dark" : "light"; }
+function dk(light, dark) { return themeName() === "dark" ? dark : light; }
+// ECharts has no CSS variables: the dark text, axis and grid colours live in one registered theme
+if (typeof echarts !== "undefined") {
+  var AX = { axisLine: { lineStyle: { color: "#3a4659" } }, axisTick: { lineStyle: { color: "#3a4659" } }, axisLabel: { color: "#aab6c6" }, splitLine: { lineStyle: { color: "#2a3648" } } };
+  echarts.registerTheme("ap-dark", {
+    backgroundColor: "transparent", textStyle: { color: "#c9d3e0" },
+    title: { textStyle: { color: "#e6ebf2" } }, legend: { textStyle: { color: "#c9d3e0" } },
+    categoryAxis: AX, valueAxis: AX, logAxis: AX, timeAxis: AX,
+    tooltip: { backgroundColor: "#1f2a3a", borderColor: "#3a4659", textStyle: { color: "#e6ebf2" } }
+  });
+}
 // One ECharts instance per box, reused across refreshes
 function chart(key, box, option) {
   if (typeof echarts === "undefined") return;
   // ECharts sizes from the box; a hidden box is 0 wide and would give an empty canvas
   if (!box.offsetWidth) { pending[key] = [box, option]; return; }
   delete pending[key];
-  if (!charts[key] || charts[key].getDom() !== box) {
+  var th = themeName();
+  if (!charts[key] || charts[key].getDom() !== box || charts[key].apTheme !== th) {
     if (charts[key]) charts[key].dispose();
-    charts[key] = echarts.init(box, null, { renderer: "canvas" });
+    charts[key] = echarts.init(box, th === "dark" ? "ap-dark" : null, { renderer: "canvas" });
+    charts[key].apTheme = th;
   } else charts[key].resize();
   charts[key].setOption(Object.assign({ animation: false, textStyle: { fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif" } }, option), true);
 }
@@ -1413,7 +1459,7 @@ function drawPending() {
 
 function empty(key, text) {
   chart(key, document.getElementById("ch-" + key), {
-    title: { text: text, left: "center", top: "middle", textStyle: { fontSize: 13, fontWeight: "normal", color: "#5f6b7a" } },
+    title: { text: text, left: "center", top: "middle", textStyle: { fontSize: 13, fontWeight: "normal", color: dk("#5f6b7a", "#9aa7b8") } },
     xAxis: { show: false }, yAxis: { show: false }, series: []
   });
 }
@@ -1443,8 +1489,8 @@ function renderMetrics(m) {
     legend: Object.assign({}, LEGEND, { top: "auto", bottom: 0, icon: "circle" }),
     series: [{ type: "pie", radius: ["55%", "78%"], center: ["50%", "42%"], data: outData, label: { show: false } }],
     graphic: [
-      { type: "text", left: "center", top: "32%", style: { text: num(outData.reduce(function (a, o) { return a + o.value; }, 0)), fontSize: 28, fontWeight: 700, fill: "#101828" } },
-      { type: "text", left: "center", top: "46%", style: { text: "messages", fontSize: 13, fill: "#667085" } }
+      { type: "text", left: "center", top: "32%", style: { text: num(outData.reduce(function (a, o) { return a + o.value; }, 0)), fontSize: 28, fontWeight: 700, fill: dk("#101828", "#e6ebf2") } },
+      { type: "text", left: "center", top: "46%", style: { text: "messages", fontSize: 13, fill: dk("#667085", "#9aa7b8") } }
     ]
   });
 
@@ -1498,7 +1544,7 @@ function renderMetrics(m) {
       barMaxWidth: 14, label: { show: true, position: "right", fontSize: 11, formatter: function (p) { return m.tools[p.dataIndex].AvgMs + " ms"; } } }]
   });
 
-  var VCOL = { PASS: COLORS.applied, PASS_NEEDS_REVIEW: COLORS.approval, FAIL: COLORS.rejected, REFUSED: "#7a4b9e", NOT_RECORDED: COLORS.other };
+  var VCOL = { PASS: COLORS.applied, PASS_NEEDS_REVIEW: COLORS.approval, FAIL: COLORS.rejected, REFUSED: dk("#7a4b9e", "#b48ad6"), NOT_RECORDED: COLORS.other };
   if (!m.validateFix.length) empty("validate", "No validate_fix calls yet");
   else chart("validate", document.getElementById("ch-validate"), {
     grid: { left: 8, right: 32, top: 8, bottom: 8, containLabel: true },
@@ -1518,7 +1564,7 @@ function pctChart(key, rows, keyName, unit) {
       valueFormatter: function (v) { return v + " " + unit; } },
     xAxis: { type: "category", data: rows.map(function (r) { return r[keyName]; }), axisLabel: { fontSize: 11 } },
     yAxis: { type: "value", axisLabel: { fontSize: 11 } },
-    series: [["p50", "#3b7dd8"], ["p95", "#1c3f73"]].map(function (k) {
+    series: [["p50", "#3b7dd8"], ["p95", dk("#1c3f73", "#8ebcf7")]].map(function (k) {
       return { name: k[0], type: "bar", data: rows.map(function (r) { return r[k[0]]; }), itemStyle: { color: k[1] }, barMaxWidth: 28 };
     })
   });
@@ -2096,6 +2142,27 @@ Array.prototype.forEach.call(document.querySelectorAll("#nav .nav-link[data-tab]
 var lastTab = "overview";
 try { lastTab = localStorage.getItem("agenticprod.tab") || "overview"; } catch (e) {}
 showTab(lastTab);
+// ---- light/dark theme: the choice is applied in <head>; this button switches it and redraws the charts ----
+(function () {
+  var btn = document.getElementById("theme-toggle");
+  function paint() {
+    var dark = themeName() === "dark", next = dark ? "light" : "dark";
+    btn.title = "Switch to " + next + " theme";
+    btn.setAttribute("aria-label", "Switch to " + next + " theme");
+    btn.querySelector("i").className = "ti " + (dark ? "ti-sun" : "ti-moon");
+  }
+  btn.addEventListener("click", function () {
+    var next = themeName() === "dark" ? "light" : "dark";
+    document.documentElement.setAttribute("data-bs-theme", next);
+    try { localStorage.setItem("agenticprod-theme", next); } catch (e) {}
+    paint();
+    // chart colours are built at render time: render again with the new theme, no reload
+    load();
+    var det = document.getElementById("mp-details");
+    if (lastStory && det && !det.classList.contains("hidden")) renderSpans(lastStory);
+  });
+  paint();
+})();
 // ---- sidebar: icon rail on wide screens, overlay under 768 px ----
 (function () {
   var KEY = "agenticprod.sideCollapsed";
@@ -2230,10 +2297,10 @@ setInterval(load, 30000);
     <details id="story-msg-box"><summary>Message (patient name, birth date, address and phone masked)</summary><pre id="story-msg"></pre></details>
   </div>
 </aside>
-<script src="flow.js?v=8.20.34"></script>
-<script src="workbench.js?v=8.20.34"></script>
-<script src="builder.js?v=8.20.34"></script>
-<script src="wizard.js?v=8.20.34"></script>
-<script src="addprod.js?v=8.20.34"></script>
+<script src="flow.js?v=8.20.35"></script>
+<script src="workbench.js?v=8.20.35"></script>
+<script src="builder.js?v=8.20.35"></script>
+<script src="wizard.js?v=8.20.35"></script>
+<script src="addprod.js?v=8.20.35"></script>
 </body>
 </html>

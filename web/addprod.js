@@ -4,9 +4,9 @@
 // send from the dashboard script.
 (function () {
   var WAYS = [
-    ["failure", "alert-triangle", "When a message fails", "We watch the items you tick. Failures go to the agent, its proposal to a human.", "no code", "#fee2e2", "#b91c1c"],
-    ["process", "code", "From my own process", "Your BPL or ObjectScript calls the agent when you decide.", "", "#e0f2fe", "#0369a1"],
-    ["rule", "arrows-split", "From a routing rule", "Add the agent as a target; matching messages go to it.", "", "#ecfdf3", "#15803d"]
+    ["failure", "alert-triangle", "When a message fails", "We watch the items you tick. Failures go to the agent, its proposal to a human.", "no code", "var(--red-bg)", "var(--red-fg)"],
+    ["process", "code", "From my own process", "Your BPL or ObjectScript calls the agent when you decide.", "", "var(--sky-bg)", "var(--sky-fg)"],
+    ["rule", "arrows-split", "From a routing rule", "Add the agent as a target; matching messages go to it.", "", "var(--green-bg)", "var(--green-fg)"]
   ];
   var MODES = [["observe", "Explain only"], ["propose", "Propose, a human approves"], ["act", "Fix safe cases"]];
   var NEWROLE = "__new__";
