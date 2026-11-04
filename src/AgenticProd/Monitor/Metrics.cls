@@ -15,19 +15,26 @@ Method GetSensors() As %Status
 	Try {
 		Do ..SetSensorInfo("decisions_total", "Triage decisions by decision and outcome (DecisionLog)", "counter")
 		Set tRS = ..Query("SELECT %EXACT(Decision) AS Decision, %EXACT(Outcome) AS Outcome, COUNT(*) AS N FROM AgenticProd_Data.DecisionLog GROUP BY %EXACT(Decision), %EXACT(Outcome)")
+		Set tAny = 0
 		While tRS.%Next() {
+			Set tAny = 1
 			Kill tLabels
 			Set tLabels("decision") = tRS.Decision, tLabels("outcome") = tRS.Outcome
 			Do ..SetSensorLabels("decisions_total", tRS.N, .tLabels)
 		}
+		// SAM prints HELP and TYPE only for a sensor that has a value, so an empty table gets a zero
+		Do:'tAny ..SetSensor("decisions_total", 0)
 
 		Do ..SetSensorInfo("tool_calls_total", "Agent tool calls by tool, allowed or denied (ToolCall)", "counter")
 		Set tRS = ..Query("SELECT %EXACT(Tool) AS Tool, COUNT(*) AS N FROM AgenticProd_Data.ToolCall GROUP BY %EXACT(Tool)")
+		Set tAny = 0
 		While tRS.%Next() {
+			Set tAny = 1
 			Kill tLabels
 			Set tLabels("tool") = tRS.Tool
 			Do ..SetSensorLabels("tool_calls_total", tRS.N, .tLabels)
 		}
+		Do:'tAny ..SetSensor("tool_calls_total", 0)
 
 		Do ..SetSensorInfo("grounding_failures_total", "Agent decisions with a failed grounding check, by check (DecisionLog.GroundingFailed)", "counter")
 		Set tRS = ..Query("SELECT GroundingFailed FROM AgenticProd_Data.DecisionLog WHERE Grounded = 0")

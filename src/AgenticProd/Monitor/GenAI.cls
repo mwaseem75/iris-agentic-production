@@ -12,13 +12,17 @@ Method GetSensors() As %Status
 		Do ..SetSensorInfo("client_token_usage", "Tokens used by the triage agent, by model and token type", "counter")
 		Set tRS = ..Query("SELECT %EXACT(Model) AS Model, SUM(PromptTokens) - SUM(CacheReadTokens) AS InputTokens, SUM(CacheReadTokens) AS CachedInputTokens, SUM(CompletionTokens) - SUM(ReasoningTokens) AS OutputTokens, SUM(ReasoningTokens) AS ReasoningOut"
 			_" FROM AgenticProd_Data.Usage WHERE (Replay = 0 OR Replay IS NULL) AND Model IS NOT NULL GROUP BY %EXACT(Model)")
+		Set tAny = 0
 		While tRS.%Next() {
+			Set tAny = 1
 			For tType = "input", "cached_input", "output", "reasoning" {
 				Kill tLabels
 				Set tLabels("model") = tRS.Model, tLabels("type") = tType
 				Do ..SetSensorLabels("client_token_usage", +$CASE(tType, "input": tRS.InputTokens, "cached_input": tRS.CachedInputTokens, "output": tRS.OutputTokens, : tRS.ReasoningOut), .tLabels)
 			}
 		}
+		// SAM prints HELP and TYPE only for a sensor that has a value, so an empty table gets a zero
+		Do:'tAny ..SetSensor("client_token_usage", 0)
 
 		// Prometheus summary: quantile series plus _sum and _count
 		Do ..SetSensorInfo("client_operation_duration_seconds", "Agent run duration in seconds, by model", "summary", "seconds")
@@ -43,6 +47,7 @@ Method GetSensors() As %Status
 			Do ..SetSensorLabels("client_operation_duration_seconds_sum", $NORMALIZE(tSum(tM), 3), .tLabels)
 			Do ..SetSensorLabels("client_operation_duration_seconds_count", tN(tM), .tLabels)
 		}
+		Do:'$DATA(tN) ..SetSensor("client_operation_duration_seconds", 0)
 	} Catch ex {
 		Set tSC = ex.AsStatus()
 	}
