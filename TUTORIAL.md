@@ -337,7 +337,7 @@ The `search_loinc` tool in [`Tools/Mapping.cls`](src/AgenticProd/Tools/Mapping.c
 
 ## 9. Human in the loop and a learning loop
 
-MAP_CODE and ESCALATE go to a person through `EnsLib.Workflow`. [`Msg/ApprovalTask.cls`](src/AgenticProd/Msg/ApprovalTask.cls) extends `EnsLib.Workflow.TaskRequest` with typed properties: `LocalCode`, `Loinc`, `Display`, `FixJSON`, `Confidence`, `Evidence`, `Reason` and `Flags`. Triage sends it to the production item `IntegrationSupport` (an `EnsLib.Workflow.Operation`). The reviewer sees it in the Workflow inbox, can change the LOINC code in a form field, and clicks Approve or Reject.
+MAP_CODE and ESCALATE go to a human reviewer through `EnsLib.Workflow`. [`Msg/ApprovalTask.cls`](src/AgenticProd/Msg/ApprovalTask.cls) extends `EnsLib.Workflow.TaskRequest` with typed properties: `LocalCode`, `Loinc`, `Display`, `FixJSON`, `Confidence`, `Evidence`, `Reason` and `Flags`. Triage sends it to the production item `IntegrationSupport` (an `EnsLib.Workflow.Operation`). The reviewer sees it in the Workflow inbox, can change the LOINC code in a form field, and clicks Approve or Reject.
 
 On Approve, Triage `OnResponse()` calls `ApplyMapping()`. It checks the LOINC check digit, then writes the mapping to the `LabCodeMap` lookup table:
 
@@ -460,7 +460,7 @@ Some details that matter in a real production:
 
 **Modes.** The check process runs in `observe` (the agent runs, the outcome is logged, nothing is sent), `propose` (tasks go to the Workflow inbox) or `act` (the checked decision is carried out). Start with `observe`.
 
-**Safe to add and remove.** Plan refuses any item name that already exists, and `Apply` never changes or restarts an existing item. Every added item is written to `Data.PluginItem` with an owner, so `Remove` takes out exactly those. If the agent's package is not visible in the target namespace, the plan includes a package mapping and applies it. The Workflow role and its tasks stay after a remove, as the record of what people decided.
+**Safe to add and remove.** Plan refuses any item name that already exists, and `Apply` never changes or restarts an existing item. Every added item is written to `Data.PluginItem` with an owner, so `Remove` takes out exactly those. If the agent's package is not visible in the target namespace, the plan includes a package mapping and applies it. The Workflow role and its tasks stay after a remove, as the record of what humans decided.
 
 **The production map.** A read-only picture of a production: services, processes and operations in lanes, with links built from item targets, routing-rule targets and the real message pairs. Items that host an agent carry an AI HUB badge.
 
