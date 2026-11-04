@@ -6,7 +6,7 @@
 <title>Agentic Production</title>
 <link rel="stylesheet" href="vendor/tabler/tabler.min.css">
 <link rel="stylesheet" href="vendor/tabler/tabler-icons.min.css">
-<link rel="stylesheet" href="workbench.css?v=8.20.7">
+<link rel="stylesheet" href="workbench.css?v=8.20.8">
 <style>
 :root {
   --tblr-font-sans-serif: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -311,11 +311,11 @@ td.go { white-space: nowrap; }
             <div class="text-secondary" style="font-size:13px" id="crumb">Agentic Production</div>
             <h2 class="page-title" id="ptitle">Overview</h2>
           </div>
-          <div class="col-auto d-flex flex-wrap align-items-center gap-3">
-            <label class="form-check form-switch m-0 wbh"><input class="form-check-input" type="checkbox" id="incl-eval"><span class="form-check-label">Include eval runs</span></label>
-            <span class="text-secondary wbh" style="font-size:13px" id="updated"></span>
-            <button class="btn wbh" type="button" id="refresh"><i class="ti ti-refresh me-1"></i>Refresh</button>
-            <button class="btn btn-primary wbh" type="button" id="hdr-burst"><i class="ti ti-send me-1"></i>Send a burst</button>
+          <div class="col-auto d-flex flex-wrap align-items-center gap-3" id="hdr-ctl">
+            <span id="hdr-eval-slot"><label class="form-check form-switch m-0" id="eval-toggle"><input class="form-check-input" type="checkbox" id="incl-eval"><span class="form-check-label">Include eval runs</span></label></span>
+            <span class="text-secondary" style="font-size:13px" id="updated"></span>
+            <button class="btn" type="button" id="refresh"><i class="ti ti-refresh me-1"></i>Refresh</button>
+            <button class="btn btn-primary" type="button" id="hdr-burst"><i class="ti ti-send me-1"></i>Send a burst</button>
           </div>
         </div>
       </div>
@@ -405,6 +405,7 @@ td.go { white-space: nowrap; }
             <h3 class="card-title me-auto">Messages <span class="text-secondary fw-normal" style="font-size:14px" id="dec-count"></span> <span class="text-secondary fw-normal" style="font-size:14px">&middot; click a row to see its flow</span></h3>
             <div class="input-icon" style="width:260px"><span class="input-icon-addon"><i class="ti ti-search"></i></span><input class="form-control" id="dec-q" placeholder="Control id or message"></div>
             <select class="form-select" style="width:auto" id="dec-ns"><option value="">All productions</option></select>
+            <span id="msg-eval-slot"></span>
             <select class="form-select" style="width:auto" id="dec-outcome">
               <option value="">Any outcome</option><option value="applied">Applied</option><option value="approval">To a person</option>
               <option value="rejected">Rejected</option><option value="resent">Resent</option><option value="other">Other</option>
@@ -1960,9 +1961,12 @@ function showTab(name) {
   if (window.flowShow) window.flowShow(name);
   if (window.workbenchShow) window.workbenchShow(name);
   if (window.wizardShow) window.wizardShow(name);
-  // The global controls (eval toggle, burst, refresh) belong to the message tabs; the map keeps Refresh
+  // Header controls show on Overview only; Messages carries the eval toggle in its own filters
   document.body.classList.toggle("wbmode", name.indexOf("wb") === 0);
   document.body.classList.toggle("wbmap", name === "wbprod");
+  document.body.classList.toggle("on-overview", name === "overview");
+  var evalSlot = document.getElementById(name === "messages" ? "msg-eval-slot" : "hdr-eval-slot"), evalToggle = document.getElementById("eval-toggle");
+  if (evalSlot && evalToggle && evalToggle.parentNode !== evalSlot) evalSlot.appendChild(evalToggle);
 }
 window.showTab = showTab;
 
@@ -2060,10 +2064,10 @@ setInterval(load, 30000);
     <details id="story-msg-box"><summary>Message (patient name, birth date, address and phone masked)</summary><pre id="story-msg"></pre></details>
   </div>
 </aside>
-<script src="flow.js?v=8.20.7"></script>
-<script src="workbench.js?v=8.20.7"></script>
-<script src="builder.js?v=8.20.7"></script>
-<script src="wizard.js?v=8.20.7"></script>
-<script src="addprod.js?v=8.20.7"></script>
+<script src="flow.js?v=8.20.8"></script>
+<script src="workbench.js?v=8.20.8"></script>
+<script src="builder.js?v=8.20.8"></script>
+<script src="wizard.js?v=8.20.8"></script>
+<script src="addprod.js?v=8.20.8"></script>
 </body>
 </html>

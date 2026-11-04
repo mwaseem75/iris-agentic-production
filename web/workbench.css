@@ -113,9 +113,8 @@
 .wb-tpl.soon:hover { border-color: var(--line); background: #fff; }
 @media (max-width: 1100px) { .wb-bgrid, .wb-two { grid-template-columns: 1fr; } }
 
-/* Header controls that only fit the message tabs */
-.wbmode .wbh { display: none !important; }
-.wbmode.wbmap #refresh { display: inline-flex !important; }
+/* Header controls (eval toggle, updated, refresh, burst) are for the Overview tab only */
+body:not(.on-overview) #hdr-ctl { display: none !important; }
 
 /* Create an agent */
 .wz-stepper { display: flex; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 6px; margin-bottom: 16px; }
