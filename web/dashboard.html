@@ -6,8 +6,8 @@
 <title>Agentic Production</title>
 <link rel="stylesheet" href="vendor/tabler/tabler.min.css">
 <link rel="stylesheet" href="vendor/tabler/tabler-icons.min.css">
-<link rel="stylesheet" href="workbench.css?v=8.20.31">
-<link rel="stylesheet" href="layout.css?v=8.20.31">
+<link rel="stylesheet" href="workbench.css?v=8.20.32">
+<link rel="stylesheet" href="layout.css?v=8.20.32">
 <style>
 :root {
   --tblr-font-sans-serif: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -113,6 +113,8 @@ h3.sub { font-size: 13px; margin: 16px 0 4px; font-weight: 650; color: var(--mut
 .err { color: var(--bad); margin: 0 0 12px; }
 .readonly-note { background: var(--warn-bg); color: var(--warn); border-radius: 8px; padding: 8px 12px; margin: 0 0 14px; }
 .kill-banner { background: var(--bad); color: #fff; border-radius: 8px; padding: 10px 14px; margin: 0 0 14px; font-weight: 600; }
+.info-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--tblr-info-lt, #e8f1fb); color: var(--tblr-info, #206bc4); border: 1px solid currentColor; border-radius: 8px; padding: 10px 14px; margin: 0 0 14px; }
+.info-banner.hidden { display: none; }
 
 /* controls the scripts build without Tabler classes */
 button:not([class*="btn"]):not(.linkbtn):not(.value):not(.info) { display: inline-block; padding: .25rem .7rem; font: inherit; font-size: 13px; border: 1px solid var(--tblr-border-color, #dce1e7); border-radius: 8px; background: #fff; color: var(--text); cursor: pointer; }
@@ -322,6 +324,7 @@ td.go { white-space: nowrap; }
           </div>
         </div>
       </div>
+      <p class="info-banner hidden" id="nokey-banner" role="status"><span>No API key is set. Failures go to a person, or use replay mode. Add a key in Settings.</span><button type="button" class="btn-close" id="nokey-close" aria-label="Dismiss"></button></p>
       <p class="kill-banner hidden" id="kill-banner" role="alert">AI kill switch is ON: every failed message goes to a person, no LLM call. Turn it off on the Settings tab.</p>
       <p class="err hidden" id="error"></p>
 
@@ -1744,6 +1747,16 @@ function fillNsFilter(list) {
   });
   fillSelect(sel, items, decNs);
 }
+// Dismissed for the session only: the banner comes back on reload while the key is still missing
+function setNoKeyBanner(on) {
+  var gone = false;
+  try { gone = sessionStorage.getItem("nokey-dismissed") === "1"; } catch (e) {}
+  document.getElementById("nokey-banner").classList.toggle("hidden", !on || gone);
+}
+document.getElementById("nokey-close").addEventListener("click", function () {
+  try { sessionStorage.setItem("nokey-dismissed", "1"); } catch (e) {}
+  document.getElementById("nokey-banner").classList.add("hidden");
+});
 function renderSettings(s) {
   settings = s;
   if (s.user) { var hu = document.getElementById("hdr-user"); hu.textContent = "Signed in as " + s.user; hu.classList.remove("hidden"); }
@@ -1752,6 +1765,7 @@ function renderSettings(s) {
   document.getElementById("hdr-burst").classList.toggle("hidden", !edit);
   document.getElementById("set-readonly").classList.toggle("hidden", edit);
   setKillBanner(s.budgets.KillSwitch);
+  setNoKeyBanner(s.keyMissing && s.budgets.Mode === "live");
 
   var body = document.getElementById("set-providers");
   body.textContent = "";
@@ -2192,10 +2206,10 @@ setInterval(load, 30000);
     <details id="story-msg-box"><summary>Message (patient name, birth date, address and phone masked)</summary><pre id="story-msg"></pre></details>
   </div>
 </aside>
-<script src="flow.js?v=8.20.31"></script>
-<script src="workbench.js?v=8.20.31"></script>
-<script src="builder.js?v=8.20.31"></script>
-<script src="wizard.js?v=8.20.31"></script>
-<script src="addprod.js?v=8.20.31"></script>
+<script src="flow.js?v=8.20.32"></script>
+<script src="workbench.js?v=8.20.32"></script>
+<script src="builder.js?v=8.20.32"></script>
+<script src="wizard.js?v=8.20.32"></script>
+<script src="addprod.js?v=8.20.32"></script>
 </body>
 </html>

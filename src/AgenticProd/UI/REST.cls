@@ -102,6 +102,8 @@ ClassMethod SettingsData() As %DynamicObject
 	Do tData.budgets.%Set("MinutesPerFailure", ##class(AgenticProd.UI.Cost).RoiSetting("MinutesPerFailure"), "number")
 	Do tData.budgets.%Set("EngineerHourlyRate", ##class(AgenticProd.UI.Cost).RoiSetting("EngineerHourlyRate"), "number")
 	Set tData.budgets.currency = ##class(AgenticProd.UI.Cost).#CURRENCY
+	// True/false only; the banner on the dashboard shows when Mode is live and this is true
+	Do tData.%Set("keyMissing", ##class(AgenticProd.Operation.Agent).KeyMissing(tData.agents.ProviderConfig), "boolean")
 	Set tData.usedToday = ##class(AgenticProd.Operation.Agent).TokensUsedToday()
 	Set tData.prices = ##class(AgenticProd.Settings.Store).Prices()
 	Set tData.memory = ##class(AgenticProd.Settings.Store).Memory()

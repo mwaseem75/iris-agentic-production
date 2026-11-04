@@ -72,6 +72,22 @@ Method TestLiveCallBlockedDuringTestRun()
 	Do $$$AssertEquals(..CountUsage(), tUsageRows, "no Usage row")
 }
 
+/// Live mode without a key: ESCALATE with the reason, no agent, no chat call, no Usage row.
+Method TestNoKeyEscalatesWithoutAgent()
+{
+	Set tOp = ##class(AgenticProd.Test.Operation.StubAgentOp).%New("TestAgentOp")
+	Set tOp.KillSwitch = 0, tOp.Mode = "live", tOp.DailyTokenBudget = 0, tOp.KeyMissing = 1
+	Set tUsageRows = ..CountUsage()
+	Do $$$AssertStatusOK(tOp.Triage(..StubRequest(), .tDecision))
+	Do $$$AssertEquals(tDecision.Decision, "ESCALATE")
+	Do $$$AssertTrue(tDecision.Reason [ "No API key set", "reason says why")
+	Do $$$AssertEquals(tOp.Calls, 0, "no chat call")
+	Do $$$AssertEquals(tDecision.AgentSessionId, "", "no agent session created")
+	Do $$$AssertEquals(..CountUsage(), tUsageRows, "no Usage row")
+	// The real check: a provider config with no Wallet key counts as no key
+	Do $$$AssertTrue(##class(AgenticProd.Operation.Agent).KeyMissing("no_such_provider"), "unknown config has no key")
+}
+
 /// Marks: active while the job runs, then a grace period; a dead job's open mark does not count.
 Method TestTestRunMarks()
 {

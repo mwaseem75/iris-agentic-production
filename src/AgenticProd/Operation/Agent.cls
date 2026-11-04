@@ -128,6 +128,20 @@ ClassMethod Seconds() As %Integer [ Internal ]
 	Quit (+tNow * 86400) + ($PIECE(tNow, ",", 2) \ 1)
 }
 
+/// 1 when the agent has no LLM key: the provider config's Wallet key is not set, or, with no
+/// config, OPENAI_API_KEY (the TriageAgent default) is empty. Never returns the key.
+ClassMethod KeyMissing(pProviderConfig As %String) As %Boolean
+{
+	If pProviderConfig '= "" Quit ##class(AgenticProd.Settings.Store).KeyStatus(pProviderConfig) '= "set"
+	Quit $SYSTEM.Util.GetEnviron("OPENAI_API_KEY") = ""
+}
+
+/// Overridden by the unit-test stub, which never reaches a provider.
+Method NoApiKey() As %Boolean
+{
+	Quit ..KeyMissing(..ProviderConfig)
+}
+
 /// Fail closed: if the switch fails the item does not start, rather than run the agent with %All.
 /// The switch lasts for the job's life, so this item must keep its own pool (no shared jobs).
 Method OnInit() As %Status
@@ -184,6 +198,13 @@ Method Triage(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As Age
 		If tBlocked '= "" {
 			$$$LOGWARNING("LLM blocked: "_tBlocked_", escalating header "_pRequest.HeaderId_" without an LLM call")
 			Set pResponse = ..EscalateDecision(pRequest, "LLM blocked: "_tBlocked)
+			Quit
+		}
+
+		// Without a key the provider fails with a raw error; say why instead, and keep the message moving
+		If ..NoApiKey() {
+			$$$LOGWARNING("No API key set, escalating header "_pRequest.HeaderId_" without an LLM call")
+			Set pResponse = ..EscalateDecision(pRequest, "No API key set; agent not called. Add a key in Settings or use replay mode")
 			Quit
 		}
 
@@ -287,6 +308,7 @@ Method Answer(pRequest As AgenticProd.Msg.AgentRequest, Output pResponse As Agen
 	Set pResponse = ##class(AgenticProd.Msg.AgentResponse).%New()
 	Try {
 		Set tStop = $SELECT(..KillSwitch: "AI kill switch is on", 1: "")
+		Set:tStop="" tStop = $SELECT(..NoApiKey(): "No API key set", 1: "")
 		Set:tStop="" tStop = $SELECT(..DailyTokenBudget && (..TokensUsedToday() >= ..DailyTokenBudget): "Daily token budget used up", 1: "")
 		Set:tStop="" tStop = ..OverDollarBudget()
 		Set:tStop="" tStop = $SELECT(..LLMBlocked()'="": "LLM blocked: "_..LLMBlocked(), 1: "")
