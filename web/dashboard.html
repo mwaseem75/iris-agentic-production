@@ -6,7 +6,7 @@
 <title>Agentic Production</title>
 <link rel="stylesheet" href="vendor/tabler/tabler.min.css">
 <link rel="stylesheet" href="vendor/tabler/tabler-icons.min.css">
-<link rel="stylesheet" href="workbench.css?v=8.20.18">
+<link rel="stylesheet" href="workbench.css?v=8.20.23">
 <style>
 :root {
   --tblr-font-sans-serif: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -406,7 +406,7 @@ td.go { white-space: nowrap; }
             <div class="input-icon msg-search"><span class="input-icon-addon"><i class="ti ti-search"></i></span><input class="form-control" id="dec-q" placeholder="Search messages"></div>
             <select class="form-select" id="dec-ns" aria-label="Production"><option value="">All productions</option></select>
             <select class="form-select" id="dec-outcome" aria-label="Result">
-              <option value="">Any result</option><option value="applied">Applied</option><option value="approval">With a reviewer</option>
+              <option value="">Any result</option><option value="applied">Fixed automatically</option><option value="approval">Sent to a reviewer</option>
               <option value="rejected">Rejected</option><option value="resent">Resent</option><option value="other">Other</option>
             </select>
             <select class="form-select" id="dec-problem" aria-label="Problem"><option value="">Any problem</option></select>
@@ -415,11 +415,11 @@ td.go { white-space: nowrap; }
           </div>
           <p class="muted m-3 hidden" id="dec-note">No live traffic yet. Switch on "Include eval runs" to see eval messages.</p>
           <table class="table table-vcenter table-hover card-table msg-table">
-            <colgroup><col style="width:12%"><col style="width:8%"><col style="width:10%"><col style="width:12%"><col style="width:11%"><col style="width:7%"><col style="width:14%"><col style="width:13%"><col style="width:13%"></colgroup>
+            <colgroup><col style="width:12%"><col style="width:8%"><col style="width:10%"><col style="width:12%"><col style="width:11%"><col style="width:7%"><col style="width:20%"><col style="width:9%"><col style="width:11%"></colgroup>
             <thead><tr>
               <th class="sortable" data-sort="time">Time (UTC)</th><th class="sortable" data-sort="message">Message</th><th class="sortable" data-sort="production">Production</th>
               <th class="sortable" data-sort="problem">Problem</th><th class="sortable" data-sort="proposal">Agent&#39;s proposal</th><th class="sortable num" data-sort="confidence">Confidence</th>
-              <th class="sortable" data-sort="result">Result</th><th class="sortable" data-sort="status">Status</th><th>Flow</th>
+              <th class="sortable" data-sort="result">Result</th><th class="sortable" data-sort="status">Status</th><th class="go">Flow</th>
             </tr></thead>
             <tbody id="decisions"></tbody>
           </table>
@@ -852,8 +852,8 @@ function setWindow(key, text) {
 // Plain label for a DecisionLog outcome; the raw code stays in the tooltip
 function outcomeLabel(o) {
   if (!o) return "\u2014";
-  if (o === "APPLIED") return "Applied";
-  if (o === "SENT_FOR_APPROVAL") return "With a reviewer";
+  if (o === "APPLIED") return "Fixed automatically";
+  if (o === "SENT_FOR_APPROVAL") return "Sent to a reviewer";
   if (o === "REJECTED") return "Rejected";
   if (o.indexOf("DOWNGRADED:") === 0) return "Downgraded to review";
   if (o.indexOf("PROPOSED:") === 0) return "Mapping proposed";
@@ -861,6 +861,20 @@ function outcomeLabel(o) {
   if (o === "APPROVED") return "Approved";
   if (o === "RESENT") return "Resent";
   return o;
+}
+// Current state of a message, not what Triage decided: Open while a Workflow task waits, Approved once a
+// reviewer said yes, Closed otherwise. The flow list (newest 25) knows the task; older rows go by outcome.
+var APPROVED_STATUS = { APPROVED: 1, REVIEW_APPLIED: 1, REVIEW_RESENT: 1, REVIEW_RETURNED: 1 };
+function stateOf(d) {
+  var m = window.flowMessage ? window.flowMessage(d.ID) : null, s = m ? m.status : "";
+  if (!s) {
+    var o = d.Outcome || "";
+    if (d.EvalRunId) return ["Closed", "other"];
+    s = (o === "SENT_FOR_APPROVAL" || o.indexOf("DOWNGRADED:") === 0 || o.indexOf("PROPOSED:") === 0) ? "waiting" : o;
+  }
+  if (s === "waiting") return ["Open", "warn"];
+  if (APPROVED_STATUS[s]) return ["Approved", "good"];
+  return ["Closed", "other"];
 }
 function outcomeTag(o) {
   var t = tag(outcomeLabel(o), outcomeKind(o));
@@ -1026,7 +1040,7 @@ function sortValue(d, key) {
     case "proposal": return proposalOf(d).toLowerCase();
     case "confidence": return confidenceOf(d);
     case "result": return outcomeLabel(d.Outcome).toLowerCase();
-    case "status": return (window.flowStatusLabel ? window.flowStatusLabel(d.ID) : "").toLowerCase();
+    case "status": return stateOf(d)[0].toLowerCase();
     default: return d.CreatedAt || "";
   }
 }
@@ -1104,12 +1118,12 @@ function renderMessages() {
     var conf = confidenceOf(d);
     cell(tr, conf === null ? "" : conf.toFixed(2), "num");
     var td = cell(tr, outcomeTag(d.Outcome), "wrapok");
-    if (d.flagged && d.flagged.length) td.appendChild(tag("flagged", "bad"));
-    if (d.fhirOut && d.fhirOut !== "valid") td.appendChild(tag("FHIR " + d.fhirOut, "bad"));
+    if (d.flagged && d.flagged.length) { var fl = el("i", null, "ti ti-flag-3 msg-flag"); fl.title = "Prompt-injection text flagged"; td.appendChild(fl); }
+    if (d.fhirOut && d.fhirOut !== "valid") td.appendChild(tag("FHIR invalid", "bad"));
     td.title = [d.triageChanged ? "Triage changed the agent's proposal" : "",
-      d.flagged && d.flagged.length ? "InjectionGuard flagged " + d.flagged.join(", ") : "",
       d.fhirOut ? "FHIR out: " + d.fhirOut : ""].filter(Boolean).join("; ");
-    cell(tr, "", "st wrapok");
+    var st = stateOf(d);
+    cell(tr, tag(st[0], st[1]));
     cell(tr, viewFlow(d, rowNs), "go");
     body.appendChild(tr);
   });
@@ -1119,8 +1133,9 @@ function renderMessages() {
 
 function viewFlow(d, rowNs) {
   var a = flowLink(d, rowNs);
-  a.className = "btn btn-sm";
-  a.lastChild.textContent = " View flow";
+  a.className = "btn btn-sm btn-primary";
+  a.title = "Show this message's flow";
+  a.lastChild.textContent = " Flow";
   return a;
 }
 
@@ -2132,10 +2147,10 @@ setInterval(load, 30000);
     <details id="story-msg-box"><summary>Message (patient name, birth date, address and phone masked)</summary><pre id="story-msg"></pre></details>
   </div>
 </aside>
-<script src="flow.js?v=8.20.18"></script>
-<script src="workbench.js?v=8.20.18"></script>
-<script src="builder.js?v=8.20.18"></script>
-<script src="wizard.js?v=8.20.18"></script>
-<script src="addprod.js?v=8.20.18"></script>
+<script src="flow.js?v=8.20.23"></script>
+<script src="workbench.js?v=8.20.23"></script>
+<script src="builder.js?v=8.20.23"></script>
+<script src="wizard.js?v=8.20.23"></script>
+<script src="addprod.js?v=8.20.23"></script>
 </body>
 </html>

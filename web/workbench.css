@@ -293,3 +293,10 @@ body:not(.on-overview) #hdr-ctl { display: none !important; }
 .wb-table .wb-n { font-size: 13.5px; }
 .wb-table .wb-d { font-size: 12px; }
 .wb-table td.wb-c-model { font-size: 12px; }
+
+/* Messages polish: badges stay on one line, the flow button is a small primary button on the right */
+.msg-table .tag { white-space: nowrap; }
+.msg-table td.go, .msg-table th.go { text-align: right; }
+.msg-table td.go .btn { font-size: 12px; padding: 2px 8px; }
+.msg-table tbody tr:hover td.go .btn-primary { filter: brightness(.88); }
+.msg-flag { color: #d63939; margin-left: 6px; font-size: 14px; vertical-align: -2px; }

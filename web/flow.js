@@ -31,8 +31,8 @@
   // ---- live status for the rows ----
   function statusTag(s) { var si = statusInfo(s); return el("span", si[0], "tag t-" + si[1]); }
   function byId(id) { return msgs.filter(function (x) { return x.id === id; })[0]; }
-  // Plain status text of one message row, for the Messages table sort
-  window.flowStatusLabel = function (id) { var m = byId(id); return m ? statusInfo(m.status)[0] : ""; };
+  // Flow list entry of one decision (current status from the Workflow task), for the Messages table
+  window.flowMessage = function (id) { return byId(id); };
   window.flowDecorate = function () {
     Array.prototype.forEach.call(document.querySelectorAll("#decisions tr[data-id]"), function (tr) {
       var m = byId(+tr.dataset.id), td = tr.querySelector("td.st");
