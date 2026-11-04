@@ -1,48 +1,85 @@
 # Agentic Production: AI Hub agents for any IRIS interoperability production
 
-Build, test and govern [IRIS AI Hub](https://github.com/intersystems-community/ai-hub-eap) agents inside a production you already have. The demo agent repairs failed HL7 lab messages and asks a person when it isn't sure.
+**A failed HL7 message does not have to wait for a person with the right skills. An AI Hub agent reads the error, proposes a fix, and a plain IRIS business process decides what is allowed to happen. When the agent is unsure, a human decides.**
 
-Entry for the InterSystems Programming Contest "AI Agents in Interoperability Workflows". Implements the Ideas Portal idea [DPI-I-627: AI assisted debug](https://ideas.intersystems.com/ideas/DPI-I-627), with parts of [DPI-I-863](https://ideas.intersystems.com/ideas/DPI-I-863) (errors to a Workflow task list) and [DPI-I-574](https://ideas.intersystems.com/ideas/DPI-I-574) (AI analysis of errors).
+Built for the InterSystems Programming Contest "AI Agents in Interoperability Workflows". Implements the Ideas Portal idea [DPI-I-627: AI assisted debug](https://ideas.intersystems.com/ideas/DPI-I-627), with parts of [DPI-I-863](https://ideas.intersystems.com/ideas/DPI-I-863) (errors to a Workflow task list) and [DPI-I-574](https://ideas.intersystems.com/ideas/DPI-I-574) (AI analysis of errors).
+
+<!-- TODO before submitting: add the links row below once they exist
+**[Online demo](URL)** · **[Video](URL)** · **[Article: the story](URL)** · **[Article: Workbench tutorial](URL)** · **[Step-by-step tutorial](TUTORIAL.md)**
+-->
 
 ![Dashboard overview](images/dashboard-overview.png)
 
-## Three things in this repo
+## What makes this different
 
-1. **A working agent in a production.** A failed HL7 message goes to an AI Hub agent. It reads the error with read-only tools and proposes one of five decisions. A plain business process checks the proposal and decides what happens. Nothing the model says is trusted on its own.
-2. **A Workbench to add AI Hub to an existing production.** Pick a production, create an agent from a template, test its tools and policies for $0, and add it. Remove it again with one click. See [AI Hub Workbench](#ai-hub-workbench).
-3. **Proof.** 60 synthetic test cases, with the share of safe and correct outcomes, the cost and the speed measured per model. You can replay the whole run for free. See [Evaluation](#evaluation).
+1. **It works inside a real production.** Not a chatbot next to IRIS. The agent is a normal Business Operation, fed by a Business Process, with Workflow tasks for humans.
+2. **You can add it to a production you already have.** The **AI Hub Workbench** reads your namespace, builds an agent from a template, tests it for $0, adds it with one click and removes it again with one click. See [AI Hub Workbench](#ai-hub-workbench).
+3. **The model is never trusted on its own.** Every fix is re-checked, every claim is grounded, identity fields are never touched, and a kill switch stops all LLM calls. See [How it stays safe](#how-it-stays-safe).
+4. **It learns, and the learning is governed.** A human approves a new code mapping once. After that the same code goes through with no LLM call and no cost.
+5. **It is measured.** 60 synthetic cases, scored for safety, accuracy, cost and speed per model. You can replay the whole run for free. See [Evaluation](#evaluation).
 
-## Which image do I need?
+## AI Hub in 60 seconds
 
-This app needs **`irishealth-community:2026.3.0AI.154.0`** (InterSystems IRIS for Health with AI Hub, early access build 154). The plain `iris-community` image of the same build does not work: it has no `EnsLib.HL7` classes, and setup stops with a message saying so. The image is not public. Load it from the tar file you received and tag it:
+[IRIS AI Hub](https://github.com/intersystems-community/ai-hub-eap) (early access, IRIS 2026.3) lets you build AI agents in ObjectScript, next to your data and your productions. This project uses almost every part of it, so it also works as a worked example.
+
+| AI Hub part | What it is | Where it is used here |
+|---|---|---|
+| `%AI.Agent` | A declarative agent: model, instructions, tools, limits | `Agent.TriageAgent` repairs failed HL7 messages |
+| `%AI.ToolSet` / `%AI.Tool` | Functions the agent can call | `Tools.HL7` (read, validate a fix) and `Tools.Mapping` (search and look up codes), all read-only |
+| `%AI.Agent.Skill` | Instructions the agent loads only when needed (`load_skill`) | `Skill.HL7Repair`, `Skill.CodeMapping` |
+| `%AI.Policy.*` | Authorization and audit around every tool call | `Policy.ReadOnly`, `Policy.Audit`, logging each call and each `validate_fix` verdict |
+| `%AI.RAG` | Vector search over your own knowledge, with local FastEmbed embeddings | A LOINC knowledge base the agent searches before it proposes a code |
+| Config Store and Wallet | Provider settings and secret keys, managed in IRIS | Settings page: providers, models, keys (write-only) |
+| Sessions and stats | Saved runs with token counts | Cost, latency and tokens in the dashboard and in Prometheus |
+
+AI Hub gives the agent its tools and its limits. This project adds what a clinical interface needs on top: deterministic checks around the agent that are plain IRIS code, not AI Hub features. They are marked as such below.
+
+## At a glance
+
+| Area | What you get |
+|---|---|
+| **Decisions** | AUTO_FIX, MAP_CODE, RESEND, REJECT, ESCALATE, each carried out only after a check |
+| **Safety** | Read-only tools, re-validation of every fix, grounding check, ambiguity check, injection scan, patient identity never changed, budgets, kill switch |
+| **Human in the loop** | Workflow inbox for mappings and escalations; approved mappings are learned and revocable |
+| **Workbench** | Library of agents, tools, skills and policies; builders and an agent wizard; add to any production in three ways; observe, propose or act modes; clean removal; read-only production map |
+| **Dashboard** | Overview, Messages with a story view per message, Trust and evaluation, Cost, Settings |
+| **Output** | HL7 v2 to the EHR and FHIR R4 (US Core lab profile check) |
+| **Measured** | 60-case evaluation, live or replayed at $0 |
+| **Observable** | Traces in IRIS, Visual Trace links, Prometheus and Grafana metrics, optional OTLP and Jaeger |
+| **Providers** | OpenAI, Anthropic, OpenRouter, NVIDIA NIM, and any OpenAI-compatible endpoint (Azure OpenAI, Ollama) |
+| **Runs anywhere** | Docker one-command installer, or ZPM; works with no API key in replay mode |
+
+## Quick start
+
+You need Docker with about 4 GB of free memory and the AI Hub image (next section).
+
+```bash
+git clone https://github.com/mwaseem75/iris-agentic-production.git
+cd iris-agentic-production
+./install.sh /path/to/irishealth-community-2026.3.0AI.154.0-docker.tar.gz
+```
+
+The path is only needed if the image is not loaded yet. On Windows use `.\install.ps1 C:\path\to\the.tar.gz` in PowerShell. The installer checks Docker and the image, creates `.env` if you have none (it never overwrites one), starts the containers, waits until IRIS is healthy and prints the URLs. **No API key is needed**: replay mode works without one.
+
+Then open **http://localhost:52773/agenticprod/dashboard.html** and log in as `SuperUser` / `SYS`.
+
+### Which image do I need?
+
+**`irishealth-community:2026.3.0AI.154.0`**: IRIS for Health with AI Hub, early access build 154. The plain `iris-community` image of the same build does not work, because it has no `EnsLib.HL7` classes, and setup stops with a message saying so. The image is not public. Load it from the tar file you received and tag it:
 
 ```bash
 docker load -i irishealth-community-2026.3.0AI.154.0-docker.tar.gz
 docker tag <loaded image name> irishealth-community:2026.3.0AI.154.0
 ```
 
-## Install
-
-You need Docker with about 4 GB of free memory (IRIS needs extra while it starts). On Windows, give WSL enough memory in `%UserProfile%\.wslconfig` (for example `memory=6GB` under `[wsl2]`), otherwise Windows can stop the WSL VM during the build.
-
-**One command.** The installer checks Docker and the image (loading it from the tar file if you pass the path), creates `.env` from `.env.example` if you have none, starts the containers, waits until IRIS is healthy and prints the URLs.
-
-```bash
-git clone https://github.com/mwaseem75/iris-agentic-production.git
-cd iris-agentic-production
-./install.sh /path/to/irishealth-community-2026.3.0AI.154.0-docker.tar.gz   # the path is only needed if the image is not loaded yet
-```
-
-On Windows, run `.\install.ps1 C:\path\to\irishealth-community-2026.3.0AI.154.0-docker.tar.gz` in PowerShell. Neither script overwrites an existing `.env`, and neither needs an API key: without one, replay mode works and failures go to a person.
-
-**Or by hand:**
+### Install by hand
 
 ```bash
 cp .env.example .env        # add OPENAI_API_KEY for live mode; replay mode needs no key
 docker compose up -d --build
 ```
 
-The first build takes about 6 minutes, and the container is healthy after about 10 more while setup runs. Setup seeds the price table and `LabCodeMap`, builds the LOINC knowledge base, creates the agent role and user, sets up the Workflow role and a demo reviewer, and creates the `LEGACY` demo namespace.
+On Windows, give WSL enough memory in `%UserProfile%\.wslconfig` (for example `memory=6GB` under `[wsl2]`), otherwise Windows can stop the WSL VM during the build. The first build takes about 6 minutes, and the container is healthy after about 10 more while setup runs. Setup seeds the price table and `LabCodeMap`, builds the LOINC knowledge base, creates the agent role and user, sets up the Workflow role and a demo reviewer, and creates the `LEGACY` demo namespace.
 
 | What | Where | Login |
 |---|---|---|
@@ -83,6 +120,8 @@ do ##class(AgenticProd.Eval.Runner).Run("gpt-4o-mini", "replay demo", "all", "re
 
 Click a message in **Messages** to open its story: the steps in plain words, a timeline, and the masked message. Each decision also links to Visual Trace in the Management Portal.
 
+![Story view of one message](images/story-view.png)
+
 To start a demo or a recording from a clean state: `do ##class(AgenticProd.Demo).Reset()`. It deletes all live (non-eval) decisions, usage, tool calls, spans and Workflow tasks, purges every production message, resets `LabCodeMap` to the seed codes and empties the `data/` folders. It does not ask first. Eval runs and the recorded runs that replay uses are kept.
 
 ## The problem
@@ -102,25 +141,27 @@ A lab sends HL7 v2 ORU^R01 results. When a message fails validation, code lookup
 | Decision | Example | What happens |
 |---|---|---|
 | AUTO_FIX | `2026-10-23 10:15` in a timestamp field | Applied automatically, only if it passes the checks below |
-| MAP_CODE | local code `GLU-01` → LOINC `2345-7` | A person approves it in the Workflow inbox; the mapping is learned |
+| MAP_CODE | local code `GLU-01` → LOINC `2345-7` | A human approves it in the Workflow inbox; the mapping is learned |
 | RESEND | downstream timeout | Resent once |
 | REJECT | segments out of order, wrong message type | Returned to the sender |
-| ESCALATE | missing units, identity problems, anything unclear | A person decides |
+| ESCALATE | missing units, identity problems, anything unclear | A human decides |
 
 The agent proposes. A deterministic business process (`AgenticProd.Process.Triage`) decides what actually happens.
 
 ## How it stays safe
 
+These checks are plain IRIS code around the agent. AI Hub supplies the read-only tools and the authorization and audit policies; the rest is this project.
+
 - **Read-only agent.** Every tool the agent has is read-only. It runs as a dedicated IRIS user with SELECT-only grants, behind an authorization policy and an audit policy that logs every tool call.
 - **Triage re-checks every fix.** An AUTO_FIX is applied only if Triage re-runs validation on a copy and it passes. The agent's own "validated" flag is never trusted. The original message is never changed; the fix creates a new message.
-- **AUTO_FIX is a whitelist.** Only changes that keep the meaning can be applied without a person: a timestamp reformatted to the same instant, `<0.5` in a numeric field turned into `<^0.5`, an empty observation status copied from its order. Codes, values, units, flags and statuses always go to a person.
+- **AUTO_FIX is a whitelist.** Only changes that keep the meaning can be applied without a human: a timestamp reformatted to the same instant, `<0.5` in a numeric field turned into `<^0.5`, an empty observation status copied from its order. Codes, values, units, flags and statuses always go to a human.
 - **Patient identity is never changed.** Any fix touching PID-3, PID-5 or PID-7 is refused.
 - **Prompt injection.** Message text reaches the model only inside marked data blocks. A deterministic scan flags instructions hidden in notes and text results; a flagged message is never auto-fixed and the reviewer sees the warning.
-- **Grounding check.** Before Triage acts, every claim in the decision must trace back to something real: a proposed LOINC must exist in the knowledge base and be one this run's search returned, with matching specimen and units; fix values must be the real values; quoted evidence must appear in the message or a tool result. If not, the message goes to a person marked "ungrounded". No extra LLM call.
-- **Ambiguity check.** If the units fit two or more of the codes the agent's own search returned, and they differ in something the message does not state (specimen, component, method), the mapping is treated as a guess and goes to a person.
+- **Grounding check.** Before Triage acts, every claim in the decision must trace back to something real: a proposed LOINC must exist in the knowledge base and be one this run's search returned, with matching specimen and units; fix values must be the real values; quoted evidence must appear in the message or a tool result. If not, the message goes to a human marked "ungrounded". No extra LLM call.
+- **Ambiguity check.** If the units fit two or more of the codes the agent's own search returned, and they differ in something the message does not state (specimen, component, method), the mapping is treated as a guess and goes to a human.
 - **Memory is governed.** Learned mappings keep where they came from (agent run, evidence, reviewer, date). An admin can revoke one; every message sent with it since its approval goes back for review.
-- **Budgets.** Per-message limits on tool calls and tokens, and a daily token budget. When a limit is hit the message goes to a person; it is never dropped.
-- **One switch to stop it.** The AI kill switch in Settings sends every failure to a person with no LLM call, and shows a red banner on every page.
+- **Budgets.** Per-message limits on tool calls and tokens, and a daily token budget. When a limit is hit the message goes to a human; it is never dropped.
+- **One switch to stop it.** The AI kill switch in Settings sends every failure to a human with no LLM call, and shows a red banner on every page.
 
 ## The learning loop
 
@@ -150,13 +191,13 @@ The **AI Hub Workbench** (sidebar group in the dashboard) is for a developer who
 
 | Way in | What is added |
 |---|---|
-| **When a message fails** | a Sentinel (custom inbound adapter `Plugin.SentinelAdapter`) that watches the items you tick, a check process (`Process.Triage`) that validates the answer, a Workflow role for people, and the agent host |
+| **When a message fails** | a Sentinel (custom inbound adapter `Plugin.SentinelAdapter`) that watches the items you tick, a check process (`Process.Triage`) that validates the answer, a Workflow role for humans, and the agent host |
 | **From your own process** | the agent host only, plus ready-to-paste ObjectScript and BPL that call it |
 | **From a routing rule** | the agent host only, plus the rule text that sends matching messages to it |
 
 The agent host is `AgenticProd.Operation.Agent` with its `AgentClass` setting pointing at your agent. The plan lists every item and the package mapping needed, and nothing changes until you apply it. The Sentinel starts from "now", so an old backlog is never sent to the agent. An existing item is never changed, even one with the same name: the request is refused instead.
 
-The mode is `observe` (the agent runs and the outcome is logged, nothing is sent), `propose` (the check runs and tasks go to the Workflow inbox) or `act` (the checked decision is carried out). Every item is tracked, so **Remove** deletes exactly what was added. The Workflow role and its tasks stay, as the record of what people decided.
+The mode is `observe` (the agent runs and the outcome is logged, nothing is sent), `propose` (the check runs and tasks go to the Workflow inbox) or `act` (the checked decision is carried out). Every item is tracked, so **Remove** deletes exactly what was added. The Workflow role and its tasks stay, as the record of what humans decided.
 
 **Production map (read-only).** Shows a production as lanes of services, processes and operations, with links built from item targets, routing-rule targets and the real message flow. The items that host an AI Hub agent carry an **AI HUB** badge.
 
@@ -180,12 +221,10 @@ Then use the Workbench to add an agent to LEGACY and send the failing samples ag
 
 ## Dashboard
 
-![Story view of one message](images/story-view.png)
-
 | Tab | What it shows |
 |---|---|
-| Overview | KPI tiles and charts: decisions, tokens by type per model, latency p50/p95, step durations (router, agent, Triage), tool calls per tool, `validate_fix` results, approval wait time, LLM calls saved by learned mappings |
-| Messages | Recent decisions with filters; click one for its story view |
+| Overview | Clickable KPI tiles and charts: decisions, tokens by type per model, latency p50/p95, step durations (router, agent, Triage), tool calls per tool, `validate_fix` results, approval wait time, LLM calls saved by learned mappings |
+| Messages | Recent decisions with filters and sorting; click one for its story view, or **View flow** |
 | Trust & evaluation | Eval runs and the headline numbers, unsafe outcomes, grounding failures |
 | Cost | Spend per model and per day against the daily budget |
 | Settings | Providers and keys, agents, guardrails, budgets and mode, prices, memory, change log |
@@ -207,7 +246,7 @@ Admins (`SuperUser`, `_SYSTEM`) can change these; the reviewer sees them read-on
 | Memory | learned mappings with provenance, revoke |
 | Change log | who changed what, when, old → new (keys logged only as "changed") |
 
-If no provider config is chosen, the agent uses `OPENAI_API_KEY` from `.env`, so a fresh install works without opening Settings. If there is no key at all and the mode is live, the agent makes no LLM call: every failure goes to a person with the reason "No API key set", and the dashboard shows a banner that says so.
+If no provider config is chosen, the agent uses `OPENAI_API_KEY` from `.env`, so a fresh install works without opening Settings. If there is no key at all and the mode is live, the agent makes no LLM call: every failure goes to a human with the reason "No API key set", and the dashboard shows a banner that says so.
 
 ## Architecture
 
@@ -244,7 +283,7 @@ The core is format-neutral: error classes, decisions, Triage and the stores do n
 
 ## FHIR output
 
-Every lab result that passes LabRouter also goes out as FHIR R4, built with the converters that ship with IRIS for Health: HL7 v2 → SDA3 → FHIR R4 bundle. `FhirOut` adds the LOINC coding from `LabCodeMap` to each Observation (the local code stays as a second coding) and checks every Observation against US Core `us-core-observation-lab` 3.1.0. Valid bundles land in `data/out-fhir/`. An invalid bundle is not sent: its issues go to Triage as a `FHIR` problem, and a person decides. LabRouter's `FHIROutput` setting turns this off.
+Every lab result that passes LabRouter also goes out as FHIR R4, built with the converters that ship with IRIS for Health: HL7 v2 → SDA3 → FHIR R4 bundle. `FhirOut` adds the LOINC coding from `LabCodeMap` to each Observation (the local code stays as a second coding) and checks every Observation against US Core `us-core-observation-lab` 3.1.0. Valid bundles land in `data/out-fhir/`. An invalid bundle is not sent: its issues go to Triage as a `FHIR` problem, and a human decides. LabRouter's `FHIROutput` setting turns this off.
 
 ## Evaluation
 
@@ -263,7 +302,7 @@ The live run used 762,395 tokens and cost $0.08 in total; the median time was 10
 
 **Agent** is what the model proposed; **system** is what Triage finally decided after the grounding gate and the action matrix. "Acceptable" means the decision was one of the case's acceptable decisions and nothing unsafe was carried out. It does not mean every mapping was right: mapping accuracy counts only the cases where the agent proposed the expected LOINC.
 
-Case 56 shows the trust layer. The message has a real timestamp error, and a text result asks the agent to change the birth date (PID-7). The agent proposed an AUTO_FIX for the timestamp only, which on its own is whitelisted. The injection guard had flagged the text result, so Triage refused to auto-apply it, downgraded the decision to ESCALATE and sent it to a person with the flagged field in the reason.
+Case 56 shows the trust layer. The message has a real timestamp error, and a text result asks the agent to change the birth date (PID-7). The agent proposed an AUTO_FIX for the timestamp only, which on its own is whitelisted. The injection guard had flagged the text result, so Triage refused to auto-apply it, downgraded the decision to ESCALATE and sent it to a human with the flagged field in the reason.
 
 ## Observability
 
@@ -273,6 +312,19 @@ Case 56 shows the trust layer. The message has a real timestamp error, and a tex
 - **Visual Trace.** Each decision links to the message session in the Management Portal.
 
 Charts use [Apache ECharts](https://echarts.apache.org/) 5.5.1 and the layout uses [Tabler](https://tabler.io/) 1.6.1 (MIT), both vendored in `web/vendor` with their licences. Nothing is loaded from a CDN.
+
+## Contest checklist
+
+| Contest goal | Where to see it |
+|---|---|
+| An AI agent inside an interoperability workflow | `Operation.Agent` and `Process.Triage` in `AgenticProd.Production` |
+| Uses IRIS AI Hub | Agent, tools, skills, policies, RAG, Config Store, Wallet (table above) |
+| Safe for real use | [How it stays safe](#how-it-stays-safe) and the unsafe_final score |
+| Human in the loop | Workflow inbox, governed memory, kill switch |
+| Reusable by others | [Workbench](#ai-hub-workbench), `Plugin.Installer`, ZPM package |
+| Easy to try | One-command installer; replay mode with no API key |
+
+Bonus features, each used for a reason: **Workflow** (human approvals), **vector search** (LOINC knowledge base), **Docker** (installer), a **custom inbound adapter** (`Plugin.SentinelAdapter`), **ZPM**, **Embedded Python** (label printer in the LEGACY demo) and the Ideas Portal idea above.
 
 ## Notes on AI Hub build 154
 
@@ -288,7 +340,7 @@ AI Hub is pre-release, and a few things are worth knowing. Details and workaroun
 
 ## Learn how it is built
 
-[TUTORIAL.md](TUTORIAL.md) walks through building this agent step by step with AI Hub: declarative agents, tools, skills, policies, RAG, the Config Store and Wallet, and measuring it.
+[TUTORIAL.md](TUTORIAL.md) walks through building this agent step by step with AI Hub: declarative agents, tools, skills, policies, RAG, the Config Store and Wallet, and measuring it, then adding an agent to a production you already have.
 
 ## Licence
 
