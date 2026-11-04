@@ -1,0 +1,105 @@
+/* Layout: sidebar rail and overlay, responsive rules. Loaded after workbench.css. */
+
+:root { --side-w: 256px; --side-rail: 64px; }
+body.side-collapsed { --side-w: var(--side-rail); }
+
+/* The sidebar is always fixed; Tabler's own narrow-screen top bar is not used */
+.navbar-vertical { position: fixed !important; top: 0; bottom: 0; left: 0; width: var(--side-w) !important; z-index: 1030; overflow-x: hidden; overflow-y: auto; transition: width .2s ease, transform .2s ease; }
+.navbar-vertical .navbar-nav { flex-direction: column !important; flex-wrap: nowrap !important; flex-grow: 0; }
+.navbar-vertical .side-foot { margin-top: auto !important; }
+.page-wrapper { margin-left: var(--side-w) !important; transition: margin-left .2s ease; min-width: 0; }
+@media (prefers-reduced-motion: reduce) { .navbar-vertical, .page-wrapper { transition: none; } }
+
+.brand { display: flex; align-items: flex-start; gap: 8px; padding: 12px 12px 6px; }
+.brand-t { padding-top: 6px; min-width: 0; font-size: 17px; line-height: 1.25; }
+.brand-t small { display: block; }
+.side-btn { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; flex: none; padding: 0; border: 0; border-radius: 8px; background: transparent; color: #c7d0dd; font-size: 22px; cursor: pointer; }
+.side-btn:hover, .side-btn:focus-visible { background: #1d2c44; color: #fff; outline: none; }
+.side-btn.side-open { display: none; color: var(--text, #101828); }
+.side-btn.side-open:hover { background: #e9edf3; }
+.navbar-vertical .nav-link { position: relative; }
+.navbar-vertical .nl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+#side-back { position: fixed; inset: 0; background: rgba(16, 24, 40, .45); z-index: 1029; }
+
+/* icon rail */
+@media (min-width: 768px) {
+  body.side-collapsed .brand { justify-content: center; padding: 12px 0 6px; }
+  body.side-collapsed .brand-t,
+  body.side-collapsed .navbar-vertical .nl,
+  body.side-collapsed .navbar-vertical .ti-external-link,
+  body.side-collapsed .side-foot > div:not(:first-child),
+  body.side-collapsed #sf-prod { display: none !important; }
+  body.side-collapsed .navbar-vertical .nav-link { justify-content: center; padding: .6rem 0; margin: 2px 8px; }
+  body.side-collapsed .navbar-vertical .nav-link > i { margin-right: 0; }
+  body.side-collapsed .nav-grp { font-size: 0 !important; line-height: 0; height: 1px; padding: 0 !important; margin: 12px 18px !important; background: #1d2c44; }
+  body.side-collapsed .side-foot { padding: 14px 0; text-align: center; }
+  body.side-collapsed .side-foot .dot { margin-right: 0; }
+  body.side-collapsed #nav-waiting { position: absolute; top: 2px; right: 4px; padding: 1px 5px; font-size: 10px; }
+}
+
+/* under 768 px: the sidebar is an overlay behind the menu button */
+@media (max-width: 767.98px) {
+  .navbar-vertical { width: min(280px, 86vw) !important; transform: translateX(-100%); }
+  body.side-open .navbar-vertical { transform: none; box-shadow: 0 0 28px rgba(0, 0, 0, .45); }
+  .page-wrapper { margin-left: 0 !important; }
+  .side-btn.side-open { display: inline-flex; }
+}
+
+/* Overview recent decisions: fixed columns that wrap, so the card never scrolls sideways */
+.ov-table { table-layout: fixed; width: 100%; margin: 0; }
+.ov-table th, .ov-table td { padding-left: 8px; padding-right: 8px; font-size: 13px; }
+.ov-table td { overflow: hidden; text-overflow: ellipsis; }
+.ov-table td.wrapok { white-space: normal; }
+.ov-table .tag { white-space: nowrap; }
+.ov-table th.go, .ov-table td.go { text-align: right; }
+
+/* ---- responsive pass ---- */
+/* Wide tables scroll inside their card; the name column stays in view */
+.msg-table td:nth-child(2), .msg-table th:nth-child(2),
+.wb-table td:first-child, .wb-table th:first-child,
+#tab-trust .table-responsive .table td:first-child, #tab-trust .table-responsive .table th:first-child,
+#tab-cost .table-responsive .table td:first-child, #tab-cost .table-responsive .table th:first-child { position: sticky; left: 0; z-index: 2; background: var(--panel, #fff); }
+.msg-table thead th:nth-child(2), .wb-table thead th:first-child, .table-responsive .table thead th:first-child { background: #f8fafc; }
+.msg-table tbody tr:hover > td:nth-child(2), .wb-table tbody tr:hover > td:first-child { background: #f6f7f9; }
+.wb-sec { overflow-x: auto; }
+@media (max-width: 1100px) {
+  .msg-table { min-width: 900px; }
+  .wb-table { min-width: 940px; }
+}
+@media (max-width: 991.98px) {
+  .page-header .row > .col-auto { width: 100%; }
+  .page-header .row > .col-auto.d-flex { justify-content: flex-start; }
+}
+@media (max-width: 767.98px) {
+  .container-fluid.px-4 { padding-left: 12px !important; padding-right: 12px !important; }
+  .page-title { font-size: 20px; }
+  .kpi .value { font-size: 28px; }
+  .btn, button.btn, .btn-sm { min-height: 36px; }
+  .btn-icon, .btn-sm.btn-icon { min-width: 36px; }
+  .side-btn { width: 44px; height: 44px; }
+  .msg-toolbar .form-select, .msg-toolbar .msg-search, .wb-bar .form-select, .wb-bar .wb-search { max-width: none; width: 100%; }
+  .msg-toolbar #msg-eval-slot { margin-left: 0 !important; }
+  .wb-bar .btn.ms-auto { margin-left: 0 !important; }
+  .wb-tabs { overflow-x: auto; flex-wrap: nowrap; }
+  .wb-tab { white-space: nowrap; }
+  .card-header { flex-wrap: wrap; gap: 6px; }
+  .wz-stepper { flex-wrap: wrap; }
+  .wz-st { flex: 1 1 45%; padding: 8px 10px; }
+}
+
+/* Stacked grids: 1fr alone lets wide content stretch the column past the screen */
+@media (max-width: 1100px) {
+  .wz-lay, .wb-bgrid, .wb-two, .wb-mapgrid { grid-template-columns: minmax(0, 1fr); }
+}
+.wz-lay > *, .wb-bgrid > *, .wb-two > *, .wb-mapgrid > * { min-width: 0; }
+
+/* touch targets on tablets and phones */
+@media (max-width: 1000px) {
+  .btn, button.btn, .btn-sm, .wb-tab { min-height: 40px; }
+  .linkbtn, .card-actions .info, .title-info, button.info { min-height: 40px; min-width: 40px; display: inline-flex; align-items: center; justify-content: center; }
+  .wb-acts .btn, .msg-table td.go .btn { min-height: 40px; }
+  button:not([class*="btn"]):not(.linkbtn):not(.value):not(.info) { min-height: 40px; }
+}
+
+/* Side panels: 100vw includes the scrollbar, so cap by the visible viewport too */
+#msg-panel, #help-panel, .wb-drawer { max-width: 100%; }

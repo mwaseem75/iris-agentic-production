@@ -6,7 +6,8 @@
 <title>Agentic Production</title>
 <link rel="stylesheet" href="vendor/tabler/tabler.min.css">
 <link rel="stylesheet" href="vendor/tabler/tabler-icons.min.css">
-<link rel="stylesheet" href="workbench.css?v=8.20.23">
+<link rel="stylesheet" href="workbench.css?v=8.20.31">
+<link rel="stylesheet" href="layout.css?v=8.20.31">
 <style>
 :root {
   --tblr-font-sans-serif: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -276,23 +277,24 @@ td.go { white-space: nowrap; }
 </head>
 <body>
 <div id="help-back" class="hidden"></div>
+<div id="side-back" class="hidden"></div>
 <aside id="help-panel" class="hidden" role="dialog" aria-label="About this card"><button type="button" id="help-close" style="float:right">Close</button><h2 id="help-title"></h2><div id="help-body"></div></aside>
 <div class="page">
   <aside class="navbar navbar-vertical navbar-expand-lg" data-bs-theme="dark">
     <div class="container-fluid d-flex flex-column h-100 p-0">
-      <div class="brand"><i class="ti ti-topology-star-3 me-2"></i>Agentic Production<small>AI control plane for IRIS Interoperability</small></div>
+      <div class="brand"><button type="button" id="side-toggle" class="side-btn" aria-label="Collapse sidebar" aria-expanded="true" aria-controls="nav"><i class="ti ti-menu-2"></i></button><div class="brand-t"><i class="ti ti-topology-star-3 me-2"></i>Agentic Production<small>AI control plane for IRIS Interoperability</small></div></div>
       <ul class="navbar-nav pt-3 w-100" id="nav">
-        <li class="nav-item"><a class="nav-link active" data-tab="overview" href="#overview"><i class="ti ti-layout-dashboard"></i>Overview</a></li>
-        <li class="nav-item"><a class="nav-link" data-tab="messages" href="#messages"><i class="ti ti-messages"></i>Messages<span class="badge bg-orange text-white ms-auto hidden" id="nav-waiting"></span></a></li>
-        <li class="nav-item"><a class="nav-link" data-tab="trust" href="#trust"><i class="ti ti-shield-check"></i>Trust &amp; evaluation</a></li>
-        <li class="nav-item"><a class="nav-link" data-tab="cost" href="#cost"><i class="ti ti-coin"></i>Cost</a></li>
+        <li class="nav-item"><a class="nav-link active" data-tab="overview" href="#overview"><i class="ti ti-layout-dashboard"></i><span class="nl">Overview</span></a></li>
+        <li class="nav-item"><a class="nav-link" data-tab="messages" href="#messages"><i class="ti ti-messages"></i><span class="nl">Messages</span><span class="badge bg-orange text-white ms-auto hidden" id="nav-waiting"></span></a></li>
+        <li class="nav-item"><a class="nav-link" data-tab="trust" href="#trust"><i class="ti ti-shield-check"></i><span class="nl">Trust &amp; evaluation</span></a></li>
+        <li class="nav-item"><a class="nav-link" data-tab="cost" href="#cost"><i class="ti ti-coin"></i><span class="nl">Cost</span></a></li>
         <li class="nav-grp">AI Hub Workbench</li>
-        <li class="nav-item"><a class="nav-link" data-tab="wbnew" href="#wbnew"><i class="ti ti-wand"></i>Create an agent</a></li>
-        <li class="nav-item"><a class="nav-link" data-tab="wblib" href="#wblib"><i class="ti ti-books"></i>Library</a></li>
-        <li class="nav-item"><a class="nav-link" data-tab="wbprod" href="#wbprod"><i class="ti ti-route"></i>Production map</a></li>
-        <li class="nav-item"><a class="nav-link" data-tab="settings" href="#settings"><i class="ti ti-settings"></i>Settings</a></li>
-        <li class="nav-item mt-3"><a class="nav-link hidden" id="inbox-link" target="_blank" rel="noopener"><i class="ti ti-inbox"></i>Workflow inbox <i class="ti ti-external-link ms-auto" style="font-size:14px;margin:0"></i></a></li>
-        <li class="nav-item"><a class="nav-link hidden" id="prod-link" target="_blank" rel="noopener"><i class="ti ti-route"></i>Production <i class="ti ti-external-link ms-auto" style="font-size:14px;margin:0"></i></a></li>
+        <li class="nav-item"><a class="nav-link" data-tab="wbnew" href="#wbnew"><i class="ti ti-wand"></i><span class="nl">Create an agent</span></a></li>
+        <li class="nav-item"><a class="nav-link" data-tab="wblib" href="#wblib"><i class="ti ti-books"></i><span class="nl">Library</span></a></li>
+        <li class="nav-item"><a class="nav-link" data-tab="wbprod" href="#wbprod"><i class="ti ti-route"></i><span class="nl">Production map</span></a></li>
+        <li class="nav-item"><a class="nav-link" data-tab="settings" href="#settings"><i class="ti ti-settings"></i><span class="nl">Settings</span></a></li>
+        <li class="nav-item mt-3"><a class="nav-link hidden" id="inbox-link" target="_blank" rel="noopener"><i class="ti ti-inbox"></i><span class="nl">Workflow inbox</span> <i class="ti ti-external-link ms-auto" style="font-size:14px;margin:0"></i></a></li>
+        <li class="nav-item"><a class="nav-link hidden" id="prod-link" target="_blank" rel="noopener"><i class="ti ti-route"></i><span class="nl">Production</span> <i class="ti ti-external-link ms-auto" style="font-size:14px;margin:0"></i></a></li>
       </ul>
       <div class="side-foot w-100">
         <div><span class="dot" id="sf-dot"></span><span id="sf-prod">Production</span></div>
@@ -309,7 +311,7 @@ td.go { white-space: nowrap; }
         <div class="row align-items-center g-2">
           <div class="col">
             <div class="text-secondary" style="font-size:13px" id="crumb">Agentic Production</div>
-            <div class="d-flex align-items-center gap-2"><h2 class="page-title" id="ptitle">Overview</h2><button type="button" class="title-info hidden" id="ptitle-info" title="About this page" aria-label="About this page"><i class="ti ti-info-circle"></i></button></div>
+            <div class="d-flex align-items-center gap-2"><button type="button" id="side-open" class="side-btn side-open" aria-label="Open menu" aria-expanded="false" aria-controls="nav"><i class="ti ti-menu-2"></i></button><h2 class="page-title" id="ptitle">Overview</h2><button type="button" class="title-info hidden" id="ptitle-info" title="About this page" aria-label="About this page"><i class="ti ti-info-circle"></i></button></div>
             <div class="text-secondary hidden" style="font-size:14px" id="psub"></div>
           </div>
           <div class="col-auto d-flex flex-wrap align-items-center gap-3" id="hdr-ctl">
@@ -363,8 +365,9 @@ td.go { white-space: nowrap; }
             <div class="card" data-info="recent">
               <div class="card-header"><h3 class="card-title">Recent decisions</h3><div class="card-actions"><a href="#messages" data-goto="messages">All messages &rarr;</a></div></div>
               <div class="table-responsive">
-                <table class="table table-vcenter card-table">
-                  <thead><tr><th>Time (UTC)</th><th>Message</th><th>Problem</th><th>Agent proposed</th><th>Outcome</th><th class="text-end">Cost</th><th></th></tr></thead>
+                <table class="table table-vcenter card-table ov-table">
+                  <colgroup><col style="width:19%"><col style="width:14%"><col style="width:16%"><col style="width:15%"><col style="width:24%"><col style="width:12%"></colgroup>
+                  <thead><tr><th>Time (UTC)</th><th>Message</th><th>Problem</th><th>Agent's proposal</th><th>Result</th><th class="go">Flow</th></tr></thead>
                   <tbody id="ov-recent"></tbody>
                 </table>
               </div>
@@ -414,6 +417,7 @@ td.go { white-space: nowrap; }
             <span id="msg-eval-slot" class="ms-auto"></span>
           </div>
           <p class="muted m-3 hidden" id="dec-note">No live traffic yet. Switch on "Include eval runs" to see eval messages.</p>
+          <div class="table-responsive">
           <table class="table table-vcenter table-hover card-table msg-table">
             <colgroup><col style="width:12%"><col style="width:8%"><col style="width:10%"><col style="width:12%"><col style="width:11%"><col style="width:7%"><col style="width:20%"><col style="width:9%"><col style="width:11%"></colgroup>
             <thead><tr>
@@ -423,6 +427,7 @@ td.go { white-space: nowrap; }
             </tr></thead>
             <tbody id="decisions"></tbody>
           </table>
+          </div>
           <div class="card-footer d-flex align-items-center flex-wrap gap-2">
             <span class="text-secondary" id="dec-range"></span>
             <ul class="pagination m-0 ms-auto" id="dec-pages"></ul>
@@ -966,16 +971,14 @@ function renderRecent(rows) {
     tr.addEventListener("click", function () { window.flowOpen(d.ID, rowNs); });
     cell(tr, d.CreatedAt ? d.CreatedAt.substring(5, 16) : "", "text-secondary");
     cell(tr, msgName(d), "mono");
-    cell(tr, ecSpan(d.ErrorClass));
-    cell(tr, agentSpan(d));
-    var td = cell(tr, outcomeTag(d.Outcome));
-    if (d.flagged && d.flagged.length) td.appendChild(tag("flagged", "bad"));
-    var c = cell(tr, costText(d), "text-end");
-    if (!d.agentCalled) c.classList.add("text-secondary");
-    cell(tr, flowLink(d, rowNs));
+    cell(tr, ecSpan(d.ErrorClass), "wrapok");
+    cell(tr, agentSpan(d), "wrapok");
+    var td = cell(tr, outcomeTag(d.Outcome), "wrapok");
+    if (d.flagged && d.flagged.length) { var fl = el("i", null, "ti ti-flag-3 msg-flag"); fl.title = "Prompt-injection text flagged"; td.appendChild(fl); }
+    cell(tr, flowLink(d, rowNs), "go");
     body.appendChild(tr);
   });
-  if (!rows.length) { var e = el("tr"); cell(e, "No decisions yet.", "muted").colSpan = 7; body.appendChild(e); }
+  if (!rows.length) { var e = el("tr"); cell(e, "No decisions yet.", "muted").colSpan = 6; body.appendChild(e); }
 }
 
 // Getting started buttons use the existing burst endpoint and the existing View flow
@@ -2070,6 +2073,48 @@ Array.prototype.forEach.call(document.querySelectorAll("#nav .nav-link[data-tab]
 var lastTab = "overview";
 try { lastTab = localStorage.getItem("agenticprod.tab") || "overview"; } catch (e) {}
 showTab(lastTab);
+// ---- sidebar: icon rail on wide screens, overlay under 768 px ----
+(function () {
+  var KEY = "agenticprod.sideCollapsed";
+  var body = document.body, toggle = document.getElementById("side-toggle"), openBtn = document.getElementById("side-open"), back = document.getElementById("side-back");
+  var narrowQ = window.matchMedia("(max-width: 767.98px)");
+  function saved() { try { return localStorage.getItem(KEY); } catch (e) { return null; } }
+  function labelLinks(on) {
+    Array.prototype.forEach.call(document.querySelectorAll("#nav .nav-link"), function (a) {
+      var nl = a.querySelector(".nl");
+      if (on && nl) a.title = nl.textContent; else a.removeAttribute("title");
+    });
+  }
+  function settle() { setTimeout(function () { window.dispatchEvent(new Event("resize")); }, 260); }
+  function setCollapsed(c, remember) {
+    body.classList.toggle("side-collapsed", c);
+    toggle.setAttribute("aria-expanded", c ? "false" : "true");
+    toggle.setAttribute("aria-label", c ? "Expand sidebar" : "Collapse sidebar");
+    labelLinks(c);
+    if (remember) { try { localStorage.setItem(KEY, c ? "1" : "0"); } catch (e) {} }
+    settle();
+  }
+  function setOverlay(o) {
+    body.classList.toggle("side-open", o);
+    back.classList.toggle("hidden", !o);
+    openBtn.setAttribute("aria-expanded", o ? "true" : "false");
+    if (o) toggle.focus(); else if (document.activeElement === toggle) openBtn.focus();
+  }
+  var s = saved();
+  setCollapsed(s === "1" ? true : s === "0" ? false : window.innerWidth < 1000, false);
+  toggle.addEventListener("click", function () {
+    if (narrowQ.matches) setOverlay(false); else setCollapsed(!body.classList.contains("side-collapsed"), true);
+  });
+  openBtn.addEventListener("click", function () { setOverlay(!body.classList.contains("side-open")); });
+  back.addEventListener("click", function () { setOverlay(false); });
+  document.getElementById("nav").addEventListener("click", function (e) {
+    if (narrowQ.matches && e.target.closest("a")) setOverlay(false);
+  });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && body.classList.contains("side-open")) setOverlay(false); });
+  var onWide = function () { if (!narrowQ.matches && body.classList.contains("side-open")) setOverlay(false); settle(); };
+  if (narrowQ.addEventListener) narrowQ.addEventListener("change", onWide); else narrowQ.addListener(onWide);
+})();
+
 document.getElementById("more").addEventListener("toggle", drawPending);
 function resetPage() { decPage = 1; renderMessages(); }
 document.getElementById("dec-q").addEventListener("input", resetPage);
@@ -2147,10 +2192,10 @@ setInterval(load, 30000);
     <details id="story-msg-box"><summary>Message (patient name, birth date, address and phone masked)</summary><pre id="story-msg"></pre></details>
   </div>
 </aside>
-<script src="flow.js?v=8.20.23"></script>
-<script src="workbench.js?v=8.20.23"></script>
-<script src="builder.js?v=8.20.23"></script>
-<script src="wizard.js?v=8.20.23"></script>
-<script src="addprod.js?v=8.20.23"></script>
+<script src="flow.js?v=8.20.31"></script>
+<script src="workbench.js?v=8.20.31"></script>
+<script src="builder.js?v=8.20.31"></script>
+<script src="wizard.js?v=8.20.31"></script>
+<script src="addprod.js?v=8.20.31"></script>
 </body>
 </html>
