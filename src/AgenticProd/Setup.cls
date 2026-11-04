@@ -368,7 +368,8 @@ ClassMethod LegacyDemo() As %Status
 		$$$ThrowOnError(..LegacyDashboardGrants())
 		New $NAMESPACE
 		Set $NAMESPACE = ..#LEGACYNS
-		$$$ThrowOnError($system.OBJ.LoadDir(##class(AgenticProd.Paths).Dir("legacy/src/"), "ck-d", .tErrors, 1))
+		// multicompile=0: under IPM the install runs in a transaction that still holds the namespace lock, so work queue workers entering LEGACY wait on it forever
+		$$$ThrowOnError($system.OBJ.LoadDir(##class(AgenticProd.Paths).Dir("legacy/src/"), "ck-d/multicompile=0", .tErrors, 1))
 		$$$ThrowOnError(##class(Legacy.Setup).Run())
 	} Catch ex {
 		Set tSC = ex.AsStatus()
