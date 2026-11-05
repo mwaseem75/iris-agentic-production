@@ -15,8 +15,8 @@
 </script>
 <link rel="stylesheet" href="vendor/tabler/tabler.min.css">
 <link rel="stylesheet" href="vendor/tabler/tabler-icons.min.css">
-<link rel="stylesheet" href="workbench.css?v=8.20.35">
-<link rel="stylesheet" href="layout.css?v=8.20.35">
+<link rel="stylesheet" href="workbench.css?v=8.20.36">
+<link rel="stylesheet" href="layout.css?v=8.20.36">
 <style>
 :root {
   --tblr-font-sans-serif: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -1475,7 +1475,8 @@ function renderMetrics(m) {
     tile("Approval wait", ap.answered ? secs(ap.p50Seconds) + " p50" : "—", ap.answered ? secs(ap.p95Seconds) + " p95, " + num(ap.answered) + " answered" : "no answered tasks"),
     tile("Human approval required", num(ap.waiting), ap.oldestWaitingSeconds == null ? "none open" : "oldest " + secs(ap.oldestWaitingSeconds)),
     tile("Learned mappings", num(m.learnedMappings), "distinct local codes"),
-    tile("Unsafe proposals blocked", num(m.unsafeBlocked), "changed by Triage, sent to a human")
+    tile("Unsafe proposals blocked", num(m.unsafeBlocked), "changed by Triage, sent to a human"),
+    tile("Replays on a changed prompt", num(m.replayPromptChanged), "recorded with a different prompt")
   );
 
   var groups = ["applied", "approval", "rejected", "resent", "other"];
@@ -2294,10 +2295,10 @@ setInterval(load, 30000);
     <details id="story-msg-box"><summary>Message (patient name, birth date, address and phone masked)</summary><pre id="story-msg"></pre></details>
   </div>
 </aside>
-<script src="flow.js?v=8.20.35"></script>
-<script src="workbench.js?v=8.20.35"></script>
-<script src="builder.js?v=8.20.35"></script>
-<script src="wizard.js?v=8.20.35"></script>
-<script src="addprod.js?v=8.20.35"></script>
+<script src="flow.js?v=8.20.36"></script>
+<script src="workbench.js?v=8.20.36"></script>
+<script src="builder.js?v=8.20.36"></script>
+<script src="wizard.js?v=8.20.36"></script>
+<script src="addprod.js?v=8.20.36"></script>
 </body>
 </html>

@@ -93,6 +93,19 @@ Method TestOldItemNamesMapToRenamedItems()
 	Do $$$AssertEquals(tJ.steps.%Get(tJ.steps.%Size() - 1).edge.to, "EhrOut", "stored hop to the old name shows as EhrOut")
 }
 
+/// A replay whose recording had a different prompt says so in the agent step.
+Method TestReplayWithChangedPromptIsMarked()
+{
+	Set tUsage = ..Usage("ESCALATE")
+	Set tJ = ##class(AgenticProd.UI.Journey).Build(..Log("ESCALATE"), "IRISAPP", ..Items(), [], [], tUsage, "", "SENT_FOR_APPROVAL")
+	Do $$$AssertNotTrue(tJ.steps.%Get(1).text [ "different prompt", "no mark by default")
+	Set tUsage.PromptMismatch = 1
+	Set tJ = ##class(AgenticProd.UI.Journey).Build(..Log("ESCALATE"), "IRISAPP", ..Items(), [], [], tUsage, "", "SENT_FOR_APPROVAL")
+	Set tIter = tJ.steps.%GetIterator(), tText = ""
+	While tIter.%GetNext(, .tStep) { Set:(tStep.kind = "agent") tText = tStep.text }
+	Do $$$AssertTrue(tText [ "Recorded with a different prompt", tText)
+}
+
 Method TestAutoFixApplied()
 {
 	Set tLog = ..Log("AUTO_FIX")

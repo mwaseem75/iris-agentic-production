@@ -312,6 +312,34 @@ Method TestReplayBurstWhileModeIsLive()
 	Do $$$AssertNotEquals(tDecision.AgentSessionId, "15", "live burst is not replayed")
 }
 
+/// A recording with no hash replays as before; one with the same hash is unmarked; a different hash
+/// still replays but the row says it was recorded with a different prompt. No LLM in any case.
+Method TestReplayComparesPromptHash()
+{
+	Set tOp = ##class(AgenticProd.Operation.Agent).%New("TestAgentOp")
+	Set tOp.Mode = "replay", tOp.Model = "replay-model"
+	Set tRequest = ##class(AgenticProd.Msg.TriageRequest).%New()
+	Set tRequest.HeaderId = -9102, tRequest.ErrorClass = "BAD_FORMAT"
+	Set tRequest.ErrorText = "OBX(1):14 '2026-10-23 10:15' is not a valid TS"
+	Set tHash = tOp.PromptHash(tRequest)
+	Do $$$AssertEquals($LENGTH(tHash), 16, "short hash")
+	Set tRequest.ErrorText = "another error"
+	Do $$$AssertNotEquals(tOp.PromptHash(tRequest), tHash, "input changes the hash")
+	Set tRequest.ErrorText = "OBX(1):14 '2026-10-23 10:15' is not a valid TS"
+	Set tDecision = {"decision":"ESCALATE","error_class":"OTHER","confidence":0.5,"reason":"recorded"}
+	For tCase = "T94", "T95", "T96" {
+		Set tRecorded = $CASE(tCase, "T94": "", "T95": tHash, : "0000000000000000")
+		Do $$$AssertStatusOK(..AddRecorded(tCase, "replay-model", tDecision, "16", 0, tRecorded))
+		Set tRequest.ControlId = "EV9999-"_tCase
+		Do $$$AssertStatusOK(tOp.Triage(tRequest, .tReplayed))
+		Do $$$AssertEquals(tReplayed.Reason, "recorded", tCase_": replayed whatever the hash")
+		Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 1 PromptMismatch, PromptHash FROM AgenticProd_Data.Usage WHERE HeaderId = -9102 AND Replay = 1 AND CaseId = ? ORDER BY ID DESC", tCase)
+		Do tRS.%Next()
+		Do $$$AssertEquals(+tRS.PromptMismatch, +(tCase = "T96"), tCase_": mismatch only for a different hash")
+		Do $$$AssertEquals(tRS.PromptHash, tHash, tCase_": replay row keeps the current hash")
+	}
+}
+
 Method TestReplayWithoutRecordEscalates()
 {
 	Set tOp = ##class(AgenticProd.Operation.Agent).%New("TestAgentOp")
@@ -330,7 +358,7 @@ Method TestReplayWithoutRecordEscalates()
 }
 
 /// A live Usage row as Operation.Agent writes it (or a replay row when pReplay).
-Method AddRecorded(pCase As %String, pModel As %String, pDecision As %DynamicObject, pSession As %String, pReplay As %Boolean) As %Status
+Method AddRecorded(pCase As %String, pModel As %String, pDecision As %DynamicObject, pSession As %String, pReplay As %Boolean, pHash As %String = "") As %Status
 {
 	Set tRow = ##class(AgenticProd.Data.Usage).%New()
 	Set tRow.HeaderId = -9102
@@ -340,6 +368,7 @@ Method AddRecorded(pCase As %String, pModel As %String, pDecision As %DynamicObj
 	Set tRow.DecisionJSON = pDecision.%ToJSON()
 	Set tRow.Decision = pDecision.decision
 	Set tRow.Replay = pReplay
+	Set tRow.PromptHash = pHash
 	Quit tRow.%Save()
 }
 

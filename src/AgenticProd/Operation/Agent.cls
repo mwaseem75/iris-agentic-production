@@ -230,6 +230,7 @@ Method Triage(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As Age
 		Set tUsage.Confidence = pResponse.Confidence
 		Set tUsage.CaseId = ##class(AgenticProd.Eval.Runner).CaseOf(pRequest.ControlId, .tRunId)
 		Set tUsage.EvalRunId = tRunId
+		Set tUsage.PromptHash = ..PromptHash(pRequest)
 		$$$ThrowOnError(pResponse.%JSONExportToString(.tJSON))
 		Set tUsage.DecisionJSON = tJSON
 		$$$ThrowOnError(tUsage.%Save())
@@ -363,12 +364,12 @@ Method Replay(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As Age
 	Try {
 		Set tStart = $ZHOROLOG
 		Set tCase = ##class(AgenticProd.Eval.Runner).CaseOf(pRequest.ControlId, .tRunId)
-		Set (tJSON, tAgentSession) = ""
+		Set (tJSON, tAgentSession, tRecordedHash) = ""
 		If tCase '= "" {
 			// Rows written before 5.4 have no DecisionJSON, so they cannot be replayed
-			Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 1 DecisionJSON, AgentSessionId FROM AgenticProd_Data.Usage WHERE CaseId = ? AND Model = ? AND COALESCE(Replay, 0) = 0 AND DecisionJSON IS NOT NULL ORDER BY ID DESC", tCase, ..Model)
+			Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 1 DecisionJSON, AgentSessionId, PromptHash FROM AgenticProd_Data.Usage WHERE CaseId = ? AND Model = ? AND COALESCE(Replay, 0) = 0 AND DecisionJSON IS NOT NULL ORDER BY ID DESC", tCase, ..Model)
 			If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message))
-			If tRS.%Next() Set tJSON = tRS.DecisionJSON, tAgentSession = tRS.AgentSessionId
+			If tRS.%Next() Set tJSON = tRS.DecisionJSON, tAgentSession = tRS.AgentSessionId, tRecordedHash = tRS.PromptHash
 		}
 		If tJSON = "" {
 			Set pResponse = ..EscalateDecision(pRequest, "replay: no recorded run for case '"_tCase_"' and model "_..Model)
@@ -385,6 +386,10 @@ Method Replay(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As Age
 		Set tUsage.Model = ..Model
 		Set (tUsage.PromptTokens, tUsage.CompletionTokens, tUsage.ReasoningTokens, tUsage.CostUsd) = 0
 		Set tUsage.Replay = 1
+		// Replays anyway; the mark tells the reader the recording may not fit today's prompt or input.
+		// A recording from before the hash existed has none and is replayed as before.
+		Set tUsage.PromptHash = ..PromptHash(pRequest)
+		Set tUsage.PromptMismatch = (tRecordedHash '= "") && (tRecordedHash '= tUsage.PromptHash)
 		Set tUsage.HeaderId = pRequest.HeaderId
 		Set tUsage.SessionId = pRequest.SessionId
 		Set tUsage.AgentSessionId = tAgentSession
@@ -463,6 +468,16 @@ Method Ask(pAgent As %AI.Agent, pSession As %AI.Agent.Session, pText As %String,
 Method AgentChat(pAgent As %AI.Agent, pSession As %AI.Agent.Session, pText As %String) As %RegisteredObject
 {
 	Quit pAgent.Chat(pSession, pText)
+}
+
+/// Short hash of what decides an agent answer up front: the agent class's PROMPTVERSION, the error
+/// class and the masked error text. The message body is left out: its control ID differs on every
+/// eval send, so it would never match a recording.
+Method PromptHash(pRequest As AgenticProd.Msg.TriageRequest) As %String
+{
+	Set tText = $PARAMETER(..AgentClass, "PROMPTVERSION")_$CHAR(10)_pRequest.ErrorClass_$CHAR(10)
+		_##class(AgenticProd.Tools.Base).MaskText(pRequest.HeaderId, pRequest.ErrorText)
+	Quit $EXTRACT(##class(%xsd.hexBinary).LogicalToXSD($SYSTEM.Encryption.SHA1Hash(tText)), 1, 16)
 }
 
 /// The task text sent to the agent. Error text comes from the interface, so it goes

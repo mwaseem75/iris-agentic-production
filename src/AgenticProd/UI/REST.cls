@@ -1142,6 +1142,7 @@ ClassMethod MetricsData(pIncludeEval As %Boolean = 0) As %DynamicObject
 	Set tOut.saved = {"calls":(+tSaved.N), "basedOnRuns":(+tRun.Runs), "tokens":null, "costUsd":null}
 	If tRun.Runs Set tOut.saved.tokens = tSaved.N * tRun.Tokens \ 1, tOut.saved.costUsd = $NORMALIZE(tSaved.N * tRun.Cost, 6)
 	Set tOut.learnedMappings = +..Rows("SELECT COUNT(DISTINCT LocalCode) AS N FROM AgenticProd_Data.DecisionLog d WHERE d.Outcome = 'APPROVED'"_tLogWhere).%Get(0).N
+	Set tOut.replayPromptChanged = +..Rows("SELECT COUNT(*) AS N FROM AgenticProd_Data.Usage WHERE Replay = 1 AND PromptMismatch = 1"_$SELECT(pIncludeEval: "", 1: " AND EvalRunId IS NULL")).%Get(0).N
 	Set tOut.unsafeBlocked = +..Rows("SELECT COUNT(*) AS N FROM AgenticProd_Data.DecisionLog d WHERE d.Outcome %STARTSWITH 'DOWNGRADED:'"_tLogWhere).%Get(0).N
 
 	Set tOut.steps = ..Quantiles("SELECT Name AS K, DurationMs AS V FROM AgenticProd_Data.Span WHERE Name IN ('router check', 'agent run', 'triage decision') AND DurationMs IS NOT NULL"

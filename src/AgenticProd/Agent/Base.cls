@@ -15,6 +15,10 @@ Parameter MAXSTEPS = 0;
 /// Daily spend limit in dollars, enforced by the production item that hosts the agent; 0 is none.
 Parameter DAILYBUDGET = 0;
 
+/// Bump when the instructions or skills change in a way that makes recorded runs stale. It goes
+/// into the replay hash (Operation.Agent.PromptHash).
+Parameter PROMPTVERSION = 1;
+
 /// Config Store LLM entry name (AI.LLM.<name>); set before %Init().
 Property ProviderConfig As %String(MAXLEN = 100);
 

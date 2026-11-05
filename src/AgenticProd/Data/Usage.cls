@@ -71,6 +71,13 @@ Property Replay As %Boolean [ InitialExpression = 0 ];
 /// Agent class of the run, so a hosted agent's DAILYBUDGET counts only its own spend.
 Property AgentClass As %String(MAXLEN = 128);
 
+/// Hash of the prompt version and the input the agent was given (Operation.Agent.PromptHash).
+/// Empty on rows recorded before it existed.
+Property PromptHash As %String(MAXLEN = 32);
+
+/// Replay rows only: 1 when the recorded run had a different PromptHash than the message being replayed.
+Property PromptMismatch As %Boolean [ InitialExpression = 0 ];
+
 Index HeaderIdx On HeaderId;
 
 Index EvalCaseIdx On (EvalRunId, CaseId);
@@ -189,6 +196,12 @@ Storage Default
 </Value>
 <Value name="28">
 <Value>AgentClass</Value>
+</Value>
+<Value name="29">
+<Value>PromptHash</Value>
+</Value>
+<Value name="30">
+<Value>PromptMismatch</Value>
 </Value>
 </Data>
 <DataLocation>^AgenticProd.Data.UsageD</DataLocation>

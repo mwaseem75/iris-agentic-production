@@ -19,7 +19,7 @@ ClassMethod Get(pNs As %String, pId As %String) As %DynamicObject
 	Set tLog = ##class(AgenticProd.Data.DecisionLog).%OpenId(pId)
 	Set tSpan = ##class(AgenticProd.UI.REST).Rows("SELECT TOP 1 Attributes FROM AgenticProd_Data.Span WHERE HeaderId = ? AND Namespace = ? AND Name = 'triage decision' ORDER BY ID DESC", tLog.HeaderId, pNs).%Get(0)
 	Set tSpanOutcome = $SELECT($IsObject(tSpan)&&(tSpan.Attributes '= ""): ##class(%DynamicObject).%FromJSON(tSpan.Attributes).%Get("agentic.final_outcome"), 1: "")
-	Set tUsage = ##class(AgenticProd.UI.REST).Rows("SELECT TOP 1 Model, Replay, Decision, Confidence, AgentSessionId, PromptTokens, CompletionTokens, CostUsd, DecisionJSON FROM AgenticProd_Data.Usage WHERE HeaderId = ? AND Namespace = ? ORDER BY ID DESC", tLog.HeaderId, pNs).%Get(0)
+	Set tUsage = ##class(AgenticProd.UI.REST).Rows("SELECT TOP 1 PromptMismatch, Model, Replay, Decision, Confidence, AgentSessionId, PromptTokens, CompletionTokens, CostUsd, DecisionJSON FROM AgenticProd_Data.Usage WHERE HeaderId = ? AND Namespace = ? ORDER BY ID DESC", tLog.HeaderId, pNs).%Get(0)
 	Set tTools = $SELECT($IsObject(tUsage)&&(tUsage.AgentSessionId '= ""): ##class(AgenticProd.UI.REST).Rows("SELECT Tool, Status, DurationMs, ResultLength, ErrorText, CreatedAt FROM AgenticProd_Data.ToolCall WHERE AgentSessionId = ? AND Namespace = ? ORDER BY ID", tUsage.AgentSessionId, pNs), 1: [])
 	Set tLearned = ##class(AgenticProd.UI.REST).Rows("SELECT TOP 1 ID, LocalCode, Loinc, Display, Reviewer, ApprovedAt FROM AgenticProd_Data.LearnedMapping WHERE DecisionLogId = ? AND Origin = 'Approved' ORDER BY ID DESC", pId).%Get(0)
 	Set tMessage = ##class(AgenticProd.UI.REST).MaskedMessage(tLog.HeaderId, .tSecrets, pNs)
@@ -159,7 +159,7 @@ ClassMethod Build(pLog As AgenticProd.Data.DecisionLog, pNs As %String, pItems A
 	} Else {
 		Set tCalls = pTools.%Size(), tAgentFrom = tPrevEnd
 		Set tTokens = +pUsage.PromptTokens + pUsage.CompletionTokens
-		Set tText = $SELECT(pUsage.Replay: "Replayed from a recorded run: no LLM call, no tools run.", 1: "Called "_pUsage.Model_".")
+		Set tText = $SELECT(pUsage.Replay: "Replayed from a recorded run: no LLM call, no tools run."_$SELECT(pUsage.PromptMismatch: " Recorded with a different prompt.", 1: ""), 1: "Called "_pUsage.Model_".")
 		Set tText = tText_" It proposed "_pUsage.Decision_$SELECT(pUsage.Confidence '= "": " with confidence "_$FNUMBER(pUsage.Confidence, "", 2), 1: "")_"."
 		Set tText = tText_" "_tCalls_" tool call"_$SELECT(tCalls=1: "", 1: "s")_", "_tTokens_" tokens, $"_$FNUMBER(+pUsage.CostUsd, "", 6)_" (tokens and cost are per run, not per tool call)."
 		Do ..Add(tSteps, "agent", "Agent", tText, tPrevEnd, tPrevEnd, {"node":(tAgentName), "sub":"model", "tokens":(tTokens), "costUsd":(+pUsage.CostUsd)}, tS0, "ok", .tPrevEnd)
