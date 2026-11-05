@@ -4,6 +4,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        IMAGE: ${IRIS_IMAGE:-irishealth-community:2026.3.0AI.154.0}
     env_file: 
       .env
     restart: always

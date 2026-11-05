@@ -2,13 +2,20 @@
 # One-command install: checks Docker and the image, creates .env, builds and starts, waits for healthy.
 # Usage: ./install.sh [path-to-image.tar.gz]   (or set IRIS_IMAGE_TAR)
 set -u
-IMAGE="irishealth-community:2026.3.0AI.154.0"
 URL="http://localhost:52773/agenticprod/dashboard.html"
 TAR="${1:-${IRIS_IMAGE_TAR:-}}"
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 
 cd "$(dirname "$0")" || die "cannot enter the repo folder"
+
+# Image name: environment first, then .env, then the tested build
+IMAGE="${IRIS_IMAGE:-}"
+if [ -z "$IMAGE" ] && [ -f .env ]; then
+  IMAGE="$(sed -n 's/^IRIS_IMAGE=//p' .env | tail -n 1 | tr -d '"')"
+fi
+IMAGE="${IMAGE:-irishealth-community:2026.3.0AI.154.0}"
+export IRIS_IMAGE="$IMAGE"
 
 # 1. Docker and compose
 command -v docker >/dev/null 2>&1 || die "docker is not installed or not on PATH"

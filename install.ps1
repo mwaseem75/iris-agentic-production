@@ -3,7 +3,6 @@
 param([string]$ImageTar = $env:IRIS_IMAGE_TAR)
 # Continue: with Stop, Windows PowerShell 5.1 throws when a native command writes to stderr
 $ErrorActionPreference = 'Continue'
-$Image = 'irishealth-community:2026.3.0AI.154.0'
 $Url = 'http://localhost:52773/agenticprod/dashboard.html'
 
 function Fail($msg) { Write-Host "ERROR: $msg" -ForegroundColor Red; exit 1 }
@@ -15,6 +14,15 @@ function Test-Image {
 }
 
 Set-Location $PSScriptRoot
+
+# Image name: environment first, then .env, then the tested build
+$Image = $env:IRIS_IMAGE
+if (-not $Image -and (Test-Path .env)) {
+    $line = Select-String -Path .env -Pattern '^IRIS_IMAGE=(.+)$' | Select-Object -Last 1
+    if ($line) { $Image = $line.Matches[0].Groups[1].Value.Trim().Trim('"') }
+}
+if (-not $Image) { $Image = 'irishealth-community:2026.3.0AI.154.0' }
+$env:IRIS_IMAGE = $Image
 
 # 1. Docker and compose
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { Fail 'docker is not installed or not on PATH' }

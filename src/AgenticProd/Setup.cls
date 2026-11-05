@@ -69,6 +69,12 @@ Parameter LEGACYNS = "LEGACY";
 /// AgenticProd.KB's hashed storage). Messages, lookups and Workflow data stay in LEGACY.
 Parameter LEGACYGLOBALS = "AgenticProd.Data.*,AgenticProd8110.*,EMZU.*";
 
+/// 1 when major.minor is 2026.3 or later, so 2027.1 passes.
+ClassMethod VersionOk(pMajor As %Integer, pMinor As %Integer) As %Boolean
+{
+	Quit (pMajor > 2026) || ((pMajor = 2026) && (pMinor >= 3))
+}
+
 /// pRoot: folder with kb/, eval/, web/, legacy/ and data/ (the IPM module parameter root); empty keeps
 /// the Docker mount or the folder IPM copied the files to (AgenticProd.Paths).
 ClassMethod Run(pRoot As %String = "") As %Status
@@ -77,7 +83,10 @@ ClassMethod Run(pRoot As %String = "") As %Status
 	Try {
 		// Plain IRIS has no EnsLib.HL7; the lab flow cannot run without it
 		If '##class(%Dictionary.CompiledClass).%ExistsId("EnsLib.HL7.Message") {
-			$$$ThrowStatus($$$ERROR($$$GeneralError, "This app needs InterSystems IRIS for Health 2026.3.0AI build 154"))
+			$$$ThrowStatus($$$ERROR($$$GeneralError, "This app needs InterSystems IRIS for Health with AI Hub (2026.3 or later)"))
+		}
+		If '..VersionOk($SYSTEM.Version.GetMajor(), $SYSTEM.Version.GetMinor()) {
+			$$$ThrowStatus($$$ERROR($$$GeneralError, "This app needs IRIS 2026.3 or later, found "_$SYSTEM.Version.GetNumber()))
 		}
 		$$$ThrowOnError(##class(AgenticProd.Paths).Init(pRoot))
 		$$$ThrowOnError(##class(AgenticProd.Data.PriceTable).Seed())
