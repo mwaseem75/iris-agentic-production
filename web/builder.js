@@ -115,7 +115,6 @@
     return wrap;
   }
 
-  // ---- shell ---------------------------------------------------------------------------------
   var left = null, codeEl, errEl, badge, msgEl, testBox, testOut, saveB, valB, argInputs = {}, polTool, polArgs;
   var META = { tool: ["tool", "database", "New SQL query tool", "Template · read-only · no ObjectScript needed"],
     skill: ["skill", "puzzle", "New skill", "Instructions and tools the agent loads only when it needs them"],
@@ -197,7 +196,6 @@
     b.appendChild(r2);
   }
 
-  // ---- tests (no AI) -------------------------------------------------------------------------
   function testCard() {
     var c = div("card"), h = div("card-header");
     h.appendChild(el("h3", cur.kind === "tool" ? "Test the tool" : "Test the policy", "card-title"));
@@ -276,7 +274,6 @@
     return wrap;
   };
 
-  // ---- preview, validate, save ---------------------------------------------------------------
   function errList(list) {
     var u = el("ul", null, "wb-errl"); list.forEach(function (t) { u.appendChild(el("li", t)); }); return u;
   }
@@ -315,7 +312,6 @@
       .then(function () { if (opts && opts.canEdit) valB.disabled = saveB.disabled = false; });
   }
 
-  // ---- entry points --------------------------------------------------------------------------
   function show() { host.classList.add("wb-building"); view.classList.remove("hidden"); window.scrollTo(0, 0); }
   function close() { host.classList.remove("wb-building"); view.classList.add("hidden"); cur = null; }
   function withOpts(fn) {

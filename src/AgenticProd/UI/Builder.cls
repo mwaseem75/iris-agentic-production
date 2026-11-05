@@ -18,7 +18,6 @@ Parameter OPS = "equals,contains,starts with";
 /// Words that never appear in a read-only query (checked outside string literals).
 Parameter FORBIDDEN = "INSERT,UPDATE,DELETE,DROP,ALTER,CREATE,GRANT,REVOKE,CALL,EXEC,EXECUTE,MERGE,TRUNCATE,INTO,COMMIT,ROLLBACK,LOCK";
 
-// ---- options -------------------------------------------------------------------------------
 
 /// Choices for the forms: provider configs, toolsets, skills and policies in this namespace.
 ClassMethod Options(pAdmin As %Boolean) As %DynamicObject
@@ -49,7 +48,6 @@ ClassMethod Options(pAdmin As %Boolean) As %DynamicObject
 	Quit tOut
 }
 
-// ---- generate ------------------------------------------------------------------------------
 
 /// {"class", "code", "spec", "errors":[]}. errors empty means the form is acceptable; compiling is
 /// a separate step (Validate). pClassOverride swaps the class name for scratch compiles.
@@ -162,7 +160,6 @@ ClassMethod ClassProblem(pClass As %String) As %String [ Internal ]
 	Quit ""
 }
 
-// ---- tool (SQL query ToolSet) --------------------------------------------------------------
 
 ClassMethod Cleantool(pSpec As %DynamicObject) As %DynamicObject [ Internal ]
 {
@@ -277,7 +274,6 @@ ClassMethod SpecBlock(pSpec As %DynamicObject) As %String [ Internal ]
 	Quit "/// Workbench form values; the builder reads this to reopen the class."_nl_"XData BuilderSpec [ MimeType = application/json ]"_nl_"{"_nl_pSpec.%ToJSON()_nl_"}"_nl_nl
 }
 
-// ---- skill ---------------------------------------------------------------------------------
 
 ClassMethod Cleanskill(pSpec As %DynamicObject) As %DynamicObject [ Internal ]
 {
@@ -315,7 +311,6 @@ ClassMethod Codeskill(pSpec As %DynamicObject, pClass As %String) As %String [ I
 	Quit tCode_..SpecBlock(pSpec)_"}"_nl
 }
 
-// ---- policy (protect arguments) ------------------------------------------------------------
 
 ClassMethod Cleanpolicy(pSpec As %DynamicObject) As %DynamicObject [ Internal ]
 {
@@ -370,7 +365,6 @@ ClassMethod Codepolicy(pSpec As %DynamicObject, pClass As %String) As %String [ 
 	Quit tCode_..SpecBlock(pSpec)_"}"_nl
 }
 
-// ---- agent ---------------------------------------------------------------------------------
 
 ClassMethod Cleanagent(pSpec As %DynamicObject) As %DynamicObject [ Internal ]
 {
@@ -424,7 +418,6 @@ ClassMethod Codeagent(pSpec As %DynamicObject, pClass As %String) As %String [ I
 	Quit tCode_..SpecBlock(pSpec)_"}"_nl
 }
 
-// ---- compile -------------------------------------------------------------------------------
 
 /// Writes pCode as class pClass and compiles it. The class stays; callers delete scratch classes.
 ClassMethod Compile(pClass As %String, pCode As %String) As %Status [ Internal ]
@@ -520,7 +513,6 @@ ClassMethod OpenSpec(pClass As %String) As %DynamicObject
 	Quit tSpec
 }
 
-// ---- tests without AI ----------------------------------------------------------------------
 
 /// Runs the tool with pArgs on a scratch copy: {"ok", "result", "elapsedMs", "errors":[]}.
 /// Runs as the logged-in user; the agent itself runs as agentic_agent with SELECT only.
@@ -567,7 +559,6 @@ ClassMethod TestPolicy(pSpec As %DynamicObject, pTool As %String, pArgs As %Dyna
 	Quit tOut
 }
 
-// ---- REST entry ----------------------------------------------------------------------------
 
 /// {"status":200|400|403, ...body}. pAction: generate, validate, save, test-tool, test-policy.
 /// Everything except generate is refused unless pAdmin.

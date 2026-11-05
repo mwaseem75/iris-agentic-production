@@ -34,7 +34,6 @@
       protectPid: !!starter.protectPid, audit: true, customOn: false, custom: [], maxOn: true, maxSteps: 8, budgetOn: true, dailyBudget: 0.5, sample: "", p: p };
   }
 
-  // ---- the spec the server understands -------------------------------------------------------
   function spec() {
     var pr = provider(), ts = [], sk = [];
     (opts.abilities || []).forEach(function (a) { if (S.on[a["class"]]) (a.kind === "skill" ? sk : ts).push(a["class"]); });
@@ -43,7 +42,6 @@
         maxSteps: S.maxOn ? Number(S.maxSteps) || 0 : 0, dailyBudget: S.budgetOn ? Number(S.dailyBudget) || 0 : 0 } };
   }
 
-  // ---- shell ---------------------------------------------------------------------------------
   var stepper = div("wz-stepper"), lay = div("wz-lay"), mainCol = div(), sumCol = div();
   lay.appendChild(mainCol); lay.appendChild(sumCol);
   host.appendChild(stepper); host.appendChild(lay);
@@ -84,7 +82,6 @@
     i.addEventListener("change", function () { fn(i.checked); }); l.appendChild(i); return l;
   }
 
-  // ---- step 1: goal --------------------------------------------------------------------------
   function goal(root) {
     var c = card("What should your agent do?", "Pick a starting point. You can change everything later.");
     var row = div("wz-goals");
@@ -124,7 +121,6 @@
     root.appendChild(c); root.appendChild(nav(false, true, "Next: abilities"));
   }
 
-  // ---- step 2: abilities ---------------------------------------------------------------------
   function abilities(root) {
     var c = card("What may the agent look up?", "Each ability is a read-only tool. Switch on only what it needs.");
     var add = btn("New ability", "btn-primary wz-add", "plus", openDrawer);
@@ -236,7 +232,6 @@
   function closeDrawer() { if (drawerEl) { document.body.removeChild(drawerEl); drawerEl = null; } }
   function errs(list) { var u = el("ul", null, "wb-errl"); list.forEach(function (t) { u.appendChild(el("li", t)); }); return u; }
 
-  // ---- step 3: rules -------------------------------------------------------------------------
   function rules(root) {
     var c = card("What must the agent never do?", "AI Hub checks these rules before every tool call. A blocked call never runs.");
     var list = div("wz-rules");
@@ -278,7 +273,6 @@
     c.body.appendChild(list); root.appendChild(c); root.appendChild(nav(true, true, "Next: try & save"));
   }
 
-  // ---- step 4: try & save --------------------------------------------------------------------
   function trySave(root) {
     var pr = provider();
     var c = card("Try it on one message", "A dry run: the agent reads, nothing is sent or changed.");
@@ -353,7 +347,6 @@
     doSave(function (cls) { if (window.wbAddProd) window.wbAddProd.open({ agentClass: cls, name: idOf(S.name) }); });
   }
 
-  // ---- summary card --------------------------------------------------------------------------
   function drawSummary() {
     clear(sumCol);
     var st = opts.starters.filter(function (s) { return s.id === S.starter; })[0], pr = provider();
@@ -383,7 +376,6 @@
     sumCol.appendChild(c);
   }
 
-  // ---- entry ---------------------------------------------------------------------------------
   function start() {
     get("api/workbench/wizard/options").then(function (o) {
       opts = o; S = fresh(o.starters[0]); step = 1; draw();

@@ -53,7 +53,6 @@ body.side-collapsed { --side-w: var(--side-rail); }
 .ov-table .tag { white-space: nowrap; }
 .ov-table th.go, .ov-table td.go { text-align: right; }
 
-/* ---- responsive pass ---- */
 /* Wide tables scroll inside their card; the name column stays in view */
 .msg-table td:nth-child(2), .msg-table th:nth-child(2),
 .wb-table td:first-child, .wb-table th:first-child,

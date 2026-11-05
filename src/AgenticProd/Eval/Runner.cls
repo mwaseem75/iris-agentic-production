@@ -420,7 +420,7 @@ ClassMethod PrepareAgent(pModel As %String, pMode As %String) As %Status
 	Try {
 		$$$ThrowOnError(##class(Ens.Director).GetProductionStatus(.tProduction, .tState))
 		If tState '= $$$eProductionStateRunning $$$ThrowStatus($$$ERROR($$$GeneralError, "production is not running"))
-		// An unset setting returns an error status; then it is simply applied
+		// An unset setting returns an error status; then it is applied
 		Set:##class(Ens.Director).GetHostSettingValue(..#AGENTITEM, "Model", .tSC1)'=pModel tSettings(..#AGENTITEM, "Host", "Model") = pModel
 		Set:##class(Ens.Director).GetHostSettingValue(..#AGENTITEM, "Mode", .tSC1)'=pMode tSettings(..#AGENTITEM, "Host", "Mode") = pMode
 		Quit:'$DATA(tSettings)

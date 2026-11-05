@@ -851,7 +851,7 @@ function renderSummary(s, m) {
   put("ai-per", "· " + money(s.costPerMessage) + " per message");
   var bar = document.getElementById("ai-budget-bar");
   put("ai-budget-t", !s.dailyTokenBudget ? "no daily budget" : s.tokensPercent + "% of " + num(s.dailyTokenBudget)
-    + (s.overBudget ? " — over budget: new messages go to a human" : ""));
+    + (s.overBudget ? ", over budget: new messages go to a human" : ""));
   // Bar width is capped at 100%; the text carries the real figure
   bar.style.width = s.dailyTokenBudget ? Math.min(100, s.tokensToday / s.dailyTokenBudget * 100).toFixed(1) + "%" : "0";
   bar.classList.toggle("bg-red", !!s.overBudget);
@@ -928,7 +928,6 @@ function outcomeTag(o) {
   return t;
 }
 
-// ---- cards: Info link and footer link, built from data-info / data-foot ----
 var CARD_INFO = {
   health: ["Production health", "Counts of failed messages the agent has triaged and what happened to them: fixed automatically, sent to a human, or rejected.", "Only whitelisted, meaning-preserving fixes are applied automatically. Everything else waits for human approval."],
   trust: ["Trust & safety", "These numbers show where the deterministic Triage step overruled or checked the agent.", "Grounding catches claims the agent could not trace to the message, its tool results or the LOINC knowledge base. A human reviewer approves every learned mapping."],
@@ -1858,7 +1857,7 @@ function renderSettings(s) {
   });
   compatKinds = s.compatKinds;
   fillSelect(document.getElementById("f-kinds"), s.providerKinds.concat(s.compatKinds).map(function (k) { return [k, kindLabel(k)]; }), "openai");
-  var choices = [["", "(.env default: OPENAI_API_KEY)"]].concat(s.providers.map(function (p) { return [p.name, p.name + " — " + p.kind + " " + p.model]; }));
+  var choices = [["", "(.env default: OPENAI_API_KEY)"]].concat(s.providers.map(function (p) { return [p.name, p.name + " (" + p.kind + " " + p.model + ")"]; }));
   fillSelect(document.getElementById("f-test-name"), choices, s.agents.ProviderConfig);
   fillSelect(document.getElementById("f-agent-provider"), choices, s.agents.ProviderConfig);
 
@@ -1919,7 +1918,7 @@ function renderSettings(s) {
   document.getElementById("set-used").textContent = "Used today (UTC): " + num(s.usedToday) + " tokens" + (budget ? " of " + num(budget) + " (" + Math.round(s.usedToday / budget * 100) + "%)" : "");
   var on = s.budgets.KillSwitch;
   document.getElementById("kill").classList.toggle("on", on);
-  document.getElementById("kill-state").replaceChildren(tag(on ? "ON — agent not called" : "off", on ? "bad" : "good"));
+  document.getElementById("kill-state").replaceChildren(tag(on ? "ON, agent not called" : "off", on ? "bad" : "good"));
   document.getElementById("kill-btn").textContent = on ? "Turn AI back on" : "Stop AI now";
 
   var pb = document.getElementById("set-prices");
@@ -2142,7 +2141,6 @@ Array.prototype.forEach.call(document.querySelectorAll("#nav .nav-link[data-tab]
 var lastTab = "overview";
 try { lastTab = localStorage.getItem("agenticprod.tab") || "overview"; } catch (e) {}
 showTab(lastTab);
-// ---- light/dark theme: the choice is applied in <head>; this button switches it and redraws the charts ----
 (function () {
   var btn = document.getElementById("theme-toggle");
   function paint() {
@@ -2163,7 +2161,6 @@ showTab(lastTab);
   });
   paint();
 })();
-// ---- sidebar: icon rail on wide screens, overlay under 768 px ----
 (function () {
   var KEY = "agenticprod.sideCollapsed";
   var body = document.body, toggle = document.getElementById("side-toggle"), openBtn = document.getElementById("side-open"), back = document.getElementById("side-back");

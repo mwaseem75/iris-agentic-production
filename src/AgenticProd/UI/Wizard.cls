@@ -28,7 +28,6 @@ Parameter PLAIN = "AgenticProd.Tools.Base|Read the failed message and its errors
 /// tool|sentence for the trial run; {name} is filled from the call's arguments.
 Parameter STEPTEXT = "get_failed_message|Read the failed message;get_error_events|Read the error log;get_similar_decisions|Looked at similar past decisions;get_segment|Read segment {segmentRef};search_interface_spec|Checked the interface spec for {topic};validate_fix|Tested a proposed fix;lookup_code|Looked up the code {localCode};search_loinc|Searched LOINC for {text};similar_past_mappings|Looked at past approved mappings";
 
-// ---- options -------------------------------------------------------------------------------
 
 /// Everything the wizard page needs to draw itself.
 ClassMethod Options(pAdmin As %Boolean) As %DynamicObject
@@ -171,7 +170,6 @@ ClassMethod AbilityRow(pClass As %String, pKind As %String, pName As %String, pD
 	Quit {"class":(pClass), "kind":(pKind), "title":(tTitle), "text":(tText), "tech":(pClass_" · "_tN_" tool"_$SELECT(tN=1: "", 1: "s")), "mine":($EXTRACT(pClass, 1, 5) = "MyAI."), "tools":(pTools)}
 }
 
-// ---- compose -------------------------------------------------------------------------------
 
 /// Class-name part from the agent's name: "Orders triage" gives OrdersTriage. "" when unusable.
 ClassMethod IdOf(pName As %String) As %String
@@ -256,7 +254,6 @@ ClassMethod AddErrors(pTo As %DynamicArray, pFrom As %DynamicArray) [ Internal ]
 	Do ..AppendAll(pTo, pFrom)
 }
 
-// ---- save ----------------------------------------------------------------------------------
 
 /// Saves the policy (when there are rules) and then the agent; both compile first as scratch copies
 /// inside Builder.Save. {"ok","saved","errors","classes":[]}.
@@ -280,7 +277,6 @@ ClassMethod Save(pSpec As %DynamicObject) As %DynamicObject
 	Quit tOut
 }
 
-// ---- trial run -----------------------------------------------------------------------------
 
 /// {"state":"ok"|"needs-confirm"|"blocked"|"invalid"|"failed", ...} (not "status": Handle puts the HTTP status there). Needs pConfirm for a live call. A process-private
 /// stub (^||AgenticProd.WizardStub, JSON {"toolCalls":[...],"answer":"","promptTokens":0,
@@ -419,7 +415,6 @@ ClassMethod StepText(pTool As %String, pArgs As %String) As %String [ Internal ]
 	Quit $ZSTRIP(tText, "<>W")
 }
 
-// ---- REST entry ----------------------------------------------------------------------------
 
 /// {"status":200|400|403, ...body}. pAction: compose (anyone), save and run (administrators).
 ClassMethod Handle(pAction As %String, pBody As %DynamicObject, pAdmin As %Boolean) As %DynamicObject

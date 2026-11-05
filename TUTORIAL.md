@@ -10,12 +10,12 @@ All facts about AI Hub below were checked on the early access **build 154**. AI 
 
 | Section | Topic |
 |---|---|
-| 1–2 | What AI Hub gives you, and your first agent call |
-| 3–5 | A declarative agent, tools, skills |
+| 1-2 | What AI Hub gives you, and your first agent call |
+| 3-5 | A declarative agent, tools, skills |
 | 6 | Running the agent inside a business operation |
 | 7 | Safety: policies, a restricted user, a deterministic decision-maker, grounding, memory |
-| 8–9 | RAG knowledge base, human in the loop, a learning loop |
-| 10–11 | Measuring it, Config Store and Wallet |
+| 8-9 | RAG knowledge base, human in the loop, a learning loop |
+| 10-11 | Measuring it, Config Store and Wallet |
 | 12 | Adding an agent to a production you already have (the Workbench) |
 | 13 | Build 154 notes |
 | 14 | Where to go next |

@@ -26,7 +26,6 @@
   function short(c) { var p = String(c || "").split("."); return p[p.length - 1]; }
   function key() { return S.ns + "|" + S.prod; }
 
-  // ---- public ---------------------------------------------------------------------------------
   function canAdd(cls) { return /^MyAI\.Agent\./.test(cls || ""); }
 
   // The Library card's part: the button and one chip per install with its Remove.
@@ -73,7 +72,6 @@
     }).catch(function (e) { button.disabled = false; window.alert(e.message); });
   }
 
-  // ---- dialog ---------------------------------------------------------------------------------
   function open(o) {
     close();
     S = { agentClass: o.agentClass, name: o.name || "", ns: "", prod: "", way: "failure", watch: {}, mode: "propose", role: NEWROLE, roleNew: "",
@@ -261,7 +259,6 @@
   }
   function selectText(n) { var r = document.createRange(); r.selectNodeContents(n); var s = window.getSelection(); s.removeAllRanges(); s.addRange(r); }
 
-  // ---- right side: what will be added, preview map -------------------------------------------
   function drawSide() {
     if (!elSide) return;
     clear(elSide);
@@ -317,7 +314,6 @@
     }
   }
 
-  // ---- footer ---------------------------------------------------------------------------------
   function drawFoot() {
     if (!elFoot) return;
     clear(elFoot);

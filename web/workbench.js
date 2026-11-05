@@ -29,11 +29,9 @@
   function usd(n) { return "$" + Number(n || 0).toFixed(4); }
   function short(n) { var p = String(n || "").split("."); return p[p.length - 1]; }
 
-  // ---- shell ---------------------------------------------------------------------------------
   // The sidebar owns the three views; showSub only asks the dashboard to switch tab
   function showSub(name) { if (window.showTab) window.showTab(TAB[name]); }
 
-  // ---- library -------------------------------------------------------------------------------
   var libHead = div("wb-lh"), libTabs = div("wb-tabs"), libBar = div("wb-bar"), libBody = div("wb-body"), libNote = div("wb-note");
   var search = el("input", null, "form-control wb-search");
   search.placeholder = "Search by name or class"; search.type = "search";
@@ -60,7 +58,6 @@
       .catch(function (e) { libNote.textContent = "Could not load the Library: " + e.message; });
   }
 
-  // ---- row data ----
   function isYours(item) { return String(item["class"]).indexOf("MyAI.") === 0; }
   function usesOf(item, g) {
     if (g.type === "agent") return item.toolsets + " toolset" + (item.toolsets === 1 ? "" : "s") + " · " + item.skills + " skill" + (item.skills === 1 ? "" : "s");
@@ -249,7 +246,6 @@
     drawer.appendChild(body);
   }
 
-  // ---- production map ------------------------------------------------------------------------
   var prodBar = div("wb-bar"), pick = el("select", null, "form-select wb-pick");
   var runBadge = el("span", null, "badge"), statAi = el("span", null, "wb-stat"), stat24 = el("span", null, "wb-stat");
   var prodNote = div("wb-note"), grid = div("wb-mapgrid"), cv = div("wb-cv"), side = div("wb-side");
@@ -551,7 +547,6 @@
   window.workbenchReload = loadLib;
   window.workbenchRefresh = function () { loadProductions(); };
 
-  // ---- entry ---------------------------------------------------------------------------------
   window.workbenchShow = function (name) {
     var view = "";
     Object.keys(TAB).forEach(function (k) { if (TAB[k] === name) view = k; });

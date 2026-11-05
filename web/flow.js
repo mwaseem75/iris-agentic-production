@@ -28,7 +28,6 @@
   }
   function showError(e) { $("error").textContent = "Flow: " + e.message; $("error").classList.remove("hidden"); }
 
-  // ---- live status for the rows ----
   function statusTag(s) { var si = statusInfo(s); return el("span", si[0], "tag t-" + si[1]); }
   function byId(id) { return msgs.filter(function (x) { return x.id === id; })[0]; }
   // Flow list entry of one decision (current status from the Workflow task), for the Messages table
@@ -76,7 +75,6 @@
     return get("api/flow/map?ns=" + (panelOpen ? panelNs : ns) + evalParam()).then(function (m) { map = m; drawMap(); if (panelOpen) renderFacts(); }).catch(showError);
   }
 
-  // ---- journey ----
   function select(id, jns, keepStep, fresh) {
     var seq = ++loadSeq;
     selId = id; panelNs = jns;
@@ -189,7 +187,6 @@
     return e;
   }
 
-  // ---- workflow canvas ----
   var CW = 1000, CH = 456;
   var ORDER = ["trigger", "router", "agent", "guard", "triage"];
   var SUBS = ["model", "memory", "tools", "skills", "knowledge", "policies"];
@@ -359,7 +356,7 @@
       var list = nums[k].filter(function (n, i, a) { return a.indexOf(n) === i; }), from = list[0], prev = from, u = cvUi[k];
       u.steps = list;
       u.el.classList.add("click");
-      u.el.title = "steps " + (list.length > 1 && list[list.length - 1] - list[0] === list.length - 1 ? list[0] + "–" + list[list.length - 1] : list.join(", "));
+      u.el.title = "steps " + (list.length > 1 && list[list.length - 1] - list[0] === list.length - 1 ? list[0] + "-" + list[list.length - 1] : list.join(", "));
       u.tip = u.el.title;
       u.el.addEventListener("click", function (e) { e.stopPropagation(); pick(k, list[0]); });
       function flush(last) {
@@ -500,7 +497,6 @@
   }
   window.addEventListener("resize", fitCanvas);
 
-  // ---- burst ----
   function burst(confirm) {
     var n = +$("burst-n").value, mode = $("burst-mode").value, msg = $("burst-msg");
     msg.className = "msg"; msg.textContent = "";
