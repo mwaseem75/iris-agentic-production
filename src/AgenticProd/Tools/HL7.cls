@@ -500,6 +500,23 @@ ClassMethod IsNumber(pVal As %String) As %Boolean [ Internal ]
 	Quit $MATCH(pVal, "[+-]?(\d+(\.\d*)?|\.\d+)")
 }
 
+/// Values of the masked PID fields (MASKEDPID) with their components, for Tools.Base.MaskText.
+ClassMethod Secrets(pMsg As EnsLib.HL7.Message, Output pSecrets) [ Internal ]
+{
+	Kill pSecrets
+	Set tFS = $EXTRACT(pMsg.Separators), tSeps = $EXTRACT(pMsg.Separators, 2, 3)_$EXTRACT(pMsg.Separators, 5)
+	Set tRaw = $REPLACE($REPLACE(pMsg.OutputToString(), $CHAR(13,10), $CHAR(13)), $CHAR(10), $CHAR(13))
+	For i = 1:1:$LENGTH(tRaw, $CHAR(13)) {
+		Set tLine = $PIECE(tRaw, $CHAR(13), i)
+		Continue:($PIECE(tLine, tFS) '= "PID")
+		For f = 1:1:$LENGTH(..#MASKEDPID, ",") {
+			Set tField = $PIECE(..#MASKEDPID, ",", f)
+			Continue:tField=""
+			Do ##class(AgenticProd.Tools.Base).AddSecret($PIECE(tLine, tFS, tField + 1), tSeps, .pSecrets)
+		}
+	}
+}
+
 /// Message text with masked PID fields, one segment per line. Called by Tools.Base for
 /// get_failed_message (see Base MASKERS).
 ClassMethod MaskedText(pMsg As EnsLib.HL7.Message, Output pText As %String) As %Status

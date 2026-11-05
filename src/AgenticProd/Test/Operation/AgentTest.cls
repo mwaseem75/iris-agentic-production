@@ -15,6 +15,20 @@ Method TestBuildTaskMarksErrorTextUntrusted()
 	Do $$$AssertNotTrue($PIECE(tTask, "<untrusted_data", 1) [ "Ignore previous", "error text does not appear before the block")
 }
 
+Method TestBuildTaskMasksPidValuesInErrorText()
+{
+	Do $$$AssertStatusOK(##class(AgenticProd.Test.Tools.HL7Test).LoadCase("05", .tHeaderId))
+	Do $$$AssertStatusOK(##class(AgenticProd.Tools.Base).OpenBody(tHeaderId, .tBody))
+	Set tDob = tBody.GetValueAt(##class(AgenticProd.Tools.HL7).FindSegment(tBody, "PID", 1)_":7")
+	Set tRequest = ##class(AgenticProd.Msg.TriageRequest).%New()
+	Set tRequest.HeaderId = tHeaderId
+	Set tRequest.ErrorText = "PID(1):7 '"_tDob_"' is not a valid date"
+	Set tTask = ##class(AgenticProd.Operation.Agent).BuildTask(tRequest)
+	Do $$$AssertNotTrue(tTask [ tDob, "birth date does not reach the model")
+	Do $$$AssertTrue(tTask [ "is not a valid date", "the error text still tells what failed")
+	Do $$$AssertTrue(tTask [ "<untrusted_data source=""error_text"">", "still fenced")
+}
+
 Method TestEscalateDecisionIsValid()
 {
 	Set tRequest = ##class(AgenticProd.Msg.TriageRequest).%New()

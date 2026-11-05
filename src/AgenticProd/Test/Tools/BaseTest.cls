@@ -33,6 +33,39 @@ Method TestGetErrorEventsReadsSessionLog()
 	Do $$$AssertNotTrue(tOut [ "info only", "info events left out")
 }
 
+Method TestMaskTextHidesProtectedPidValues()
+{
+	Do $$$AssertStatusOK(##class(AgenticProd.Test.Tools.HL7Test).LoadCase("05", .tHeaderId))
+	Do $$$AssertStatusOK(##class(AgenticProd.Tools.Base).OpenBody(tHeaderId, .tBody))
+	Set tName = ..PidField(tBody, "5.1"), tDob = ..PidField(tBody, 7)
+	Do $$$AssertTrue(($LENGTH(tName) > 2) && ($LENGTH(tDob) > 2), "fixture has a name and a birth date")
+	Set tText = "PID(1):7 '"_tDob_"' is not a valid date; name "_tName_" seen; MRN 100001 ok"
+	Set tOut = ##class(AgenticProd.Tools.Base).MaskText(tHeaderId, tText)
+	Do $$$AssertNotTrue(tOut [ tDob, "PID-7 value masked")
+	Do $$$AssertNotTrue(tOut [ tName, "PID-5 value masked")
+	Do $$$AssertTrue(tOut [ "is not a valid date", "the rest of the line stays")
+	Do $$$AssertTrue(tOut [ "MRN 100001 ok", "PID-3 is not masked")
+	Do $$$AssertEquals(##class(AgenticProd.Tools.Base).MaskText(-1, tText), tText, "no message: text unchanged")
+	Do $$$AssertEquals(##class(AgenticProd.Tools.Base).MaskText(tHeaderId, ""), "", "empty text")
+}
+
+Method TestGetErrorEventsMasksPidValues()
+{
+	Do $$$AssertStatusOK(##class(AgenticProd.Test.Tools.HL7Test).LoadCase("05", .tHeaderId))
+	Do $$$AssertStatusOK(##class(AgenticProd.Tools.Base).OpenBody(tHeaderId, .tBody))
+	Set tDob = ..PidField(tBody, 7)
+	Set tLog = ##class(Ens.Util.Log).%New()
+	Set tLog.SessionId = tHeaderId
+	Set tLog.ConfigName = ##class(AgenticProd.Test.Tools.HL7Test).#TESTSOURCE
+	Set tLog.Type = 2
+	Set tLog.Text = "PID(1):7 '"_tDob_"' is not a valid date"
+	Set tLog.TimeLogged = $ZDATETIME($ZTIMESTAMP, 3)
+	Do $$$AssertStatusOK(tLog.%Save())
+	Set tOut = ##class(AgenticProd.Tools.Base).%New().GetErrorEvents(tHeaderId)
+	Do $$$AssertTrue(tOut [ "is not a valid date", "error event returned")
+	Do $$$AssertNotTrue(tOut [ tDob, "PID-7 value masked in the log line")
+}
+
 Method TestGetSimilarDecisions()
 {
 	For i = 1:1:7 {
@@ -69,6 +102,12 @@ Method TestGetSimilarDecisionsAnyCode()
 	Set tList = [].%FromJSON($PIECE(tOut, $CHAR(10), 2))
 	Do $$$AssertTrue(tList.%Size() > 0, "empty sourceCode matches any code: "_$EXTRACT(tOut, 1, 300))
 	Do $$$AssertEquals(tList.%Get(0).reason, "any code row", "newest first")
+}
+
+/// A PID field of the stored message; the segment index comes from the PID's position.
+ClassMethod PidField(pBody As EnsLib.HL7.Message, pField As %String) As %String [ Private ]
+{
+	Quit pBody.GetValueAt(##class(AgenticProd.Tools.HL7).FindSegment(pBody, "PID", 1)_":"_pField)
 }
 
 Method OnBeforeAllTests() As %Status

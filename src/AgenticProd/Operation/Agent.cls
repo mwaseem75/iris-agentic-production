@@ -466,7 +466,7 @@ Method AgentChat(pAgent As %AI.Agent, pSession As %AI.Agent.Session, pText As %S
 }
 
 /// The task text sent to the agent. Error text comes from the interface, so it goes
-/// inside an untrusted_data block.
+/// inside an untrusted_data block, with the protected PID values masked (log lines quote them).
 ClassMethod BuildTask(pRequest As AgenticProd.Msg.TriageRequest) As %String
 {
 	Set tNL = $CHAR(10)
@@ -477,7 +477,7 @@ ClassMethod BuildTask(pRequest As AgenticProd.Msg.TriageRequest) As %String
 		_"Format: "_pRequest.Format_tNL
 		_"Router's first guess at error_class: "_pRequest.ErrorClass_tNL
 		_"<untrusted_data source=""error_text"">"_tNL
-		_pRequest.ErrorText_tNL
+		_##class(AgenticProd.Tools.Base).MaskText(pRequest.HeaderId, pRequest.ErrorText)_tNL
 		_"</untrusted_data>"
 }
 

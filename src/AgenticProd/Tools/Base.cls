@@ -57,7 +57,7 @@ Method GetErrorEvents(headerId As %Integer) As %String
 		Set tText = tText_"Header error status: "_tHeader.ErrorStatus_$CHAR(10)
 	}
 	If tText = "" Set tText = "No error or warning events for session "_tHeader.SessionId_$CHAR(10)
-	Quit ..Untrusted("error_events", headerId, tText)
+	Quit ..Untrusted("error_events", headerId, ..MaskText(headerId, tText))
 }
 
 /// Return up to 5 DecisionLog rows as a JSON array; reason and fix text came from the model.
@@ -118,6 +118,52 @@ ClassMethod MaskerFor(pBodyClass As %String) As %String [ Internal ]
 		Set tPair = ""
 	}
 	Quit $PIECE($GET(tPair), "=", 2)
+}
+
+/// pText with the protected patient values of the failed message replaced by ***. Error log lines
+/// quote field values ("PID(1):7 '19850230' is not a valid date"), so the text is masked the way
+/// the body is. Unchanged when the message cannot be opened or its format has no masking rule.
+ClassMethod MaskText(pHeaderId As %Integer, pText As %String) As %String
+{
+	Quit:((pText = "") || (pHeaderId = "")) pText
+	Try {
+		Quit:$$$ISERR(..OpenBody(pHeaderId, .tBody))
+		Set tMasker = ..MaskerFor($CLASSNAME(tBody))
+		Quit:(tMasker = "")
+		Do $CLASSMETHOD(tMasker, "Secrets", tBody, .tSecrets)
+		// longest first, so a full name goes before its parts
+		Set tKey = ""
+		For {
+			Set tKey = $ORDER(tSecrets(tKey))
+			Quit:tKey=""
+			Set tByLen(-$LENGTH(tKey), tKey) = ""
+		}
+		Set tLen = ""
+		For {
+			Set tLen = $ORDER(tByLen(tLen))
+			Quit:tLen=""
+			Set tKey = ""
+			For {
+				Set tKey = $ORDER(tByLen(tLen, tKey))
+				Quit:tKey=""
+				Set pText = $REPLACE(pText, tKey, "***")
+			}
+		}
+	} Catch {}
+	Quit pText
+}
+
+/// pValue and each of its components, repeats and subcomponents (pSeps lists those separators) as
+/// secrets. Pieces under 3 characters are skipped: they would mask ordinary words.
+ClassMethod AddSecret(pValue As %String, pSeps As %String, ByRef pSecrets) [ Internal ]
+{
+	Quit:$LENGTH(pValue)<3
+	Set pSecrets(pValue) = ""
+	For s = 1:1:$LENGTH(pSeps) {
+		Set tSep = $EXTRACT(pSeps, s)
+		Continue:pValue'[tSep
+		For p = 1:1:$LENGTH(pValue, tSep) Do ..AddSecret($PIECE(pValue, tSep, p), pSeps, .pSecrets)
+	}
 }
 
 /// Wrap interface text so the model treats it as data (hard rule 6).
