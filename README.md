@@ -63,9 +63,13 @@ The path is only needed if the image is not loaded yet. On Windows use `.\instal
 
 Then open **http://localhost:52773/agenticprod/dashboard.html** and log in as `SuperUser` / `SYS`.
 
+The agent calls OpenAI, `gpt-4o-mini` by default, with the key in `OPENAI_API_KEY` in `.env`. Without a key no model is called: failed messages go to a human, or use replay mode.
+
 ### Which image do I need?
 
 **`irishealth-community:2026.3.0AI.154.0`**: IRIS for Health with AI Hub, early access build 154. The plain `iris-community` image of the same build does not work, because it has no `EnsLib.HL7` classes, and setup stops with a message saying so. The image is not public. Load it from the tar file you received and tag it:
+
+Tested on build 154. To use another build, set `IRIS_IMAGE` in `.env` (for example `IRIS_IMAGE=my-registry/irishealth-ai:2027.1`) and run `./install.sh` again. Setup accepts IRIS for Health with AI Hub 2026.3 or later.
 
 ```bash
 docker load -i irishealth-community-2026.3.0AI.154.0-docker.tar.gz
@@ -99,6 +103,33 @@ zpm "load /path/to/iris-agentic-production"
 Setup runs as part of the install. The files the code reads at run time are copied under the manager directory; pass `-Droot=/some/folder` to choose another place.
 
 **Optional traces.** To also run an OpenTelemetry Collector and Jaeger: `docker compose --profile observability up -d`. Jaeger is at http://localhost:16686.
+
+## Verify it works
+
+```bash
+./verify.sh              # Windows: .erify.ps1
+```
+
+It runs `AgenticProd.Verify.Run()` in the container and prints one line per step. No LLM is called and nothing of yours is changed: the replay steps run the agent in the container process and delete their own rows.
+
+```
+AgenticProd verify, no LLM call
+PASS  HL7 classes: EnsLib.HL7.Message found
+PASS  Production: AgenticProd.Production running
+PASS  AI Hub: %AI.Agent found on IRIS 2026.3.0AI
+PASS  LOINC knowledge base: 46 rows
+PASS  Sample case 05 replayed from gpt-4o-mini: decision AUTO_FIX, expected AUTO_FIX
+PASS  Replay scores: 3 of 3 cases match the recorded run
+Verify PASSED: 6 of 6 steps
+```
+
+The two replay steps need a recorded live run of the case. Where there is none they print `SKIP` with the reason, and `./verify.sh --strict` counts that as a failure. The exit code is 0 when no step failed.
+
+Unit tests, no LLM call (a unit-test run blocks live calls): 225 test methods in 33 classes.
+
+```objectscript
+do ##class(%UnitTest.Manager).RunTest("AgenticProd", "/noload/nodelete")
+```
 
 ## Try it in five minutes
 
@@ -162,6 +193,22 @@ These checks are plain IRIS code around the agent. AI Hub supplies the read-only
 - **Memory is governed.** Learned mappings keep where they came from (agent run, evidence, reviewer, date). An admin can revoke one; every message sent with it since its approval goes back for review.
 - **Budgets.** Per-message limits on tool calls and tokens, and a daily token budget. When a limit is hit the message goes to a human; it is never dropped.
 - **One switch to stop it.** The AI kill switch in Settings sends every failure to a human with no LLM call, and shows a red banner on every page.
+
+## What the model sees
+
+For a failed message the model gets a task and can call read-only tools. Exactly what is hidden and what is not:
+
+| | Sent to the model |
+|---|---|
+| **Task text** | Header ID, session ID, source item, format, the router's first error class, and the error text. The error text is the header's error status plus the session's Error and Alert log lines, at most 4000 characters. |
+| **Masked as `***`** | The values of **PID-5** (name), **PID-7** (birth date), **PID-11** (address) and **PID-13** (phone), and each component of them that is 3 characters or longer. This applies to `get_failed_message`, `get_segment`, `get_error_events` and the error text in the task. A message in a format with no masking rule is not shown at all. |
+| **Sent as is** | **PID-3** (patient identifier, for example `100001^^^SIMHOSP^MR`) and every PID field other than 5, 7, 11 and 13; all MSH, OBR, OBX and NTE content, including free text such as OBX-5 and NTE; anything else in the error text, for example a result value a validation error quotes. |
+
+PID-3 is not replaced by a token. Unit tests and eval cases need its real value: several cases are about its structure (the assigning authority in PID-3.4), and the agent cannot judge those from a hash. Identity fields are still never changed: any fix to PID-3, PID-5 or PID-7 is refused.
+
+Everything that comes from the interface reaches the model inside `<untrusted_data source="...">` blocks, and a closing tag inside the data is escaped. The tool descriptions tell the model to treat that text as evidence and never follow instructions in it. A deterministic scan also flags instruction-like text, and a flagged message can never be applied automatically.
+
+The data goes to the provider you configure (OpenAI by default). With a kill switch on, no data leaves IRIS.
 
 ## The learning loop
 
@@ -290,6 +337,8 @@ Every lab result that passes LabRouter also goes out as FHIR R4, built with the 
 60 synthetic cases in [`eval/cases`](eval/cases): normal errors, look-alike LOINC codes (serum vs blood vs urine, fasting, high-sensitivity, calculated), identity traps, structure and routing errors, a simulated timeout, prompt injection attempts and valid controls. Each case lists the expected decision, the other acceptable decisions, and the decisions that would be unsafe.
 
 You do not have to run it. **Replay** runs all 60 cases from recorded model calls: no key, no cost, same result every time. A live run needs your own key and costs about $0.09.
+
+A replay is keyed by case ID and model. Each recording stores a hash of the prompt version and the input the agent was given (error class and masked error text). If the hash of a replayed message differs from the recording's, the recorded decision is still used, no LLM is called, and the story view and the Trust tab mark it "recorded with a different prompt". Recordings made before the hash existed replay as before.
 
 The most important number is **unsafe_final**: how often the system carried out an unsafe decision. It is counted apart from **unsafe_agent**, how often the model proposed one.
 
