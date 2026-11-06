@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # One-command install: checks Docker and the image, creates .env, builds and starts, waits for healthy.
-# Usage: ./install.sh [path-to-image.tar.gz]   (or set IRIS_IMAGE_TAR)
+# Usage: ./install.sh [path-to-the-tar-file-from-the-portal]   (or set IRIS_IMAGE_TAR; not needed when the image is already loaded)
 set -u
 URL="http://localhost:52773/agenticprod/dashboard.html"
 TAR="${1:-${IRIS_IMAGE_TAR:-}}"
@@ -22,7 +22,10 @@ command -v docker >/dev/null 2>&1 || die "docker is not installed or not on PATH
 docker info >/dev/null 2>&1 || die "docker is installed but the daemon is not running"
 docker compose version >/dev/null 2>&1 || die "'docker compose' (v2) is not available"
 
-# 2. The AI Hub image is not public, so it has to be loaded from the tar file
+# 2. The AI Hub image is not public. It comes as a tar file from the AI Hub early-access portal;
+# docker load prints its internal name, and the app builds FROM the short tag. Take the tar path,
+# an image that is already loaded under the internal name, or one already tagged.
+INTERNAL="docker.iscinternal.com/docker-intersystems/intersystems/irishealth-community:2027.1.0AI.109.0"
 if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
   if [ -n "$TAR" ]; then
     [ -f "$TAR" ] || die "image file not found: $TAR"
@@ -31,7 +34,12 @@ if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
     echo "$out"
     loaded="$(printf '%s\n' "$out" | sed -n 's/^Loaded image: //p' | tail -n 1)"
     [ -n "$loaded" ] || die "docker load did not print a 'Loaded image:' name"
+    echo "Running: docker tag $loaded $IMAGE"
     docker tag "$loaded" "$IMAGE" || die "docker tag failed for $loaded"
+  elif docker image inspect "$INTERNAL" >/dev/null 2>&1; then
+    echo "Found the loaded image $INTERNAL"
+    echo "Running: docker tag $INTERNAL $IMAGE"
+    docker tag "$INTERNAL" "$IMAGE" || die "docker tag failed for $INTERNAL"
   fi
 fi
 if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
@@ -40,13 +48,14 @@ ERROR: the image $IMAGE is missing.
 
 This app needs $IMAGE (InterSystems IRIS for Health with AI Hub, early access
 build 109, built on build 154). The plain iris-community image of the same build does not work: it has no
-EnsLib.HL7 classes, and setup stops with a message saying so. The image is not public.
-Load it from the tar file you received and tag it:
+EnsLib.HL7 classes, and setup stops with a message saying so. The image is not public: download the
+tar file from the AI Hub early-access portal, then load it and tag it:
 
-  docker load -i irishealth-community-2027.1.0AI.109.0-docker.tar.gz
-  docker tag <loaded image name> $IMAGE
+  docker load -i <the tar file from the portal>
+  docker tag docker.iscinternal.com/docker-intersystems/intersystems/irishealth-community:2027.1.0AI.109.0 $IMAGE
 
-Or run: ./install.sh path/to/irishealth-community-2027.1.0AI.109.0-docker.tar.gz
+docker load prints that internal name. Or run: ./install.sh path/to/the-tar-file-from-the-portal
+Never push this image, or an image built from it, to a public registry.
 MSG
   exit 1
 fi

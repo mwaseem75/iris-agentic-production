@@ -56,7 +56,7 @@ You need Docker with about 4 GB of free memory and the AI Hub image (next sectio
 ```bash
 git clone https://github.com/mwaseem75/iris-agentic-production.git
 cd iris-agentic-production
-./install.sh /path/to/irishealth-community-2027.1.0AI.109.0-docker.tar.gz
+./install.sh /path/to/the-tar-file-from-the-portal
 ```
 
 The path is only needed if the image is not loaded yet. On Windows use `.\install.ps1 C:\path\to\the.tar.gz` in PowerShell. The installer checks Docker and the image, creates `.env` if you have none (it never overwrites one), starts the containers, waits until IRIS is healthy and prints the URLs. **No API key is needed**: the sample cases are answered from the recorded runs that setup loads (see [Recorded runs](#evaluation)).
@@ -67,12 +67,15 @@ The agent calls OpenAI, `gpt-4o-mini` by default, with the key in `OPENAI_API_KE
 
 ### Which image do I need?
 
-**`irishealth-community:2027.1.0AI.109.0`** (the default): IRIS for Health with AI Hub, early access build 109. The app was built on build 154 (`irishealth-community:2026.3.0AI.154.0`) and verified on build 109: all 104 classes compile, the unit tests pass, `./verify.sh` runs (its two replay steps are skipped while there is no recorded run), and the dashboard pages and API answer for the `reviewer` and `SuperUser` logins. No live LLM call has been made on build 109 yet, so live mode on 109 is not verified; see [Notes on AI Hub builds 154 and 109](#notes-on-ai-hub-builds-154-and-109). The plain `iris-community` image of the same build does not work, because it has no `EnsLib.HL7` classes, and setup stops with a message saying so. The image is not public. Load it from the tar file you received and tag it:
+**`irishealth-community:2027.1.0AI.109.0`** (the default): IRIS for Health with AI Hub, early access build 109. The app was built on build 154 (`irishealth-community:2026.3.0AI.154.0`) and verified on build 109: all 104 classes compile, the unit tests pass, `./verify.sh` runs (its two replay steps are skipped while there is no recorded run), and the dashboard pages and API answer for the `reviewer` and `SuperUser` logins. No live LLM call has been made on build 109 yet, so live mode on 109 is not verified; see [Notes on AI Hub builds 154 and 109](#notes-on-ai-hub-builds-154-and-109). The plain `iris-community` image of the same build does not work, because it has no `EnsLib.HL7` classes, and setup stops with a message saying so. The image is not public: download the tar file from the AI Hub early-access portal. `docker load` prints its internal name, and you retag it to the short name the `Dockerfile` expects:
 
 ```bash
-docker load -i irishealth-community-2027.1.0AI.109.0-docker.tar.gz
-docker tag <loaded image name> irishealth-community:2027.1.0AI.109.0
+docker load -i <the tar file from the portal>
+# Loaded image: docker.iscinternal.com/docker-intersystems/intersystems/irishealth-community:2027.1.0AI.109.0
+docker tag docker.iscinternal.com/docker-intersystems/intersystems/irishealth-community:2027.1.0AI.109.0 irishealth-community:2027.1.0AI.109.0
 ```
+
+`./install.sh` and `.\install.ps1` do this for you: give them the tar path, or run them when the image is already loaded under the internal name, and they print the `docker tag` command they ran. **Never push this image, or any image built from it, to a public registry.**
 
 To use another build, set `IRIS_IMAGE` in `.env` (for example `IRIS_IMAGE=irishealth-community:2026.3.0AI.154.0` for the build 154 image it was built on) and run `./install.sh` again. Setup accepts IRIS for Health with AI Hub 2026.3 or later.
 

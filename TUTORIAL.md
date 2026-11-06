@@ -38,11 +38,11 @@ The AI Hub facts below were found on the early access **build 154**, and the wor
 
 ## 2. Setup
 
-You need Docker and the AI Hub early access image, build 109 (the app was built on build 154 and verified on 109). Use the **IRIS for Health** image (`irishealth-community`), not plain `iris-community`: this app needs the HL7 classes (`EnsLib.HL7`), and setup stops with a clear message if they are missing. Load it and give it the tag the [`Dockerfile`](Dockerfile) expects:
+You need Docker and the AI Hub early access image, build 109 (the app was built on build 154 and verified on 109). Use the **IRIS for Health** image (`irishealth-community`), not plain `iris-community`: this app needs the HL7 classes (`EnsLib.HL7`), and setup stops with a clear message if they are missing. Download the tar file from the AI Hub early-access portal. `docker load` prints the internal name `docker.iscinternal.com/docker-intersystems/intersystems/irishealth-community:2027.1.0AI.109.0`; give it the tag the [`Dockerfile`](Dockerfile) expects (the install scripts do this for you), and never push the image to a public registry:
 
 ```bash
-docker load -i irishealth-community-2027.1.0AI.109.0-docker.tar.gz
-docker tag <loaded image name> irishealth-community:2027.1.0AI.109.0
+docker load -i <the tar file from the portal>
+docker tag docker.iscinternal.com/docker-intersystems/intersystems/irishealth-community:2027.1.0AI.109.0 irishealth-community:2027.1.0AI.109.0
 ```
 
 To use the build 154 image instead, set `IRIS_IMAGE=irishealth-community:2026.3.0AI.154.0` in `.env`. The API key goes in `.env`, which git ignores. [`.env.example`](.env.example) has the names only:
