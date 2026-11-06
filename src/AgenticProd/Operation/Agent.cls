@@ -180,6 +180,13 @@ Method Triage(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As Age
 			$$$ThrowOnError(..Replay(pRequest, .pResponse))
 			Quit
 		}
+		// With no key the recordings that ship with the repo answer the sample cases. A replay costs
+		// nothing, so it comes before the budget gates, which only guard spend.
+		If ..NoApiKey(), ..FindRecording(pRequest, .tRecJSON, .tRecSession, .tRecHash) {
+			$$$LOGINFO("No API key set, replaying the recorded run for header "_pRequest.HeaderId)
+			$$$ThrowOnError(..Replay(pRequest, .pResponse, 1))
+			Quit
+		}
 		// Never drop the message: over budget it still goes to Triage, as ESCALATE
 		Set tUsed = ..TokensUsedToday()
 		If ..DailyTokenBudget, tUsed >= ..DailyTokenBudget {
@@ -203,12 +210,6 @@ Method Triage(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As Age
 
 		// Without a key the provider fails with a raw error; say why instead, and keep the message moving
 		If ..NoApiKey() {
-			// The recordings that ship with the repo answer the sample cases without a key
-			If ..FindRecording(pRequest, .tRecJSON, .tRecSession, .tRecHash) {
-				$$$LOGINFO("No API key set, replaying the recorded run for header "_pRequest.HeaderId)
-				$$$ThrowOnError(..Replay(pRequest, .pResponse, 1))
-				Quit
-			}
 			$$$LOGWARNING("No API key set, escalating header "_pRequest.HeaderId_" without an LLM call")
 			Set pResponse = ..EscalateDecision(pRequest, "No API key set; agent not called. Add a key in Settings or use replay mode")
 			Quit
@@ -378,7 +379,9 @@ Method FindRecording(pRequest As AgenticProd.Msg.TriageRequest, Output pJSON As 
 			If tRS.%Next() Set pJSON = tRS.DecisionJSON, pSession = tRS.AgentSessionId, pHash = tRS.PromptHash
 		}
 		If pJSON = "" {
-			Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 1 DecisionJSON, AgentSessionId, PromptHash FROM AgenticProd_Data.Usage WHERE PromptHash = ? AND Model = ? AND COALESCE(Replay, 0) = 0 AND DecisionJSON IS NOT NULL ORDER BY ID DESC", ..PromptHash(pRequest), ..Model)
+			// PromptTokens > 0: a run that failed before the model answered (provider error) stores an
+			// ESCALATE too, and that is not a recording
+			Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 1 DecisionJSON, AgentSessionId, PromptHash FROM AgenticProd_Data.Usage WHERE PromptHash = ? AND Model = ? AND COALESCE(Replay, 0) = 0 AND PromptTokens > 0 AND DecisionJSON IS NOT NULL ORDER BY ID DESC", ..PromptHash(pRequest), ..Model)
 			If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message))
 			If tRS.%Next() Set pJSON = tRS.DecisionJSON, pSession = tRS.AgentSessionId, pHash = tRS.PromptHash
 		}

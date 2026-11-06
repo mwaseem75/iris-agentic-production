@@ -452,6 +452,39 @@ Method TestKillSwitchWinsOverReplay()
 	}
 }
 
+/// A replay costs nothing, so a used-up daily token budget does not turn it into an escalation.
+Method TestNoKeyReplayIgnoresTheTokenBudget()
+{
+	Do $$$AssertStatusOK(..AddUsage(10, 0))
+	Do $$$AssertStatusOK(..AddRecorded("T97", "rec-find-model", {"decision":"MAP_CODE","error_class":"UNMAPPED_CODE","confidence":0.8,"reason":"recorded run"}, "21", 0))
+	Set tOp = ..KeylessOp("rec-find-model")
+	Set tOp.DailyTokenBudget = 1
+	Set tRequest = ..SampleRequest("budget text")
+	Set tRequest.ControlId = "EV9999-T97"
+	Do $$$AssertStatusOK(tOp.Triage(tRequest, .tDecision))
+	Do $$$AssertEquals(tDecision.Reason, "recorded run", "replayed although the budget is used up")
+	// With no recording the budget gate still comes first
+	Set tOp.Model = "rec-none-model"
+	Do $$$AssertStatusOK(tOp.Triage(tRequest, .tDecision))
+	Do $$$AssertTrue(tDecision.Reason [ "budget", "no recording: the budget gate answers")
+}
+
+/// A failed run (provider error, no tokens) stores an ESCALATE with the same PromptHash as the
+/// next attempt, and it must not be replayed as if the model had answered.
+Method TestFailedRunIsNotARecordingByHash()
+{
+	Set tOp = ..KeylessOp("rec-find-model")
+	Set tRequest = ..SampleRequest("failed run text")
+	Set tRow = ##class(AgenticProd.Data.Usage).%New()
+	Set tRow.HeaderId = -9102, tRow.Model = "rec-find-model", tRow.PromptHash = tOp.PromptHash(tRequest)
+	Set tRow.DecisionJSON = {"decision":"ESCALATE","reason":"agent call failed: HTTP 500"}.%ToJSON()
+	Do $$$AssertStatusOK(tRow.%Save())
+	Do $$$AssertNotTrue(tOp.FindRecording(tRequest), "no tokens: not a recording")
+	Set tRow.PromptTokens = 50
+	Do $$$AssertStatusOK(tRow.%Save())
+	Do $$$AssertTrue(tOp.FindRecording(tRequest), "same row with tokens is one")
+}
+
 /// Stub operation with no API key, live mode, no budget.
 Method KeylessOp(pModel As %String) As AgenticProd.Test.Operation.StubAgentOp
 {
@@ -480,6 +513,8 @@ Method AddRecorded(pCase As %String, pModel As %String, pDecision As %DynamicObj
 	Set tRow.Decision = pDecision.decision
 	Set tRow.Replay = pReplay
 	Set tRow.PromptHash = pHash
+	// A live run that reached the model has tokens; the hash lookup relies on it
+	Set:'pReplay tRow.PromptTokens = 100
 	Quit tRow.%Save()
 }
 
