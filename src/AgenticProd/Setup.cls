@@ -107,10 +107,33 @@ ClassMethod Run(pRoot As %String = "") As %Status
 		$$$ThrowOnError(..PortalFavorites())
 		$$$ThrowOnError(##class(AgenticProd.Paths).ApplyToProduction(##class(AgenticProd.Production).%ClassName(1)))
 		$$$ThrowOnError(..LegacyDemo())
+		// Not fatal: without the model the first plug-in start in LEGACY downloads it, which is slow but works
+		Set tWarm = ..WarmEmbeddingModel()
+		If $$$ISERR(tWarm) Write "Embedding model not cached: ", $PIECE($SYSTEM.Status.GetErrorText(tWarm), $CHAR(10)), !
 		// Setup runs at image build with IRIS about to stop, so starting it here would not last
 		$$$ThrowOnError(##class(Ens.Director).SetAutoStart("AgenticProd.Production"))
 	} Catch ex {
 		Set tSC = ex.AsStatus()
+	}
+	Quit tSC
+}
+
+/// FastEmbed caches its model (about 90 MB) in .fastembed_cache under the process's working directory,
+/// and IRIS sets that to the namespace's database folder. So IRISAPP and LEGACY each need their own copy,
+/// and the first plug-in start in a cold LEGACY downloads it while the production update waits.
+/// Create() is what downloads. Setup runs at image build, so the copies end up in the image.
+ClassMethod WarmEmbeddingModel() As %Status
+{
+	Set tSC = $$$OK
+	Set tHome = $NAMESPACE
+	New $NAMESPACE
+	For tNS = tHome, ..#LEGACYNS {
+		Try {
+			Set $NAMESPACE = tNS
+			Set tEmb = ##class(%AI.RAG.Embedding.FastEmbed).Create()
+		} Catch ex {
+			Set tSC = $SYSTEM.Status.AppendStatus(tSC, ex.AsStatus())
+		}
 	}
 	Quit tSC
 }
