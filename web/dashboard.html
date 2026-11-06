@@ -143,6 +143,19 @@ tr.click:hover > td, tr.sel > td { background: var(--info-bg); }
 .kill.on { background: var(--bad-bg); }
 .checks { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 6px 0; }
 .checks label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.set-strip { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin: 0 0 14px; }
+.set-strip .card { padding: 10px 14px; min-width: 0; }
+.set-strip .label { color: var(--muted); font-size: 12px; }
+.set-strip .value { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.set-strip .sub { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.set-strip .card.bad { border-color: var(--bad); background: var(--bad-bg); }
+.set-strip .card.bad .value { color: var(--bad); }
+@media (max-width: 1199.98px) { .set-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 575.98px) { .set-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.set-group { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; padding: 10px 14px 4px; }
+.set-group:first-child { padding-top: 4px; }
+.set-wrap { max-width: 1100px; }
+.set-lead { color: var(--text-2); font-size: 14px; margin: 0 0 10px; }
 pre.instr { white-space: pre-wrap; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; font-size: 12px; max-height: 360px; overflow: auto; }
 h3.sub { font-size: 13px; margin: 16px 0 4px; font-weight: 650; color: var(--muted); }
 .msg { font-size: 13px; margin: 6px 0 0; min-height: 1.2em; }
@@ -569,22 +582,33 @@ td.go { white-space: nowrap; }
       <!-- Settings -->
       <div class="tabpanel hidden" id="tab-settings" role="tabpanel">
         <p class="readonly-note hidden" id="set-readonly">Read-only: changing settings needs the AgenticProd_Admin role.</p>
+        <div class="set-strip" id="set-strip" aria-label="Current settings">
+          <div class="card"><div class="label">Provider</div><div class="value" id="ss-provider">…</div></div>
+          <div class="card"><div class="label">Key</div><div class="value" id="ss-key">…</div><div class="sub hidden" id="ss-key-sub"></div></div>
+          <div class="card"><div class="label">Mode</div><div class="value" id="ss-mode">…</div></div>
+          <div class="card" id="ss-kill-card"><div class="label">Kill switch</div><div class="value" id="ss-kill">…</div></div>
+          <div class="card"><div class="label">Today's budget</div><div class="value" id="ss-budget">…</div></div>
+        </div>
         <div class="row g-3">
           <div class="col-xl-2 col-lg-3">
             <div class="card"><div class="list-group list-group-flush settings-nav p-2" id="set-menu">
+              <div class="set-group">Connect</div>
               <a class="list-group-item list-group-item-action active" data-sec="providers"><i class="ti ti-key me-2"></i>Providers &amp; keys</a>
+              <div class="set-group">Control</div>
               <a class="list-group-item list-group-item-action" data-sec="agent"><i class="ti ti-robot me-2"></i>Agent</a>
               <a class="list-group-item list-group-item-action" data-sec="guardrails"><i class="ti ti-shield me-2"></i>Guardrails</a>
               <a class="list-group-item list-group-item-action" data-sec="budgets"><i class="ti ti-gauge me-2"></i>Budgets &amp; mode</a>
+              <a class="list-group-item list-group-item-action text-red" data-sec="kill"><i class="ti ti-power me-2"></i>Kill switch</a>
+              <div class="set-group">Govern</div>
               <a class="list-group-item list-group-item-action" data-sec="memory"><i class="ti ti-brain me-2"></i>Memory</a>
               <a class="list-group-item list-group-item-action" data-sec="plugin"><i class="ti ti-plug me-2"></i>Plug-in</a>
               <a class="list-group-item list-group-item-action" data-sec="changes"><i class="ti ti-history me-2"></i>Change log</a>
-              <a class="list-group-item list-group-item-action text-red" data-sec="kill"><i class="ti ti-power me-2"></i>Kill switch</a>
             </div></div>
           </div>
-          <div class="col-xl-10 col-lg-9">
+          <div class="col-xl-10 col-lg-9"><div class="set-wrap">
 
             <div class="set-sec" data-sec="providers">
+              <p class="set-lead">Choose the model provider. Keys go to the IRIS Wallet and are never shown again.</p>
               <div class="card" data-info="Providers">
                 <div class="card-header"><div><h3 class="card-title">Providers &amp; keys</h3><div class="sub-text">Configs live in the AI Hub Config Store (<code>AI.LLM.&lt;name&gt;</code>); keys live in the IRIS Wallet and are never shown again.</div></div></div>
                 <div class="table-responsive">
@@ -614,6 +638,7 @@ td.go { white-space: nowrap; }
             </div>
 
             <div class="set-sec hidden" data-sec="agent">
+              <p class="set-lead">Limits for each agent: model, temperature, tool calls and tokens per message.</p>
               <div class="card" data-info="Agents">
                 <div class="card-header"><div><h3 class="card-title">Agent &middot; TriageAgent</h3><div class="sub-text">Model, temperature and limits. Applied as production item settings; the item restarts (about 20 s).</div></div></div>
                 <div class="card-body">
@@ -634,6 +659,7 @@ td.go { white-space: nowrap; }
             </div>
 
             <div class="set-sec hidden" data-sec="guardrails">
+              <p class="set-lead">What the agent may fix without a human, and how strictly its claims are checked.</p>
               <div class="card" data-info="Guardrails">
                 <div class="card-header"><div><h3 class="card-title">Guardrails</h3><div class="sub-text">Every agent tool is readonly today. The authorization policy refuses a write or critical tool unless its tier is enabled; a tool that requires auth is at least write.</div></div></div>
                 <div class="table-responsive">
@@ -657,6 +683,7 @@ td.go { white-space: nowrap; }
             </div>
 
             <div class="set-sec hidden" data-sec="budgets">
+              <p class="set-lead">Daily token budget, live or replay mode.</p>
               <div class="card mb-3" data-info="Budgets">
                 <div class="card-header"><h3 class="card-title">Budgets &amp; mode</h3></div>
                 <div class="card-body">
@@ -684,6 +711,7 @@ td.go { white-space: nowrap; }
             </div>
 
             <div class="set-sec hidden" data-sec="memory">
+              <p class="set-lead">Mappings the system learned from human approvals. Revoke one here.</p>
               <div class="card" data-info="Memory">
                 <div class="card-header"><div><h3 class="card-title">Memory &middot; learned code mappings</h3><div class="sub-text">Every code table entry a production uses without asking the agent, with where it came from. Revoke removes the entry and sends a review task for each message that went out with it; the same mapping is only learned again with a reviewer's note.</div></div></div>
                 <div class="table-responsive">
@@ -697,6 +725,7 @@ td.go { white-space: nowrap; }
             </div>
 
             <div class="set-sec hidden" data-sec="plugin">
+              <p class="set-lead">Productions the plug-in watches, each with a mode: observe only logs, propose sends decisions to a review inbox, act applies whitelisted fixes.</p>
               <div class="card" data-info="Productions">
                 <div class="card-header"><div><h3 class="card-title">Plug-in &middot; productions</h3><div class="sub-text">The home production and every production the plug-in was added to, with its mode: observe logs what it would do, propose sends every decision to that namespace's review inbox, act fixes whitelisted errors, resends transient ones and returns structure errors. Health and cost are for the last 24 hours.</div></div></div>
                 <div class="table-responsive">
@@ -710,6 +739,7 @@ td.go { white-space: nowrap; }
             </div>
 
             <div class="set-sec hidden" data-sec="changes">
+              <p class="set-lead">Who changed what, and when. Keys are logged only as changed.</p>
               <div class="card" data-info="Change log">
                 <div class="card-header"><h3 class="card-title">Change log <span class="text-secondary fw-normal" style="font-size:14px">last 50</span></h3></div>
                 <div class="table-responsive">
@@ -722,6 +752,7 @@ td.go { white-space: nowrap; }
             </div>
 
             <div class="set-sec hidden" data-sec="kill">
+              <p class="set-lead">Stops every LLM call. Failures go to a human.</p>
               <div class="card">
                 <div class="card-header"><h3 class="card-title">Kill switch</h3></div>
                 <div class="card-body">
@@ -735,7 +766,7 @@ td.go { white-space: nowrap; }
               </div>
             </div>
 
-          </div>
+          </div></div>
         </div>
       </div>
       <div style="height:32px"></div>
@@ -1818,6 +1849,22 @@ document.getElementById("nokey-close").addEventListener("click", function () {
   try { sessionStorage.setItem("nokey-dismissed", "1"); } catch (e) {}
   document.getElementById("nokey-banner").classList.add("hidden");
 });
+// Status strip: read-only summary of values the sections below edit
+function renderStrip(s) {
+  var pc = s.agents.ProviderConfig, prov = null;
+  s.providers.forEach(function (p) { if (p.name === pc) prov = p; });
+  var t = function (id, v) { document.getElementById(id).textContent = v; };
+  t("ss-provider", pc ? (prov ? prov.name + " · " + prov.model : pc + " · " + s.agents.Model) : "OPENAI_API_KEY from .env");
+  t("ss-key", s.keyMissing ? "not set" : "set");
+  var sub = document.getElementById("ss-key-sub"), live = s.budgets.Mode === "live";
+  sub.textContent = "No key: sample cases replay from recorded runs";
+  sub.classList.toggle("hidden", !(s.keyMissing && live));
+  t("ss-mode", s.budgets.Mode);
+  t("ss-kill", s.budgets.KillSwitch ? "on" : "off");
+  document.getElementById("ss-kill-card").classList.toggle("bad", !!s.budgets.KillSwitch);
+  var budget = s.budgets.DailyTokenBudget;
+  t("ss-budget", num(s.usedToday) + (budget ? " of " + num(budget) : " (no limit)") + " tokens");
+}
 function renderSettings(s) {
   settings = s;
   if (s.user) { var hu = document.getElementById("hdr-user"); hu.textContent = "Signed in as " + s.user; hu.classList.remove("hidden"); }
@@ -1828,11 +1875,12 @@ function renderSettings(s) {
   setKillBanner(s.budgets.KillSwitch);
   setNoKeyBanner(s.keyMissing && s.budgets.Mode === "live");
 
+  renderStrip(s);
   var body = document.getElementById("set-providers");
   body.textContent = "";
   if (!s.providers.length) {
     var tr = el("tr");
-    cell(tr, "No provider configs yet: the agent uses OPENAI_API_KEY from .env.", "muted").colSpan = 6;
+    cell(tr, "No provider added. The agent uses the key from .env. Add one here to switch model or provider.", "muted").colSpan = 6;
     body.appendChild(tr);
   }
   s.providers.forEach(function (p) {
@@ -2106,7 +2154,7 @@ var SUBS = {
   wbnew: "Build an AI Hub agent step by step: pick its tools and skills, write its instructions, test it for $0, then add it to a production.",
   wblib: "Everything an AI Hub agent is built from, found in this namespace. Pick a part to see what it does, where it is used and its source, or test it for $0.",
   wbprod: "A read-only picture of a production. Items that host an AI Hub agent carry the AI HUB badge.",
-  settings: "Providers and keys, agent limits, guardrails, budgets, prices, learned mappings and the change log."
+  settings: "Control what the agent may use, do and spend. Every change is logged in the change log."
 };
 var PAGE_INFO = { wblib: "AI Hub Library" };
 document.getElementById("ptitle-info").addEventListener("click", function () { openHelp(this.dataset.help); });
