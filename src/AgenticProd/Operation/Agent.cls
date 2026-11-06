@@ -203,6 +203,12 @@ Method Triage(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As Age
 
 		// Without a key the provider fails with a raw error; say why instead, and keep the message moving
 		If ..NoApiKey() {
+			// The recordings that ship with the repo answer the sample cases without a key
+			If ..FindRecording(pRequest, .tRecJSON, .tRecSession, .tRecHash) {
+				$$$LOGINFO("No API key set, replaying the recorded run for header "_pRequest.HeaderId)
+				$$$ThrowOnError(..Replay(pRequest, .pResponse))
+				Quit
+			}
 			$$$LOGWARNING("No API key set, escalating header "_pRequest.HeaderId_" without an LLM call")
 			Set pResponse = ..EscalateDecision(pRequest, "No API key set; agent not called. Add a key in Settings or use replay mode")
 			Quit
@@ -356,6 +362,32 @@ Method Answer(pRequest As AgenticProd.Msg.AgentRequest, Output pResponse As Agen
 	Quit tSC
 }
 
+/// 1 when a live run is recorded for this request. Returns its Decision JSON, saved session and PromptHash.
+/// Looked up by eval case and model first. The sample cases sent with Demo.SendCase keep their own
+/// message IDs instead of EV<run>-<case>, so those are found by PromptHash: the prompt version, the
+/// error class and the masked error text. Rows recorded before PromptHash existed have none.
+Method FindRecording(pRequest As AgenticProd.Msg.TriageRequest, Output pJSON As %String, Output pSession As %String, Output pHash As %String) As %Boolean
+{
+	Set (pJSON, pSession, pHash) = ""
+	Try {
+		Set tCase = ##class(AgenticProd.Eval.Runner).CaseOf(pRequest.ControlId)
+		If tCase '= "" {
+			// Rows written before 5.4 have no DecisionJSON, so they cannot be replayed
+			Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 1 DecisionJSON, AgentSessionId, PromptHash FROM AgenticProd_Data.Usage WHERE CaseId = ? AND Model = ? AND COALESCE(Replay, 0) = 0 AND DecisionJSON IS NOT NULL ORDER BY ID DESC", tCase, ..Model)
+			If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message))
+			If tRS.%Next() Set pJSON = tRS.DecisionJSON, pSession = tRS.AgentSessionId, pHash = tRS.PromptHash
+		}
+		If pJSON = "" {
+			Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 1 DecisionJSON, AgentSessionId, PromptHash FROM AgenticProd_Data.Usage WHERE PromptHash = ? AND Model = ? AND COALESCE(Replay, 0) = 0 AND DecisionJSON IS NOT NULL ORDER BY ID DESC", ..PromptHash(pRequest), ..Model)
+			If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message))
+			If tRS.%Next() Set pJSON = tRS.DecisionJSON, pSession = tRS.AgentSessionId, pHash = tRS.PromptHash
+		}
+	} Catch ex {
+		Set (pJSON, pSession, pHash) = ""
+	}
+	Quit (pJSON '= "")
+}
+
 /// Replay mode: the Decision of the latest live Usage row for the request's eval case and Model,
 /// or ESCALATE "no recorded run". Writes a Usage row marked Replay, tokens and cost 0.
 Method Replay(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As AgenticProd.Msg.Decision) As %Status
@@ -364,13 +396,7 @@ Method Replay(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As Age
 	Try {
 		Set tStart = $ZHOROLOG
 		Set tCase = ##class(AgenticProd.Eval.Runner).CaseOf(pRequest.ControlId, .tRunId)
-		Set (tJSON, tAgentSession, tRecordedHash) = ""
-		If tCase '= "" {
-			// Rows written before 5.4 have no DecisionJSON, so they cannot be replayed
-			Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 1 DecisionJSON, AgentSessionId, PromptHash FROM AgenticProd_Data.Usage WHERE CaseId = ? AND Model = ? AND COALESCE(Replay, 0) = 0 AND DecisionJSON IS NOT NULL ORDER BY ID DESC", tCase, ..Model)
-			If tRS.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$SQLError, tRS.%SQLCODE, tRS.%Message))
-			If tRS.%Next() Set tJSON = tRS.DecisionJSON, tAgentSession = tRS.AgentSessionId, tRecordedHash = tRS.PromptHash
-		}
+		Do ..FindRecording(pRequest, .tJSON, .tAgentSession, .tRecordedHash)
 		If tJSON = "" {
 			Set pResponse = ..EscalateDecision(pRequest, "replay: no recorded run for case '"_tCase_"' and model "_..Model)
 		} Else {

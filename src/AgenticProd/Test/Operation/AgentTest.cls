@@ -90,7 +90,8 @@ Method TestLiveCallBlockedDuringTestRun()
 Method TestNoKeyEscalatesWithoutAgent()
 {
 	Set tOp = ##class(AgenticProd.Test.Operation.StubAgentOp).%New("TestAgentOp")
-	Set tOp.KillSwitch = 0, tOp.Mode = "live", tOp.DailyTokenBudget = 0, tOp.KeyMissing = 1
+	// A model no recording was made with, or a shipped recording could answer instead of the escalation
+	Set tOp.KillSwitch = 0, tOp.Mode = "live", tOp.DailyTokenBudget = 0, tOp.KeyMissing = 1, tOp.Model = "rec-none-model"
 	Set tUsageRows = ..CountUsage()
 	Do $$$AssertStatusOK(tOp.Triage(..StubRequest(), .tDecision))
 	Do $$$AssertEquals(tDecision.Decision, "ESCALATE")
@@ -355,6 +356,114 @@ Method TestReplayWithoutRecordEscalates()
 	Set tRequest.ControlId = "MSG00001"
 	Do $$$AssertStatusOK(tOp.Triage(tRequest, .tDecision))
 	Do $$$AssertEquals(tDecision.Decision, "ESCALATE", "not an eval message: nothing to replay")
+}
+
+/// Looked up by eval case and model first, then by PromptHash for messages with their own IDs.
+/// Replay rows are never a recording, and another model's recording is not this model's.
+Method TestFindRecordingByCaseAndByHash()
+{
+	Set tOp = ..KeylessOp("rec-find-model")
+	Set tRequest = ..SampleRequest("OBX(1):14 'find-recording-text' is not a valid TS")
+	Set tHash = tOp.PromptHash(tRequest)
+	Do $$$AssertStatusOK(..AddRecorded("T97", "rec-find-model", {"decision":"ESCALATE","error_class":"OTHER","confidence":0.5,"reason":"by case"}, "21", 0, "0000000000000001"))
+	Do $$$AssertStatusOK(..AddRecorded("T98", "rec-find-model", {"decision":"ESCALATE","error_class":"OTHER","confidence":0.5,"reason":"by hash"}, "22", 0, tHash))
+
+	Set tRequest.ControlId = "EV9999-T97"
+	Do $$$AssertTrue(tOp.FindRecording(tRequest, .tJSON, .tSession, .tRecHash), "found by case")
+	Do $$$AssertEquals({}.%FromJSON(tJSON).reason, "by case")
+	Do $$$AssertEquals(tSession, "21")
+	Do $$$AssertEquals(tRecHash, "0000000000000001", "returns the recorded hash, so Replay can mark a mismatch")
+
+	Set tRequest.ControlId = "MSG00007"
+	Do $$$AssertTrue(tOp.FindRecording(tRequest, .tJSON, .tSession, .tRecHash), "found by hash, no eval case in the ID")
+	Do $$$AssertEquals({}.%FromJSON(tJSON).reason, "by hash")
+	Do $$$AssertEquals(tSession, "22")
+
+	Set tRequest.ControlId = "EV9999-T55"
+	Do $$$AssertTrue(tOp.FindRecording(tRequest, .tJSON), "unknown case still falls back to the hash")
+	Do $$$AssertEquals({}.%FromJSON(tJSON).reason, "by hash")
+
+	Set tRequest.ErrorText = "another error text"
+	Set tRequest.ControlId = "MSG00007"
+	Do $$$AssertNotTrue(tOp.FindRecording(tRequest, .tJSON, .tSession, .tRecHash), "different input: no recording")
+	Do $$$AssertEquals(tJSON_tSession_tRecHash, "", "outputs cleared")
+
+	Set tOther = ..KeylessOp("rec-other-model")
+	Set tRequest.ErrorText = "OBX(1):14 'find-recording-text' is not a valid TS"
+	Do $$$AssertNotTrue(tOther.FindRecording(tRequest), "other model")
+
+	// Only a replay row for this input
+	Set tRequest.ErrorText = "replay-only text"
+	Do $$$AssertStatusOK(..AddRecorded("T99", "rec-find-model", {"decision":"ESCALATE","reason":"replay row"}, "23", 1, tOp.PromptHash(tRequest)))
+	Set tRequest.ControlId = "EV9999-T99"
+	Do $$$AssertNotTrue(tOp.FindRecording(tRequest), "a replay row is not a recording")
+}
+
+/// Live mode, no key, recording found: the recorded decision, a Replay Usage row, no agent and no chat.
+Method TestNoKeyWithRecordingReplays()
+{
+	Set tOp = ..KeylessOp("rec-find-model")
+	Do $$$AssertStatusOK(..AddRecorded("T97", "rec-find-model", {"decision":"MAP_CODE","error_class":"UNMAPPED_CODE","confidence":0.8,"mapping":{"local_code":"GLU-01","loinc":"2345-7","display":"Glucose"},"evidence":["unit mg/dL"],"reason":"recorded run"}, "21", 0))
+	Set tRequest = ..SampleRequest("no-key replay text")
+	Set tRequest.ControlId = "EV9999-T97"
+	Set tUsageRows = ..CountUsage()
+	Do $$$AssertStatusOK(tOp.Triage(tRequest, .tDecision))
+	Do $$$AssertEquals(tDecision.Decision, "MAP_CODE")
+	Do $$$AssertEquals(tDecision.Reason, "recorded run")
+	Do $$$AssertEquals(tDecision.AgentSessionId, "21", "points at the recorded session")
+	Do $$$AssertEquals(tDecision.CostUsd, 0)
+	Do $$$AssertEquals(tOp.Calls, 0, "no chat call")
+	Do $$$AssertEquals(..CountUsage(), tUsageRows + 1, "one Usage row")
+	Set tRS = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 1 Replay, CostUsd FROM AgenticProd_Data.Usage WHERE HeaderId = -9102 ORDER BY ID DESC")
+	Do tRS.%Next()
+	Do $$$AssertEquals(tRS.Replay, 1, "marked replay")
+	Do $$$AssertEquals(+tRS.CostUsd, 0)
+}
+
+Method TestNoKeyWithoutRecordingEscalates()
+{
+	Set tOp = ..KeylessOp("rec-none-model")
+	Set tRequest = ..SampleRequest("no recording for this text")
+	Set tRequest.ControlId = "EV9999-T97"
+	Set tUsageRows = ..CountUsage()
+	Do $$$AssertStatusOK(tOp.Triage(tRequest, .tDecision))
+	Do $$$AssertEquals(tDecision.Decision, "ESCALATE")
+	Do $$$AssertTrue(tDecision.Reason [ "No API key set", "reason says why")
+	Do $$$AssertEquals(tOp.Calls, 0, "no chat call")
+	Do $$$AssertEquals(..CountUsage(), tUsageRows, "no Usage row")
+}
+
+/// The switch means no agent answer at all, so not a recorded one either, in live and replay mode.
+Method TestKillSwitchWinsOverReplay()
+{
+	Do $$$AssertStatusOK(..AddRecorded("T97", "rec-find-model", {"decision":"MAP_CODE","error_class":"UNMAPPED_CODE","confidence":0.8,"reason":"recorded run"}, "21", 0))
+	Set tRequest = ..SampleRequest("kill switch text")
+	Set tRequest.ControlId = "EV9999-T97"
+	For tMode = "live", "replay" {
+		Set tOp = ..KeylessOp("rec-find-model")
+		Set tOp.KillSwitch = 1, tOp.Mode = tMode
+		Set tUsageRows = ..CountUsage()
+		Do $$$AssertStatusOK(tOp.Triage(tRequest, .tDecision))
+		Do $$$AssertEquals(tDecision.Decision, "ESCALATE", tMode_": escalated")
+		Do $$$AssertTrue(tDecision.Reason [ "kill switch", tMode_": reason names the switch")
+		Do $$$AssertEquals(..CountUsage(), tUsageRows, tMode_": no Usage row, nothing replayed")
+	}
+}
+
+/// Stub operation with no API key, live mode, no budget.
+Method KeylessOp(pModel As %String) As AgenticProd.Test.Operation.StubAgentOp
+{
+	Set tOp = ##class(AgenticProd.Test.Operation.StubAgentOp).%New("TestAgentOp")
+	Set tOp.KillSwitch = 0, tOp.Mode = "live", tOp.DailyTokenBudget = 0, tOp.KeyMissing = 1, tOp.Model = pModel
+	Quit tOp
+}
+
+Method SampleRequest(pErrorText As %String) As AgenticProd.Msg.TriageRequest
+{
+	Set tRequest = ..StubRequest()
+	Set tRequest.ErrorClass = "BAD_FORMAT"
+	Set tRequest.ErrorText = pErrorText
+	Quit tRequest
 }
 
 /// A live Usage row as Operation.Agent writes it (or a replay row when pReplay).
