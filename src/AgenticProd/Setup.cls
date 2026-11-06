@@ -92,6 +92,9 @@ ClassMethod Run(pRoot As %String = "") As %Status
 		$$$ThrowOnError(##class(AgenticProd.Data.PriceTable).Seed())
 		$$$ThrowOnError(..BackfillNamespace())
 		$$$ThrowOnError(..SeedLabCodeMap())
+		// Recorded runs that ship with the repo: replay and the sample cases then work with no API key
+		Set tRec = ##class(AgenticProd.Recordings).Load()
+		If $$$ISERR(tRec) Write "Recordings not loaded: ", $SYSTEM.Status.GetErrorText(tRec), !
 		$$$ThrowOnError(..BuildLoincKB())
 		// Before the roles: they list the settings resources
 		$$$ThrowOnError(##class(AgenticProd.Settings.Store).Prepare())
