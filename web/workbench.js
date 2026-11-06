@@ -1,6 +1,6 @@
 "use strict";
-// AI Hub Workbench: the AI Hub Library of the AI Hub classes and the read-only
-// map of what a production uses. Nothing here changes IRIS. Needs el, get, send from the dashboard script.
+// AI Hub Workbench: the AI Hub Library of the AI Hub classes, and AI Hub in Production,
+// a read-only map of what a production uses. Nothing here changes IRIS. Needs el, get, send from the dashboard script.
 (function () {
   var panels = { lib: document.getElementById("wb-lib"), prod: document.getElementById("wb-prod") };
   if (!panels.lib || !panels.prod) return;
@@ -136,7 +136,7 @@
   // ---------- page parts
   var anat = div("card wb-l-anat"), libTabs = div("wb-tabs"), libBar = div("wb-bar"), libBody = div("wb-l-body"), libNote = div("wb-note");
   var search = el("input", null, "form-control wb-search");
-  search.placeholder = "Search by name, class or description"; search.type = "search"; search.setAttribute("aria-label", "Search the Library");
+  search.placeholder = "Search by name, class or description"; search.type = "search"; search.setAttribute("aria-label", "Search the AI Hub Library");
   search.addEventListener("input", function () { libQuery = search.value.toLowerCase(); renderLib(); });
   var sourceBox = el("select", null, "form-select wb-pickbox"); sourceBox.setAttribute("aria-label", "Source");
   [["", "Any source"], ["builtin", "Ships with the app"], ["yours", "Created in Workbench"]].forEach(function (o) { var op = el("option", o[1]); op.value = o[0]; sourceBox.appendChild(op); });
@@ -508,7 +508,7 @@
   var prodNote = div("wb-note"), grid = div("wb-mapgrid"), cv = div("wb-cv"), side = div("wb-side");
   prodBar.appendChild(el("span", "Production", "text-secondary")); prodBar.appendChild(pick); prodBar.appendChild(runBadge);
   prodBar.appendChild(statAi); prodBar.appendChild(stat24);
-  prodBar.appendChild(div("wb-hint", "Read-only map · change components in the Library"));
+  prodBar.appendChild(div("wb-hint", "Read-only map · change components in the AI Hub Library"));
   var wrap = div("wb-cvwrap"), zoomBar = div("wb-zoom");
   [["zoom-in", function () { zoom(1.2); }, "Zoom in"], ["zoom-out", function () { zoom(1 / 1.2); }, "Zoom out"], ["arrows-maximize", function () { fit(); }, "Fit to screen"]].forEach(function (z) {
     var b = el("button", null, "btn btn-sm btn-icon"); b.type = "button"; b.title = z[2]; b.setAttribute("aria-label", z[2]); b.appendChild(icon(z[0]));
@@ -796,7 +796,7 @@
     b2.appendChild(kv("Used by", (c.usedBy || []).join(", ")));
     b2.appendChild(kv(c.kind === "model" ? "Agent runs, last 24 h" : "Tool calls, last 24 h", String(c.calls24h || 0)));
     var row = div("d-flex gap-2 mt-3");
-    var lb = el("button", null, "btn flex-fill"); lb.type = "button"; lb.appendChild(icon("books", "me-1")); lb.appendChild(document.createTextNode("Open in Library"));
+    var lb = el("button", null, "btn flex-fill"); lb.type = "button"; lb.appendChild(icon("books", "me-1")); lb.appendChild(document.createTextNode("Open in AI Hub Library"));
     lb.addEventListener("click", function () { openInLibrary(c); });
     row.appendChild(lb); b2.appendChild(row);
     cardEl.appendChild(b2); side.appendChild(cardEl);

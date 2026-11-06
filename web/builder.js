@@ -127,7 +127,7 @@
     clear(view);
     var m = META[cur.kind], editing = !!cur.$editing;
     var bar = div("wb-bar");
-    bar.appendChild(btn("Library", "btn-sm", "arrow-left", close));
+    bar.appendChild(btn("AI Hub Library", "btn-sm", "arrow-left", close));
     var hd = div("wb-sh"), ic = div("wb-ic t-" + m[0]); ic.appendChild(icon(m[1]));
     var t = div(); t.appendChild(div("fw-bold", editing ? "Edit " + cur.class : m[2])); t.appendChild(div("wb-d", m[3]));
     hd.appendChild(ic); hd.appendChild(t); bar.appendChild(hd); view.appendChild(bar);
@@ -346,7 +346,7 @@
 
   window.wbBuilder = {
     templates: function () { withOpts(picker); },
-    // Straight into one builder: tool, skill, policy or agent-blank (the Library's Create new menu)
+    // Straight into one builder: tool, skill, policy or agent-blank (the AI Hub Library's Create new menu)
     create: function (id) { startNew(id); },
     // MyAI classes written by a builder reopen in it; others fall back to the read-only drawer
     edit: function (cls, fallback) {

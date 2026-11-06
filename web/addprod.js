@@ -28,7 +28,7 @@
 
   function canAdd(cls) { return /^MyAI\.Agent\./.test(cls || ""); }
 
-  // The Library card's part: the button and one chip per install with its Remove.
+  // The AI Hub Library card's part: the button and one chip per install with its Remove.
   function cardBits(item, reload) {
     var box = div("ap-card");
     box.addEventListener("click", function (e) { e.stopPropagation(); });

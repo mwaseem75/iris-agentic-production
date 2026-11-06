@@ -337,7 +337,7 @@
     saveMsg.textContent = "Saving…";
     send("POST", "api/workbench/wizard/save", { spec: spec() }).then(function (r) {
       if (!r.saved) { saveMsg.textContent = ""; clear(runBox); runBox.appendChild(errs(r.errors || ["Not saved."])); return; }
-      saveMsg.textContent = "Saved " + r.classes.join(" and ") + ". Find it in the Library.";
+      saveMsg.textContent = "Saved " + r.classes.join(" and ") + ". Find it in the AI Hub Library.";
       if (window.workbenchReload) window.workbenchReload();
       if (typeof then === "function") then(r.classes[r.classes.length - 1]);
     }).catch(function (e) { saveMsg.textContent = e.message; });

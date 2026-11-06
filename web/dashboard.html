@@ -15,8 +15,8 @@
 </script>
 <link rel="stylesheet" href="vendor/tabler/tabler.min.css">
 <link rel="stylesheet" href="vendor/tabler/tabler-icons.min.css">
-<link rel="stylesheet" href="workbench.css?v=8.20.42">
-<link rel="stylesheet" href="layout.css?v=8.20.42">
+<link rel="stylesheet" href="workbench.css?v=8.20.44">
+<link rel="stylesheet" href="layout.css?v=8.20.44">
 <style>
 :root {
   --tblr-font-sans-serif: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -330,8 +330,8 @@ td.go { white-space: nowrap; }
         <li class="nav-item"><a class="nav-link" data-tab="cost" href="#cost"><i class="ti ti-coin"></i><span class="nl">Cost</span></a></li>
         <li class="nav-grp">AI Hub Workbench</li>
         <li class="nav-item"><a class="nav-link" data-tab="wbnew" href="#wbnew"><i class="ti ti-wand"></i><span class="nl">Create an agent</span></a></li>
-        <li class="nav-item"><a class="nav-link" data-tab="wblib" href="#wblib"><i class="ti ti-books"></i><span class="nl">Library</span></a></li>
-        <li class="nav-item"><a class="nav-link" data-tab="wbprod" href="#wbprod"><i class="ti ti-route"></i><span class="nl">Production map</span></a></li>
+        <li class="nav-item"><a class="nav-link" data-tab="wblib" href="#wblib"><i class="ti ti-books"></i><span class="nl">AI Hub Library</span></a></li>
+        <li class="nav-item"><a class="nav-link" data-tab="wbprod" href="#wbprod"><i class="ti ti-route"></i><span class="nl">AI Hub in Production</span></a></li>
         <li class="nav-item"><a class="nav-link" data-tab="settings" href="#settings"><i class="ti ti-settings"></i><span class="nl">Settings</span></a></li>
         <li class="nav-item mt-3"><a class="nav-link hidden" id="inbox-link" target="_blank" rel="noopener"><i class="ti ti-inbox"></i><span class="nl">Workflow inbox</span> <i class="ti ti-external-link ms-auto" style="font-size:14px;margin:0"></i></a></li>
         <li class="nav-item"><a class="nav-link hidden" id="prod-link" target="_blank" rel="noopener"><i class="ti ti-route"></i><span class="nl">Production</span> <i class="ti ti-external-link ms-auto" style="font-size:14px;margin:0"></i></a></li>
@@ -938,7 +938,7 @@ var CARD_INFO = {
   mix: ["Outcome mix", "Final outcomes of triaged messages, grouped the same way as the status chips.", "Colours match the status chips used on the Messages tab."],
   start: ["Getting started", "Four steps to see the system work from start to finish.", "Sending a message or a burst needs an account that may edit settings. Replay runs use recorded agent answers, so they cost nothing."],
   "Send a burst": ["Send a burst", "Sends random evaluation cases as new messages so you can watch them move through the production.", "Replay mode costs nothing. Live mode calls the model and asks for confirmation first."],
-  "Library": ["Library", "Everything the agent can use, in one list: agents, tools, skills, policies, knowledge and the plain IRIS checks around them.", "Built-in items ship with the app. Yours are classes made from a template; you can edit them and add an agent to a production. Nothing here changes a production until you use Add to production."],
+  "AI Hub Library": ["AI Hub Library", "Everything an AI Hub agent is built from: its tools, skills, policies and knowledge, and the plain IRIS checks around it.", "Parts that ship with the app are read-only. Parts created in Workbench are classes made from a template; you can edit and test them, and add an agent to a production. Nothing here changes a production until you use Add to production."],
   "Recent decisions": ["Recent decisions", "Every message the agent has handled, newest first.", "Click a row or View flow to open its path, the agent's tool calls and the checks Triage ran."],
   "Eval runs": ["Eval runs", "Each run scores the agent against labelled test cases.", "Select a run to see every case, what the agent proposed and whether it matched."],
   "Providers": ["Providers & keys", "Model providers and API keys the agent can use.", "Keys are stored in the Wallet and shown only as set or not set."],
@@ -2092,7 +2092,7 @@ document.getElementById("kill-btn").addEventListener("click", function () {
   }).catch(function (e) { say("m-kill", e.message); }).then(function () { btn.disabled = false; });
 });
 
-var TITLES = { overview: "Overview", wbnew: "Create an agent", wblib: "Library", wbprod: "Production map", messages: "Messages", trust: "Trust & evaluation", cost: "Cost", settings: "Settings" };
+var TITLES = { overview: "Overview", wbnew: "Create an agent", wblib: "AI Hub Library", wbprod: "AI Hub in Production", messages: "Messages", trust: "Trust & evaluation", cost: "Cost", settings: "Settings" };
 // One description per page; a page with sub-tabs or several views keeps the same text
 var SUBS = {
   overview: "Live view of the agent at work: how many failed messages came in, what was decided, what it cost and how fast.",
@@ -2104,7 +2104,7 @@ var SUBS = {
   wbprod: "A read-only picture of a production. Items that host an AI Hub agent carry the AI HUB badge.",
   settings: "Providers and keys, agent limits, guardrails, budgets, prices, learned mappings and the change log."
 };
-var PAGE_INFO = { wblib: "Library" };
+var PAGE_INFO = { wblib: "AI Hub Library" };
 document.getElementById("ptitle-info").addEventListener("click", function () { openHelp(this.dataset.help); });
 function showTab(name) {
   if (!document.getElementById("tab-" + name)) name = "overview";
@@ -2113,6 +2113,7 @@ function showTab(name) {
     a.classList.toggle("active", a.dataset.tab === name);
   });
   document.getElementById("ptitle").textContent = TITLES[name];
+  document.title = TITLES[name] + " · Agentic Production";
   var sub = document.getElementById("psub");
   sub.textContent = SUBS[name] || "";
   sub.classList.toggle("hidden", !SUBS[name]);
@@ -2307,10 +2308,10 @@ setInterval(load, 30000);
     <details id="story-msg-box"><summary>Message (patient name, birth date, address and phone masked)</summary><pre id="story-msg"></pre></details>
   </div>
 </aside>
-<script src="flow.js?v=8.20.42"></script>
-<script src="workbench.js?v=8.20.42"></script>
-<script src="builder.js?v=8.20.42"></script>
-<script src="wizard.js?v=8.20.42"></script>
-<script src="addprod.js?v=8.20.42"></script>
+<script src="flow.js?v=8.20.44"></script>
+<script src="workbench.js?v=8.20.44"></script>
+<script src="builder.js?v=8.20.44"></script>
+<script src="wizard.js?v=8.20.44"></script>
+<script src="addprod.js?v=8.20.44"></script>
 </body>
 </html>
