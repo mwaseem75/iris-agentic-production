@@ -206,7 +206,7 @@ Method Triage(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As Age
 			// The recordings that ship with the repo answer the sample cases without a key
 			If ..FindRecording(pRequest, .tRecJSON, .tRecSession, .tRecHash) {
 				$$$LOGINFO("No API key set, replaying the recorded run for header "_pRequest.HeaderId)
-				$$$ThrowOnError(..Replay(pRequest, .pResponse))
+				$$$ThrowOnError(..Replay(pRequest, .pResponse, 1))
 				Quit
 			}
 			$$$LOGWARNING("No API key set, escalating header "_pRequest.HeaderId_" without an LLM call")
@@ -390,7 +390,8 @@ Method FindRecording(pRequest As AgenticProd.Msg.TriageRequest, Output pJSON As 
 
 /// Replay mode: the Decision of the latest live Usage row for the request's eval case and Model,
 /// or ESCALATE "no recorded run". Writes a Usage row marked Replay, tokens and cost 0.
-Method Replay(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As AgenticProd.Msg.Decision) As %Status
+/// pNoKey: the run was live and only replays because there is no API key (the story says so).
+Method Replay(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As AgenticProd.Msg.Decision, pNoKey As %Boolean = 0) As %Status
 {
 	Set tSC = $$$OK
 	Try {
@@ -411,7 +412,7 @@ Method Replay(pRequest As AgenticProd.Msg.TriageRequest, Output pResponse As Age
 		Set tUsage.Provider = ##class(AgenticProd.Agent.TriageAgent).#PROVIDER
 		Set tUsage.Model = ..Model
 		Set (tUsage.PromptTokens, tUsage.CompletionTokens, tUsage.ReasoningTokens, tUsage.CostUsd) = 0
-		Set tUsage.Replay = 1
+		Set tUsage.Replay = 1, tUsage.ReplayNoKey = pNoKey
 		// Replays anyway; the mark tells the reader the recording may not fit today's prompt or input.
 		// A recording from before the hash existed has none and is replayed as before.
 		Set tUsage.PromptHash = ..PromptHash(pRequest)

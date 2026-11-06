@@ -106,6 +106,28 @@ Method TestReplayWithChangedPromptIsMarked()
 	Do $$$AssertTrue(tText [ "Recorded with a different prompt", tText)
 }
 
+/// Plain replay keeps its wording; a replay only because there was no key says so.
+Method TestReplayWithNoKeyIsMarked()
+{
+	Set tUsage = ..Usage("ESCALATE")
+	Set tUsage.Replay = 1
+	Set tJ = ##class(AgenticProd.UI.Journey).Build(..Log("ESCALATE"), "IRISAPP", ..Items(), [], [], tUsage, "", "SENT_FOR_APPROVAL")
+	Set tText = ..AgentText(tJ)
+	Do $$$AssertTrue(tText [ "Replayed from a recorded run: no LLM call", tText)
+	Do $$$AssertNotTrue(tText [ "no API key", "plain replay is not a no-key replay")
+	Set tUsage.ReplayNoKey = 1
+	Set tJ = ##class(AgenticProd.UI.Journey).Build(..Log("ESCALATE"), "IRISAPP", ..Items(), [], [], tUsage, "", "SENT_FOR_APPROVAL")
+	Set tText = ..AgentText(tJ)
+	Do $$$AssertTrue(tText [ "Replayed from a recorded run, no API key", tText)
+}
+
+Method AgentText(pJourney As %DynamicObject) As %String
+{
+	Set tIter = pJourney.steps.%GetIterator(), tText = ""
+	While tIter.%GetNext(, .tStep) { Set:(tStep.kind = "agent") tText = tStep.text }
+	Quit tText
+}
+
 Method TestAutoFixApplied()
 {
 	Set tLog = ..Log("AUTO_FIX")

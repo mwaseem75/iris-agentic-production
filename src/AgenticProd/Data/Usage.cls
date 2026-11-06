@@ -78,6 +78,9 @@ Property PromptHash As %String(MAXLEN = 32);
 /// Replay rows only: 1 when the recorded run had a different PromptHash than the message being replayed.
 Property PromptMismatch As %Boolean [ InitialExpression = 0 ];
 
+/// Replay rows only: 1 when the run was live but had no API key, so a recording answered instead.
+Property ReplayNoKey As %Boolean [ InitialExpression = 0 ];
+
 Index HeaderIdx On HeaderId;
 
 Index EvalCaseIdx On (EvalRunId, CaseId);
@@ -202,6 +205,9 @@ Storage Default
 </Value>
 <Value name="30">
 <Value>PromptMismatch</Value>
+</Value>
+<Value name="31">
+<Value>ReplayNoKey</Value>
 </Value>
 </Data>
 <DataLocation>^AgenticProd.Data.UsageD</DataLocation>
