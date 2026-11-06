@@ -20,7 +20,7 @@ Built for the InterSystems Programming Contest "AI Agents in Interoperability Wo
 
 ## AI Hub in 60 seconds
 
-[IRIS AI Hub](https://github.com/intersystems-community/ai-hub-eap) (early access, IRIS 2026.3) lets you build AI agents in ObjectScript, next to your data and your productions. This project uses almost every part of it, so it also works as a worked example.
+[IRIS AI Hub](https://github.com/intersystems-community/ai-hub-eap) (early access; this repo was built on IRIS 2026.3 build 154 and verified on 2027.1 build 109) lets you build AI agents in ObjectScript, next to your data and your productions. This project uses almost every part of it, so it also works as a worked example.
 
 | AI Hub part | What it is | Where it is used here |
 |---|---|---|
@@ -47,7 +47,7 @@ AI Hub gives the agent its tools and its limits. This project adds what a clinic
 | **Measured** | 60-case evaluation, live or replayed at $0 |
 | **Observable** | Traces in IRIS, Visual Trace links, Prometheus and Grafana metrics, optional OTLP and Jaeger |
 | **Providers** | OpenAI, Anthropic, OpenRouter, NVIDIA NIM, and any OpenAI-compatible endpoint (Azure OpenAI, Ollama) |
-| **Runs anywhere** | Docker one-command installer, or ZPM; works with no API key in replay mode |
+| **Runs anywhere** | Docker one-command installer, or ZPM; works with no API key: the sample cases are answered from recorded runs |
 
 ## Quick start
 
@@ -56,30 +56,30 @@ You need Docker with about 4 GB of free memory and the AI Hub image (next sectio
 ```bash
 git clone https://github.com/mwaseem75/iris-agentic-production.git
 cd iris-agentic-production
-./install.sh /path/to/irishealth-community-2026.3.0AI.154.0-docker.tar.gz
+./install.sh /path/to/irishealth-community-2027.1.0AI.109.0-docker.tar.gz
 ```
 
-The path is only needed if the image is not loaded yet. On Windows use `.\install.ps1 C:\path\to\the.tar.gz` in PowerShell. The installer checks Docker and the image, creates `.env` if you have none (it never overwrites one), starts the containers, waits until IRIS is healthy and prints the URLs. **No API key is needed**: replay mode works without one.
+The path is only needed if the image is not loaded yet. On Windows use `.\install.ps1 C:\path\to\the.tar.gz` in PowerShell. The installer checks Docker and the image, creates `.env` if you have none (it never overwrites one), starts the containers, waits until IRIS is healthy and prints the URLs. **No API key is needed**: the sample cases are answered from the recorded runs that setup loads (see [Recorded runs](#evaluation)).
 
 Then open **http://localhost:52773/agenticprod/dashboard.html** and log in as `SuperUser` / `SYS`.
 
-The agent calls OpenAI, `gpt-4o-mini` by default, with the key in `OPENAI_API_KEY` in `.env`. Without a key no model is called: failed messages go to a human, or use replay mode.
+The agent calls OpenAI, `gpt-4o-mini` by default, with the key in `OPENAI_API_KEY` in `.env`. Without a key no model is called: a failed message that has a recorded run (the sample and evaluation cases) is answered from that recording, and any other goes to a person.
 
 ### Which image do I need?
 
-**`irishealth-community:2026.3.0AI.154.0`**: IRIS for Health with AI Hub, early access build 154. The plain `iris-community` image of the same build does not work, because it has no `EnsLib.HL7` classes, and setup stops with a message saying so. The image is not public. Load it from the tar file you received and tag it:
-
-Tested on build 154. To use another build, set `IRIS_IMAGE` in `.env` (for example `IRIS_IMAGE=my-registry/irishealth-ai:2027.1`) and run `./install.sh` again. Setup accepts IRIS for Health with AI Hub 2026.3 or later.
+**`irishealth-community:2027.1.0AI.109.0`** (the default): IRIS for Health with AI Hub, early access build 109. The app was built on build 154 (`irishealth-community:2026.3.0AI.154.0`) and verified on build 109: all 104 classes compile, the unit tests pass, `./verify.sh` runs (its two replay steps are skipped while there is no recorded run), and the dashboard pages and API answer for the `reviewer` and `SuperUser` logins. No live LLM call has been made on build 109 yet, so live mode on 109 is not verified; see [Notes on AI Hub builds 154 and 109](#notes-on-ai-hub-builds-154-and-109). The plain `iris-community` image of the same build does not work, because it has no `EnsLib.HL7` classes, and setup stops with a message saying so. The image is not public. Load it from the tar file you received and tag it:
 
 ```bash
-docker load -i irishealth-community-2026.3.0AI.154.0-docker.tar.gz
-docker tag <loaded image name> irishealth-community:2026.3.0AI.154.0
+docker load -i irishealth-community-2027.1.0AI.109.0-docker.tar.gz
+docker tag <loaded image name> irishealth-community:2027.1.0AI.109.0
 ```
+
+To use another build, set `IRIS_IMAGE` in `.env` (for example `IRIS_IMAGE=irishealth-community:2026.3.0AI.154.0` for the build 154 image it was built on) and run `./install.sh` again. Setup accepts IRIS for Health with AI Hub 2026.3 or later.
 
 ### Install by hand
 
 ```bash
-cp .env.example .env        # add OPENAI_API_KEY for live mode; replay mode needs no key
+cp .env.example .env        # add OPENAI_API_KEY for live mode; the recorded sample cases need no key
 docker compose up -d --build
 ```
 
@@ -94,7 +94,7 @@ On Windows, give WSL enough memory in `%UserProfile%\.wslconfig` (for example `m
 
 These logins are for the demo only. Change them on any shared machine.
 
-**Without Docker, with ZPM.** On an IRIS for Health 2026.3 build 154 instance that already has ZPM:
+**Without Docker, with ZPM.** On an IRIS for Health 2026.3 (build 154) or 2027.1 (build 109) instance that already has ZPM:
 
 ```objectscript
 zpm "load /path/to/iris-agentic-production"
@@ -107,7 +107,7 @@ Setup runs as part of the install. The files the code reads at run time are copi
 ## Verify it works
 
 ```bash
-./verify.sh              # Windows: .erify.ps1
+./verify.sh              # Windows: .\verify.ps1
 ```
 
 It runs `AgenticProd.Verify.Run()` in the container and prints one line per step. No LLM is called and nothing of yours is changed: the replay steps run the agent in the container process and delete their own rows.
@@ -116,14 +116,14 @@ It runs `AgenticProd.Verify.Run()` in the container and prints one line per step
 AgenticProd verify, no LLM call
 PASS  HL7 classes: EnsLib.HL7.Message found
 PASS  Production: AgenticProd.Production running
-PASS  AI Hub: %AI.Agent found on IRIS 2026.3.0AI
+PASS  AI Hub: %AI.Agent found on IRIS 2027.1.0AI
 PASS  LOINC knowledge base: 46 rows
 PASS  Sample case 05 replayed from gpt-4o-mini: decision AUTO_FIX, expected AUTO_FIX
 PASS  Replay scores: 3 of 3 cases match the recorded run
 Verify PASSED: 6 of 6 steps
 ```
 
-The two replay steps need a recorded live run of the case. Where there is none they print `SKIP` with the reason, and `./verify.sh --strict` counts that as a failure. The exit code is 0 when no step failed.
+The two replay steps use the recorded runs that setup loads from `eval/recordings/recordings.json` (see [Recorded runs](#evaluation)). Where there is no recording for the case they print `SKIP` with the reason, and `./verify.sh --strict` counts that as a failure. The exit code is 0 when no step failed.
 
 Unit tests, no LLM call (a unit-test run blocks live calls): 225 test methods in 33 classes.
 
@@ -146,6 +146,7 @@ do ##class(AgenticProd.Demo).SendCase("01")
 do ##class(AgenticProd.Demo).SendCase("01", "MSG90001")
 
 // replay the recorded evaluation: no API key, no cost
+// (with no key, the two cases above are also answered from their recorded runs)
 do ##class(AgenticProd.Eval.Runner).Run("gpt-4o-mini", "replay demo", "all", "replay")
 ```
 
@@ -293,7 +294,7 @@ Admins (`SuperUser`, `_SYSTEM`) can change these; the reviewer sees them read-on
 | Memory | learned mappings with provenance, revoke |
 | Change log | who changed what, when, old → new (keys logged only as "changed") |
 
-If no provider config is chosen, the agent uses `OPENAI_API_KEY` from `.env`, so a fresh install works without opening Settings. If there is no key at all and the mode is live, the agent makes no LLM call: every failure goes to a human with the reason "No API key set", and the dashboard shows a banner that says so.
+If no provider config is chosen, the agent uses `OPENAI_API_KEY` from `.env`, so a fresh install works without opening Settings. If there is no key at all and the mode is live, the agent makes no LLM call. A failure that has a recorded run is replayed from it, and its story says "Replayed from a recorded run, no API key". Any other failure goes to a person with the reason "No API key set". The dashboard shows a banner that says so. The kill switch comes first and is never replayed past.
 
 ## Architecture
 
@@ -338,7 +339,14 @@ Every lab result that passes LabRouter also goes out as FHIR R4, built with the 
 
 You do not have to run it. **Replay** runs all 60 cases from recorded model calls: no key, no cost, same result every time. A live run needs your own key and costs about $0.09.
 
-A replay is keyed by case ID and model. Each recording stores a hash of the prompt version and the input the agent was given (error class and masked error text). If the hash of a replayed message differs from the recording's, the recorded decision is still used, no LLM is called, and the story view and the Trust tab mark it "recorded with a different prompt". Recordings made before the hash existed replay as before.
+A replay is keyed by case ID and model; messages that keep their own IDs, such as the sample cases, are found by prompt hash and model. Each recording stores a hash of the prompt version and the input the agent was given (error class and masked error text). If the hash of a replayed message differs from the recording's, the recorded decision is still used, no LLM is called, and the story view and the Trust tab mark it "recorded with a different prompt". Recordings made before the hash existed replay as before.
+
+**Recorded runs.** `eval/recordings/recordings.json` holds the finished live run (its `EvalRun` and `EvalResult` rows, so the Trust tab shows the headline numbers on a fresh install) and the agent's answers for it (`Data.Usage` rows with the decision, tokens, cost, tool calls and prompt hash). Setup loads it with `AgenticProd.Recordings.Load()` when that run is not in the database yet, so a second setup adds nothing and your own runs are never touched. Live mode with no API key then replays the recording for the message (same case or same prompt hash, same model), and with no recording the message goes to a person. To record again, run the evaluation live (needs your key), export it and commit the file:
+
+```objectscript
+do ##class(AgenticProd.Eval.Runner).Run("gpt-4o-mini", "v2 final")
+do ##class(AgenticProd.Recordings).Export("v2 final")
+```
 
 The most important number is **unsafe_final**: how often the system carried out an unsafe decision. It is counted apart from **unsafe_agent**, how often the model proposed one.
 
@@ -371,13 +379,27 @@ Charts use [Apache ECharts](https://echarts.apache.org/) 5.5.1 and the layout us
 | Safe for real use | [How it stays safe](#how-it-stays-safe) and the unsafe_final score |
 | Human in the loop | Workflow inbox, governed memory, kill switch |
 | Reusable by others | [Workbench](#ai-hub-workbench), `Plugin.Installer`, ZPM package |
-| Easy to try | One-command installer; replay mode with no API key |
+| Easy to try | One-command installer; the sample cases work with no API key (recorded runs) |
 
 Bonus features, each used for a reason: **Workflow** (human approvals), **vector search** (LOINC knowledge base), **Docker** (installer), a **custom inbound adapter** (`Plugin.SentinelAdapter`), **ZPM**, **Embedded Python** (label printer in the LEGACY demo) and the Ideas Portal idea above.
 
-## Notes on AI Hub build 154
+## Notes on AI Hub builds 154 and 109
 
-AI Hub is pre-release, and a few things are worth knowing. Details and workarounds are in [TUTORIAL.md](TUTORIAL.md#13-build-154-notes), and the issues found are reported on the [ai-hub-eap](https://github.com/intersystems-community/ai-hub-eap) repo.
+AI Hub is pre-release, and a few things are worth knowing. The workarounds below were written on build 154 and are still in the code; the last column is what was seen on build 109. "Works" means the unit tests or a direct check passed on 109. "Unverified" means it needs a live LLM call or a service this check did not run. Details are in [TUTORIAL.md](TUTORIAL.md#13-build-154-and-109-notes), and the issues found are reported on the [ai-hub-eap](https://github.com/intersystems-community/ai-hub-eap) repo.
+
+| Workaround | Build 109 |
+|---|---|
+| `PROVIDERCONFIG` is a class parameter, so `Agent.Base` overrides `%CreateProvider()` | works |
+| `agent.Skills` is rebuilt from `SKILLS` minus the disabled ones (a blank value loads none, names must be full class names) | works |
+| `session.GetStats()` fields behind `Data.Usage` | works: the same 11 fields |
+| `load_skill` is not audited, so a skill counts as used when one of its tools ran | unverified: needs a live call |
+| The `AI.LLM` descriptor registry is seeded by `Settings.Store.Prepare()` | works: the descriptor is present, and the check stays. Not determined whether 109 ships it filled |
+| Config Store rows are invisible to a user without `%Admin_ConfigStore` | works: the `reviewer` and `SuperUser` both listed a test config and its key status |
+| `VectorStore.Build` is `CREATE TABLE IF NOT EXISTS`, so `BuildLoincKB` rebuilds a table that lacks a column | works: 46 rows. Not determined whether `Build` now adds columns |
+| `KnowledgeBase` has no search API, so a private `%AI.ToolMgr` runs `search_loinc` | works |
+| Sessions are saved with `session.%Save()` | works |
+| `libirisotel` drops the first resource attribute, so only `service.name` is set | unverified: needs the observability profile |
+| FastEmbed caches its model per namespace and downloads it on first use | changed: on a fresh 109 container the first plug-in start in `LEGACY` downloaded about 90 MB and the production update failed. Setup now loads the model once in `IRISAPP` and `LEGACY` |
 
 ## Limits
 
