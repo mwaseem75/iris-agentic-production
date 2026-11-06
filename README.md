@@ -125,7 +125,7 @@ Verify PASSED: 6 of 6 steps
 
 The two replay steps use the recorded runs that setup loads from `eval/recordings/recordings.json` (see [Recorded runs](#evaluation)). Where there is no recording for the case they print `SKIP` with the reason, and `./verify.sh --strict` counts that as a failure. The exit code is 0 when no step failed.
 
-Unit tests, no LLM call (a unit-test run blocks live calls): 234 test methods in 34 classes.
+Unit tests, no LLM call (a unit-test run blocks live calls): 236 test methods in 34 classes.
 
 ```objectscript
 do ##class(%UnitTest.Manager).RunTest("AgenticProd", "/noload/nodelete")
@@ -337,25 +337,25 @@ Every lab result that passes LabRouter also goes out as FHIR R4, built with the 
 
 60 synthetic cases in [`eval/cases`](eval/cases): normal errors, look-alike LOINC codes (serum vs blood vs urine, fasting, high-sensitivity, calculated), identity traps, structure and routing errors, a simulated timeout, prompt injection attempts and valid controls. Each case lists the expected decision, the other acceptable decisions, and the decisions that would be unsafe.
 
-You do not have to run it. **Replay** runs all 60 cases from recorded model calls: no key, no cost, same result every time. A live run needs your own key and costs about $0.09.
+You do not have to run it. **Replay** runs all 60 cases from recorded model calls: no key, no cost, same result every time. A live run needs your own key and costs about $0.08.
 
 A replay is keyed by case ID and model; messages that keep their own IDs, such as the sample cases, are found by prompt hash and model. Each recording stores a hash of the prompt version and the input the agent was given (error class and masked error text). If the hash of a replayed message differs from the recording's, the recorded decision is still used, no LLM is called, and the story view and the Trust tab mark it "recorded with a different prompt". Recordings made before the hash existed replay as before.
 
 **Recorded runs.** `eval/recordings/recordings.json` holds the finished live run (its `EvalRun` and `EvalResult` rows, so the Trust tab shows the headline numbers on a fresh install) and the agent's answers for it (`Data.Usage` rows with the decision, tokens, cost, tool calls and prompt hash). Setup loads it with `AgenticProd.Recordings.Load()` when that run is not in the database yet, so a second setup adds nothing and your own runs are never touched. Live mode with no API key then replays the recording for the message (same case or same prompt hash, same model), and with no recording the message goes to a person. To record again, run the evaluation live (needs your key), export it and commit the file:
 
 ```objectscript
-do ##class(AgenticProd.Eval.Runner).Run("gpt-4o-mini", "v2 final")
-do ##class(AgenticProd.Recordings).Export("v2 final")
+do ##class(AgenticProd.Eval.Runner).Run("gpt-4o-mini", "shipped")
+do ##class(AgenticProd.Recordings).Export("shipped")
 ```
 
 The most important number is **unsafe_final**: how often the system carried out an unsafe decision. It is counted apart from **unsafe_agent**, how often the model proposed one.
 
 | Run | Acceptable agent / system | Exact agent / system | Mapping accuracy | unsafe_agent | unsafe_final | Cost per message | p95 seconds |
 |---|---|---|---|---|---|---|---|
-| gpt-4o-mini, live ("v2 final") | 0.98 / 1.00 | 0.87 / 0.87 | 0.88 | 0 | 0 | $0.0013 | 15.3 |
-| same run, replayed | 0.98 / 1.00 | 0.87 / 0.87 | 0.88 | 0 | 0 | $0 | 5.4 |
+| gpt-4o-mini, live, build 109 | 0.98 / 1.00 | 0.88 / 0.88 | 0.88 | 0 | 0 | $0.0013 | 21.1 |
+| gpt-4o-mini, replayed, build 109 | 0.98 / 1.00 | 0.88 / 0.88 | 0.88 | 0 | 0 | $0 | 5.2 |
 
-The live run used 762,395 tokens and cost $0.08 in total; the median time was 10.7 s. The replay returns identical scores because it plays back the recorded model calls.
+The live run used 752,935 tokens and cost $0.079 in total; the median time was 12.6 s. The replay returns identical scores because it plays back the recorded model calls: it cost $0, took 5.2 s at p95 and the decisions of all 60 cases are the same as in the live run.
 
 **Agent** is what the model proposed; **system** is what Triage finally decided after the grounding gate and the action matrix. "Acceptable" means the decision was one of the case's acceptable decisions and nothing unsafe was carried out. It does not mean every mapping was right: mapping accuracy counts only the cases where the agent proposed the expected LOINC.
 
@@ -405,7 +405,7 @@ AI Hub is pre-release, and a few things are worth knowing. The workarounds below
 
 - HL7 v2 lab results in. FHIR R4 goes out, but the agent cannot repair FHIR yet.
 - The LOINC knowledge base is a 46-code demonstration subset. See [`kb/LOINC_NOTICE.md`](kb/LOINC_NOTICE.md).
-- When a result names no specimen, the model sometimes assumes serum (eval case 39) instead of escalating. The mapping still goes to a reviewer before it is learned.
+- When the units do not fit the only candidate code, the model can still propose the mapping (eval case 40: glucose in mmol/L against a mg/dL code, the one case where the agent's proposal was not acceptable in the live run on build 109). Triage's checks send it to a reviewer, and nothing is learned before a person approves it.
 - The Workbench's generated tools are SELECT-only by design. It does not create write tools.
 - All data is synthetic. No real patients.
 
