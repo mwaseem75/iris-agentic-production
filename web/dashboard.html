@@ -15,8 +15,8 @@
 </script>
 <link rel="stylesheet" href="vendor/tabler/tabler.min.css">
 <link rel="stylesheet" href="vendor/tabler/tabler-icons.min.css">
-<link rel="stylesheet" href="workbench.css?v=8.20.38">
-<link rel="stylesheet" href="layout.css?v=8.20.38">
+<link rel="stylesheet" href="workbench.css?v=8.20.42">
+<link rel="stylesheet" href="layout.css?v=8.20.42">
 <style>
 :root {
   --tblr-font-sans-serif: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -155,8 +155,8 @@ h3.sub { font-size: 13px; margin: 16px 0 4px; font-weight: 650; color: var(--mut
 .info-banner.hidden { display: none; }
 
 /* controls the scripts build without Tabler classes */
-button:not([class*="btn"]):not(.linkbtn):not(.value):not(.info) { display: inline-block; padding: .25rem .7rem; font: inherit; font-size: 13px; border: 1px solid var(--tblr-border-color, var(--line)); border-radius: 8px; background: var(--panel); color: var(--text); cursor: pointer; }
-button:not([class*="btn"]):hover { border-color: var(--accent); }
+button:not([class*="btn"]):not([class*="wb-"]):not(.linkbtn):not(.value):not(.info) { display: inline-block; padding: .25rem .7rem; font: inherit; font-size: 13px; border: 1px solid var(--tblr-border-color, var(--line)); border-radius: 8px; background: var(--panel); color: var(--text); cursor: pointer; }
+button:not([class*="btn"]):not([class*="wb-"]):hover { border-color: var(--accent); }
 button.primary { background: var(--accent) !important; border-color: var(--accent) !important; color: #fff !important; }
 button.danger { color: var(--bad); border-color: var(--bad); }
 button:disabled { opacity: .5; cursor: default; }
@@ -2100,7 +2100,7 @@ var SUBS = {
   trust: "Proof that the agent is safe: scored test runs, unsafe outcomes, grounding failures and the checks around the model.",
   cost: "What the agent costs: spend per model and per day against the daily budget.",
   wbnew: "Build an AI Hub agent step by step: pick its tools and skills, write its instructions, test it for $0, then add it to a production.",
-  wblib: "The AI Hub parts found in this namespace: agents, tools, skills and policies, and where each one is used.",
+  wblib: "Everything an AI Hub agent is built from, found in this namespace. Pick a part to see what it does, where it is used and its source, or test it for $0.",
   wbprod: "A read-only picture of a production. Items that host an AI Hub agent carry the AI HUB badge.",
   settings: "Providers and keys, agent limits, guardrails, budgets, prices, learned mappings and the change log."
 };
@@ -2307,10 +2307,10 @@ setInterval(load, 30000);
     <details id="story-msg-box"><summary>Message (patient name, birth date, address and phone masked)</summary><pre id="story-msg"></pre></details>
   </div>
 </aside>
-<script src="flow.js?v=8.20.38"></script>
-<script src="workbench.js?v=8.20.38"></script>
-<script src="builder.js?v=8.20.38"></script>
-<script src="wizard.js?v=8.20.38"></script>
-<script src="addprod.js?v=8.20.38"></script>
+<script src="flow.js?v=8.20.42"></script>
+<script src="workbench.js?v=8.20.42"></script>
+<script src="builder.js?v=8.20.42"></script>
+<script src="wizard.js?v=8.20.42"></script>
+<script src="addprod.js?v=8.20.42"></script>
 </body>
 </html>

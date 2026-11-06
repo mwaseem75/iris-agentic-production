@@ -55,15 +55,12 @@ body.side-collapsed { --side-w: var(--side-rail); }
 
 /* Wide tables scroll inside their card; the name column stays in view */
 .msg-table td:nth-child(2), .msg-table th:nth-child(2),
-.wb-table td:first-child, .wb-table th:first-child,
 #tab-trust .table-responsive .table td:first-child, #tab-trust .table-responsive .table th:first-child,
 #tab-cost .table-responsive .table td:first-child, #tab-cost .table-responsive .table th:first-child { position: sticky; left: 0; z-index: 2; background: var(--panel); }
-.msg-table thead th:nth-child(2), .wb-table thead th:first-child, .table-responsive .table thead th:first-child { background: var(--surface-2); }
-.msg-table tbody tr:hover > td:nth-child(2), .wb-table tbody tr:hover > td:first-child { background: var(--hover); }
-.wb-sec { overflow-x: auto; }
+.msg-table thead th:nth-child(2), .table-responsive .table thead th:first-child { background: var(--surface-2); }
+.msg-table tbody tr:hover > td:nth-child(2) { background: var(--hover); }
 @media (max-width: 1100px) {
   .msg-table { min-width: 900px; }
-  .wb-table { min-width: 940px; }
 }
 @media (max-width: 991.98px) {
   .page-header .row > .col-auto { width: 100%; }
@@ -98,6 +95,7 @@ body.side-collapsed { --side-w: var(--side-rail); }
   .linkbtn, .card-actions .info, .title-info, button.info { min-height: 40px; min-width: 40px; display: inline-flex; align-items: center; justify-content: center; }
   .wb-acts .btn, .msg-table td.go .btn { min-height: 40px; }
   button:not([class*="btn"]):not(.linkbtn):not(.value):not(.info) { min-height: 40px; }
+  .wb-tab, .wb-achip, .wb-achk, .wb-newitem, .wb-l-dtab, .wb-l-partbtn { min-height: 40px; }
 }
 
 /* Side panels: 100vw includes the scrollbar, so cap by the visible viewport too */

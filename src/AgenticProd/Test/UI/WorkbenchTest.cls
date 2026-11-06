@@ -77,6 +77,44 @@ Method TestLibrary()
 	Do $$$AssertTrue(tBase.usedBy [ "TriageAgent", "toolset says who uses it")
 }
 
+/// The Library page builds its "How the agent is built" card from each agent's wiring, so the
+/// lists must match what the agent class really names, with the host's policies as the default.
+Method TestAgentWiring()
+{
+	Set tLib = ##class(AgenticProd.UI.Workbench).Library()
+	Set tIter = tLib.agents.%GetIterator()
+	While tIter.%GetNext(, .tA) { Set:tA.class="AgenticProd.Agent.TriageAgent" tAgent = tA }
+	Do $$$AssertTrue($IsObject($GET(tAgent)), "triage agent is listed")
+	Quit:'$IsObject($GET(tAgent))
+	Set tW = tAgent.wiring
+	Do $$$AssertTrue($IsObject(tW), "the agent has a wiring object")
+	Do $$$AssertEquals(tW.toolsets.%Size(), 1, "one tool set of its own")
+	Do $$$AssertEquals(tW.toolsets.%Get(0), "AgenticProd.Tools.Base")
+	Do $$$AssertEquals(tW.skills.%Size(), 2)
+	Do $$$AssertTrue(tW.skills.%ToJSON() [ "AgenticProd.Skill.HL7Repair" && (tW.skills.%ToJSON() [ "AgenticProd.Skill.CodeMapping"), "both skills")
+	Do $$$AssertEquals(tW.policies.%Get(0), "AgenticProd.Policy.ReadOnly", "no AUTHPOLICY: the host's default")
+	Do $$$AssertEquals(tW.policies.%Get(1), "AgenticProd.Policy.Audit", "no AUDITPOLICY: the host's default")
+	Do $$$AssertEquals(tW.knowledge.%Get(0), "search_loinc", "a skill's tool set holds the search tool")
+	// Every class the wiring names is itself a Library part, so the card can open it
+	Set tAll = ","
+	For tKey = "toolsets", "skills", "policies" {
+		Set tI = $PROPERTY(tLib, tKey).%GetIterator()
+		While tI.%GetNext(, .tRow) { Set tAll = tAll_tRow.class_"," }
+	}
+	For tKey = "toolsets", "skills", "policies" {
+		Set tI = $PROPERTY(tW, tKey).%GetIterator()
+		While tI.%GetNext(, .tC) { Do $$$AssertTrue(tAll [ (","_tC_","), tC_" is in the Library") }
+	}
+}
+
+/// The Source tab shows the class text, not the line count that comes first in the text services array.
+Method TestSourceStartsWithTheClass()
+{
+	Set tSrc = ##class(AgenticProd.UI.Workbench).Source("AgenticProd.Policy.Audit").source
+	Do $$$AssertTrue(tSrc [ "Class AgenticProd.Policy.Audit", "class text")
+	Do $$$AssertEquals($EXTRACT(tSrc, 1, 7), "Include", "first line is source, not a number")
+}
+
 Method TestOwnProductions()
 {
 	// A package mapped in from another database is not that namespace's production

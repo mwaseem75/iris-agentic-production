@@ -16,6 +16,11 @@ Parameter HOSTCLASS = "AgenticProd.Operation.Agent";
 
 Parameter AGENTCLASS = "AgenticProd.Agent.TriageAgent";
 
+/// What Operation.Agent attaches when the agent class names no policy of its own.
+Parameter DEFAULTAUTH = "AgenticProd.Policy.ReadOnly";
+
+Parameter DEFAULTAUDIT = "AgenticProd.Policy.Audit";
+
 /// Plain IRIS checks that run around the agent. Not AI Hub classes, so they are listed by hand.
 /// class|name|description
 Parameter CHECKS = "AgenticProd.Policy.InjectionGuard|Injection guard|Flags instruction-like text in a message, which stops AUTO_FIX.;AgenticProd.Tools.HL7|Grounding gate|Every claim in a decision must come from the message or a tool result.";
@@ -432,6 +437,8 @@ ClassMethod SourceText(pClass As %String) As %String [ Internal ]
 		For {
 			Set i = $ORDER(tLines(i))
 			Quit:i=""
+			// Node 0 holds the line count on this build, not a line of source
+			Continue:i=0
 			Set tText = tText_tLines(i)_$CHAR(10)
 		}
 	} Catch {}
@@ -516,6 +523,35 @@ ClassMethod Library() As %DynamicObject
 		Set:tVias'="" tUse = tUse_$SELECT(tUse="": "", 1: " · ")_"via skill "_tVias
 		Do tOut.toolsets.%Push({"class":(tT.class), "name":(tDef.name), "description":(tDef.description), "tools":(tDef.tools), "toolDescriptions":(tDef.toolDescriptions), "readOnly":(..ReadOnlyTools(tT.class)), "usedBy":(tUse)})
 		Set:(..SourceText(tT.class) [ "search_loinc") tMapText = tMapText_tT.class_","
+	}
+	// What each agent is built from, for the Library's "How the agent is built" card. Knowledge is
+	// listed when one of its toolsets, or a toolset of one of its skills, holds the search tool.
+	Set tIter = tOut.agents.%GetIterator()
+	While tIter.%GetNext(, .tA) {
+		Set tAC = tA.class, tW = {"toolsets":[], "skills":[], "policies":[], "knowledge":[]}, tKb = 0
+		Set tList = $PARAMETER(tAC, "TOOLSETS")
+		For i = 1:1:$LENGTH(tList, ",") {
+			Set tC = $ZSTRIP($PIECE(tList, ",", i), "<>W")
+			Continue:tC=""
+			Do tW.toolsets.%Push(tC)
+			Set:((","_tMapText) [ (","_tC_",")) tKb = 1
+		}
+		Set tList = $PARAMETER(tAC, "SKILLS")
+		For i = 1:1:$LENGTH(tList, ",") {
+			Set tC = $ZSTRIP($PIECE(tList, ",", i), "<>W")
+			Continue:tC=""
+			Do tW.skills.%Push(tC)
+			Set tTools = $PARAMETER(tC, "TOOLS")
+			For j = 1:1:$LENGTH(tTools, ",") {
+				Set tT = $ZSTRIP($PIECE(tTools, ",", j), "<>W")
+				Set:(tT'="")&&((","_tMapText) [ (","_tT_",")) tKb = 1
+			}
+		}
+		Set tAuth = $PARAMETER(tAC, "AUTHPOLICY"), tAudit = $PARAMETER(tAC, "AUDITPOLICY")
+		Do tW.policies.%Push($SELECT(tAuth'="": tAuth, 1: ..#DEFAULTAUTH))
+		Do tW.policies.%Push($SELECT(tAudit'="": tAudit, 1: ..#DEFAULTAUDIT))
+		Do:tKb tW.knowledge.%Push("search_loinc")
+		Set tA.wiring = tW
 	}
 	Set tIter = tSkillRows.%GetIterator()
 	While tIter.%GetNext(, .tS) {

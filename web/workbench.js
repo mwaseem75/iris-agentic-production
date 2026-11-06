@@ -1,24 +1,30 @@
 "use strict";
-// AI Hub Workbench: Library of the AI Hub classes and a read-only
-// map of what a production uses. Nothing here changes IRIS. Needs el, get from the dashboard script.
+// AI Hub Workbench: the AI Hub Library of the AI Hub classes and the read-only
+// map of what a production uses. Nothing here changes IRIS. Needs el, get, send from the dashboard script.
 (function () {
   var panels = { lib: document.getElementById("wb-lib"), prod: document.getElementById("wb-prod") };
   if (!panels.lib || !panels.prod) return;
   var TAB = { lib: "wblib", prod: "wbprod" };
-  var started = false, lib = null, libType = "all", libQuery = "", libSource = "", libUsed = "", libSort = { key: "", dir: "asc" }, mapData = null, mapSel = "", mapRes = null;
+  var started = false, lib = null, libType = "all", libQuery = "", libSource = "", agentSel = "", mapData = null, mapSel = "", mapRes = null;
 
-  // Library groups in page order; key is the field in /workbench/library
+  // Library groups in page order; key is the field in /workbench/library. Agents are not a tab:
+  // they show in the "How the agent is built" card and open from there.
   var GROUPS = [
-    { key: "agents", type: "agent", title: "Agents", sub: "%AI.Agent · model, instructions, tools, skills", icon: "robot", cls: "agent" },
-    { key: "toolsets", type: "tool", title: "Tools", sub: "%AI.ToolSet · what the agent may call", icon: "tool", cls: "tool" },
-    { key: "skills", type: "skill", title: "Skills", sub: "%AI.Agent.Skill · instructions and tools loaded when needed", icon: "puzzle", cls: "skill" },
-    { key: "policies", type: "policy", title: "Policies", sub: "%AI.Policy · checked by AI Hub on every tool call", icon: "lock", cls: "pol" },
-    { key: "knowledge", type: "knowledge", title: "Knowledge", sub: "%AI.RAG · IRIS vector search", icon: "database-search", cls: "kb" },
-    { key: "checks", type: "check", title: "Checks", sub: "plain IRIS code around the agent, not AI Hub · run after the answer", icon: "shield-half", cls: "chk" }
+    { key: "agents", type: "agent", title: "Agents", sub: "%AI.Agent · model, instructions and the parts below", icon: "robot", tab: false, base: "%AI.Agent" },
+    { key: "toolsets", type: "tool", title: "Tools", sub: "what the agent may call", icon: "tool", base: "%AI.ToolSet", own: "tools", test: true },
+    { key: "skills", type: "skill", title: "Skills", sub: "know-how the agent loads only when needed", icon: "puzzle", base: "%AI.Agent.Skill", own: "skills" },
+    { key: "policies", type: "policy", title: "Policies", sub: "rules applied to every tool call", icon: "lock", base: "%AI.Policy.*", own: "policies", test: true },
+    { key: "knowledge", type: "knowledge", title: "Knowledge", sub: "what the agent can search", icon: "database-search", base: "%AI.RAG", own: "knowledge" },
+    { key: "checks", type: "check", title: "Checks", sub: "plain IRIS code around the agent, not AI Hub · run after its answer", icon: "shield-half", base: "plain IRIS", own: "checks" }
   ];
-  var FILTERS = [["all", "All"], ["agent", "Agents"], ["tool", "Tools"], ["skill", "Skills"], ["policy", "Policies"], ["knowledge", "Knowledge"], ["check", "Checks"]];
   var KIND = { model: ["Model", "cpu", "#a78bfa"], toolset: ["ToolSet", "tool", "#60a5fa"], skill: ["Skill", "puzzle", "#c4b5fd"], knowledge: ["Knowledge", "database-search", "#34d399"], policy: ["Policy", "lock", "#f87171"] };
   var TYPE_ICON = { service: "file-import", process: "arrows-split", operation: "send", other: "box" };
+  var NEW_ITEMS = [
+    ["tool", "database", "Tool", "A read-only SQL query the agent can call"],
+    ["skill", "puzzle", "Skill", "Instructions the agent loads when needed"],
+    ["policy", "lock", "Policy", "A rule checked on every tool call"],
+    ["agent-blank", "robot", "Agent", "Your instructions, your tools"]
+  ];
 
   function icon(name, extra) { return el("i", null, "ti ti-" + name + (extra ? " " + extra : "")); }
   function div(cls, text) { return el("div", text, cls); }
@@ -28,152 +34,215 @@
   function tidy(t) { return String(t || "").replace(/\s*\.{2}(?!\.)/g, ".").replace(/\.\s*\.(?=\s|$)/g, "."); }
   function usd(n) { return "$" + Number(n || 0).toFixed(4); }
   function short(n) { var p = String(n || "").split("."); return p[p.length - 1]; }
+  function plural(n, word) { return n + " " + word + (n === 1 ? "" : "s"); }
 
   // The sidebar owns the three views; showSub only asks the dashboard to switch tab
   function showSub(name) { if (window.showTab) window.showTab(TAB[name]); }
 
-  var libHead = div("wb-lh"), libTabs = div("wb-tabs"), libBar = div("wb-bar"), libBody = div("wb-body"), libNote = div("wb-note");
-  var search = el("input", null, "form-control wb-search");
-  search.placeholder = "Search by name or class"; search.type = "search";
-  search.addEventListener("input", function () { libQuery = search.value.toLowerCase(); renderLib(); });
-  function pickBox(label, options, set) {
-    var s = el("select", null, "form-select wb-pickbox"); s.setAttribute("aria-label", label);
-    options.forEach(function (o) { var op = el("option", o[1]); op.value = o[0]; s.appendChild(op); });
-    s.addEventListener("change", function () { set(s.value); renderLib(); });
-    return s;
+  function groupOf(type) { for (var i = 0; i < GROUPS.length; i++) if (GROUPS[i].type === type) return GROUPS[i]; return null; }
+  function itemsOf(g) { return (lib && lib[g.key]) || []; }
+  function isYours(item) { return String(item["class"]).indexOf("MyAI.") === 0; }
+  function byClass(key, cls) { var l = (lib && lib[key]) || []; for (var i = 0; i < l.length; i++) if (l[i]["class"] === cls) return l[i]; return null; }
+  function byName(key, name) { var l = (lib && lib[key]) || []; for (var i = 0; i < l.length; i++) if (l[i].name === name) return l[i]; return null; }
+  // Skills are titled by class, like everywhere else on the page; the name the model loads is in the drawer
+  function titleOf(item, g) { return g.type === "skill" ? short(item["class"]) : item.name; }
+  function descOf(item, g) {
+    var d = tidy(item.description);
+    // The policy description is "<kind> · <class comment>"; the kind has its own badge
+    return g.type === "policy" ? d.replace(/^(authorization|audit) · /i, "") : d;
   }
-  var sourceBox = pickBox("Source", [["", "Any source"], ["builtin", "Built-in"], ["yours", "Yours"]], function (v) { libSource = v; });
-  var usedBox = pickBox("Used in", [["", "Used in: anywhere"], ["prod", "In production"], ["none", "Not in production"]], function (v) { libUsed = v; });
-  var newBtn = el("button", null, "btn btn-primary btn-sm ms-auto"); newBtn.type = "button"; newBtn.appendChild(icon("plus", "me-1")); newBtn.appendChild(document.createTextNode("New from template"));
-  newBtn.addEventListener("click", function () { if (window.wbBuilder) window.wbBuilder.templates(); });
-  libBar.appendChild(search); libBar.appendChild(sourceBox); libBar.appendChild(usedBox); libBar.appendChild(newBtn);
-  panels.lib.appendChild(libTabs); panels.lib.appendChild(libBar); panels.lib.appendChild(libNote); panels.lib.appendChild(libBody);
 
-  var drawer = div("wb-drawer hidden");
-  document.body.appendChild(drawer);
+  // What an agent is built from, as the API reports it. An older API without it gives an empty agent.
+  function wiringOf(a) {
+    var w = (a && a.wiring) || {};
+    return { toolsets: w.toolsets || [], skills: w.skills || [], policies: w.policies || [], knowledge: w.knowledge || [] };
+  }
+  function curAgent() {
+    var l = (lib && lib.agents) || [];
+    for (var i = 0; i < l.length; i++) if (l[i]["class"] === agentSel) return l[i];
+    return l[0] || null;
+  }
+  // Tool sets the agent reaches: its own and the ones its skills add
+  function reachableToolsets(a) {
+    var w = wiringOf(a), seen = {}, out = [];
+    function add(c) { if (c && !seen[c]) { seen[c] = 1; out.push(c); } }
+    w.toolsets.forEach(add);
+    w.skills.forEach(function (sc) {
+      var sk = byClass("skills", sc);
+      if (sk) String(sk.toolsets || "").split(", ").forEach(function (n) { var ts = byName("toolsets", n); if (ts) add(ts["class"]); });
+    });
+    return out;
+  }
+
+  // [{agent, via}]: the agents that use one part, from their wiring
+  function usedBy(item, g) {
+    var out = [];
+    ((lib && lib.agents) || []).forEach(function (a) {
+      var w = wiringOf(a);
+      if (g.type === "tool") {
+        if (w.toolsets.indexOf(item["class"]) >= 0) out.push({ agent: a.name, via: "" });
+        itemsOf(groupOf("skill")).forEach(function (s) {
+          if (w.skills.indexOf(s["class"]) >= 0 && String(s.toolsets || "").split(", ").indexOf(item.name) >= 0) out.push({ agent: a.name, via: "skill " + short(s["class"]) });
+        });
+      } else if (g.type === "skill") {
+        if (w.skills.indexOf(item["class"]) >= 0) out.push({ agent: a.name, via: "" });
+      } else if (g.type === "policy") {
+        if (w.policies.indexOf(item["class"]) >= 0) out.push({ agent: a.name, via: "" });
+      } else if (g.type === "knowledge") {
+        if (w.knowledge.indexOf(item["class"]) >= 0) { var m = /via (skill .+)$/.exec(item.usedBy || ""); out.push({ agent: a.name, via: m ? m[1] : "" }); }
+      }
+    });
+    return out;
+  }
+  // "used by A via skill S", agents in bold, as parts for meta()
+  function usedParts(list, verb) {
+    var by = {}, order = [], parts = [];
+    list.forEach(function (u) { if (!by[u.agent]) { by[u.agent] = []; order.push(u.agent); } if (u.via) by[u.agent].push(u.via); });
+    order.forEach(function (n, i) {
+      parts.push((i ? " · " : "") + verb + " ");
+      parts.push({ b: n });
+      if (by[n].length) parts.push(" via " + by[n].join(", "));
+    });
+    return parts;
+  }
+  function meta(parts) {
+    var m = div("wb-l-meta");
+    parts.forEach(function (p) { if (p && p.b !== undefined) m.appendChild(el("b", p.b)); else m.appendChild(document.createTextNode(p)); });
+    return m;
+  }
+  function metaOf(item, g) {
+    var parts = [];
+    if (g.type === "tool") {
+      var n = (item.tools || []).length;
+      parts.push({ b: plural(n, "tool") }); parts.push(item.readOnly ? ", all read-only" : ", can change data");
+      var u = usedParts(usedBy(item, g), "used by");
+      parts = parts.concat(u.length ? [" · "].concat(u) : [" · not used by an agent yet"]);
+    } else if (g.type === "skill") {
+      parts.push("uses toolset "); parts.push({ b: item.toolsets || "none" });
+      var us = usedParts(usedBy(item, g), "used by");
+      if (us.length) parts = parts.concat([" · "], us);
+    } else if (g.type === "policy") {
+      var up = usedParts(usedBy(item, g), "applies to");
+      parts = up.length ? up : ["not attached to an agent"];
+    } else if (g.type === "knowledge") {
+      var uk = usedParts(usedBy(item, g), "used by");
+      parts = (uk.length ? uk : ["not used by an agent yet"]).concat([" · local vector search"]);
+    } else {
+      parts.push(item.usedBy || "plain IRIS");
+    }
+    return meta(parts);
+  }
+
+  // ---------- page parts
+  var anat = div("card wb-l-anat"), libTabs = div("wb-tabs"), libBar = div("wb-bar"), libBody = div("wb-l-body"), libNote = div("wb-note");
+  var search = el("input", null, "form-control wb-search");
+  search.placeholder = "Search by name, class or description"; search.type = "search"; search.setAttribute("aria-label", "Search the Library");
+  search.addEventListener("input", function () { libQuery = search.value.toLowerCase(); renderLib(); });
+  var sourceBox = el("select", null, "form-select wb-pickbox"); sourceBox.setAttribute("aria-label", "Source");
+  [["", "Any source"], ["builtin", "Ships with the app"], ["yours", "Created in Workbench"]].forEach(function (o) { var op = el("option", o[1]); op.value = o[0]; sourceBox.appendChild(op); });
+  sourceBox.addEventListener("change", function () { libSource = sourceBox.value; renderLib(); });
+
+  // Create new: a small menu that opens the existing builders
+  var newWrap = div("wb-newwrap ms-auto"), newMenu = div("wb-newmenu hidden");
+  var newBtn = el("button", null, "btn btn-primary btn-sm"); newBtn.type = "button"; newBtn.setAttribute("aria-haspopup", "true"); newBtn.setAttribute("aria-expanded", "false");
+  newBtn.appendChild(icon("plus", "me-1")); newBtn.appendChild(document.createTextNode("Create new")); newBtn.appendChild(icon("chevron-down", "ms-1"));
+  function closeNew() { newMenu.classList.add("hidden"); newBtn.setAttribute("aria-expanded", "false"); }
+  newBtn.addEventListener("click", function (e) {
+    e.stopPropagation();
+    var open = newMenu.classList.contains("hidden");
+    newMenu.classList.toggle("hidden", !open); newBtn.setAttribute("aria-expanded", open ? "true" : "false");
+  });
+  NEW_ITEMS.forEach(function (n) {
+    var b = el("button", null, "wb-newitem"); b.type = "button";
+    b.appendChild(icon(n[1]));
+    var t = div(); t.appendChild(el("b", n[2])); t.appendChild(div("wb-d", n[3])); b.appendChild(t);
+    b.addEventListener("click", function () { closeNew(); if (window.wbBuilder) window.wbBuilder.create(n[0]); });
+    newMenu.appendChild(b);
+  });
+  newWrap.appendChild(newBtn); newWrap.appendChild(newMenu);
+  document.addEventListener("click", closeNew);
+
+  libBar.appendChild(search); libBar.appendChild(sourceBox); libBar.appendChild(newWrap);
+  panels.lib.appendChild(anat); panels.lib.appendChild(libTabs); panels.lib.appendChild(libBar); panels.lib.appendChild(libNote); panels.lib.appendChild(libBody);
 
   function loadLib() {
     libNote.textContent = "Loading…";
     get("api/workbench/library").then(function (d) { lib = d; libNote.textContent = ""; renderLib(); })
-      .catch(function (e) { libNote.textContent = "Could not load the Library: " + e.message; });
+      .catch(function (e) { libNote.textContent = "Could not load the AI Hub Library: " + e.message; });
   }
 
-  function isYours(item) { return String(item["class"]).indexOf("MyAI.") === 0; }
-  function usesOf(item, g) {
-    if (g.type === "agent") return item.toolsets + " toolset" + (item.toolsets === 1 ? "" : "s") + " · " + item.skills + " skill" + (item.skills === 1 ? "" : "s");
-    if (g.type === "tool" || g.type === "skill") { var n = (item.tools || []).length; return n + " tool" + (n === 1 ? "" : "s") + (g.type === "tool" ? (item.readOnly ? " · read-only" : " · can change data") : ""); }
-    if (g.type === "policy") return item.kind || "policy";
-    if (g.type === "knowledge") return "vector search";
-    return "plain IRIS";
-  }
-  function prodOf(item, g) {
-    if (g.type === "agent") {
-      var names = [];
-      if (item.hostedBy) names.push(item.hostedBy);
-      (item.installs || []).forEach(function (i) { names.push(i.owner + " (" + i.namespace + ")"); });
-      return names.join(", ");
-    }
-    return String(item.usedBy || "").replace(/^used by /, "");
-  }
-  function sortKey(item, g, k) {
-    switch (k) {
-      case "name": return String(item.name || "").toLowerCase();
-      case "class": return String(item["class"]).toLowerCase();
-      case "model": return g.type === "agent" ? String(item.model || "").toLowerCase() : "";
-      case "source": return isYours(item) ? "yours" : "built-in";
-      case "prod": return prodOf(item, g).toLowerCase();
-      default: return "";
-    }
-  }
-
-  function matches(item, g) {
-    if (libType !== "all" && libType !== g.type) return false;
-    if (libSource && (libSource === "yours") !== isYours(item)) return false;
-    var p = prodOf(item, g);
-    if (libUsed === "prod" && !p) return false;
-    if (libUsed === "none" && p) return false;
-    if (!libQuery) return true;
-    return (String(item.name) + " " + item["class"]).toLowerCase().indexOf(libQuery) >= 0;
-  }
-
-  function act(label, ic, fn, cls, tip) {
-    var b = el("button", null, "btn btn-sm " + (cls || "")); b.type = "button";
-    if (ic) b.appendChild(icon(ic, label ? "me-1" : ""));
-    if (label) b.appendChild(document.createTextNode(label));
-    if (tip) { b.title = tip; b.setAttribute("aria-label", tip); }
-    b.addEventListener("click", function (e) { e.stopPropagation(); fn(b); });
+  // ---------- how the agent is built
+  function chip(count, title, text, fn, cls) {
+    var b = el("button", null, "wb-achip" + (cls ? " " + cls : "")); b.type = "button";
+    b.appendChild(el("i", String(count), "wb-acount")); b.appendChild(el("b", title)); b.appendChild(el("span", text));
+    b.addEventListener("click", fn);
     return b;
   }
+  function sign(t) { return el("span", t, "wb-asign"); }
+  function goTo(type) {
+    libType = type; renderLib();
+    var s = libBody.querySelector('[data-type="' + type + '"]');
+    if (s && s.scrollIntoView) s.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
-  function libRow(item, g) {
-    var tr = el("tr");
-    var yours = isYours(item), prod = prodOf(item, g);
-    var nm = el("td", null, "wb-c-name");
-    nm.appendChild(div("wb-n", item.name)); nm.appendChild(div("wb-d", tidy(item.description)));
-    nm.title = tidy(item.description);
-    tr.appendChild(nm);
-    tr.appendChild(el("td", item["class"], "wb-c-class"));
-    tr.appendChild(el("td", g.type === "agent" ? item.model : "—", "wb-c-model"));
-    var us = el("td", usesOf(item, g), "wb-c-uses"); us.title = item.tools && item.tools.length ? item.tools.join(" · ") : usesOf(item, g); tr.appendChild(us);
-    var sc = el("td"); sc.appendChild(el("span", yours ? "Yours" : "Built-in", "wb-srcb " + (yours ? "yours" : "builtin"))); tr.appendChild(sc);
-    var pd = el("td", prod || "—", "wb-c-prod"); pd.title = prod; tr.appendChild(pd);
-    var ac = el("td"), box = div("wb-acts");
-    var openSrc = function () { openDrawer(item, g); };
-    box.appendChild(act("View source", "", openSrc));
-    if (g.type === "agent" && window.wbAddProd && window.wbAddProd.canAdd(item["class"])) {
-      box.appendChild(act("Add to production", "", function () { window.wbAddProd.openFor(item, loadLib); }, "btn-outline-primary"));
+  function renderAnat() {
+    clear(anat);
+    var a = curAgent();
+    if (!a) { anat.classList.add("hidden"); return; }
+    anat.classList.remove("hidden");
+    var w = wiringOf(a), sets = reachableToolsets(a), nTools = 0;
+    sets.forEach(function (c) { var t = byClass("toolsets", c); if (t) nTools += (t.tools || []).length; });
+    var body = div("card-body");
+    var top = div("wb-l-anat-h");
+    var t = div(); t.appendChild(el("h3", "How the " + a.name + " is built", "wb-l-h3"));
+    t.appendChild(div("wb-l-sub", "An agent is its instructions plus these parts. Click a part to see it."));
+    top.appendChild(t);
+    if (lib.agents.length > 1) {
+      var sel = el("select", null, "form-select wb-pickbox"); sel.setAttribute("aria-label", "Agent");
+      lib.agents.forEach(function (x) { var o = el("option", x.name); o.value = x["class"]; sel.appendChild(o); });
+      sel.value = a["class"];
+      sel.addEventListener("change", function () { agentSel = sel.value; renderAnat(); });
+      top.appendChild(sel);
     }
-    if (yours && window.wbBuilder && window.wbBuilder.editable(item["class"]) && g.type !== "knowledge" && g.type !== "check") {
-      box.appendChild(act("", "pencil", function () { window.wbBuilder.edit(item["class"], openSrc); }, "btn-icon", "Edit"));
-    }
-    if (yours && g.type === "agent" && window.wbAddProd) {
-      (item.installs || []).forEach(function (i) {
-        box.appendChild(act("", "arrow-back-up", function (b) { window.wbAddProd.removeInstall(i, b, loadLib); }, "btn-icon btn-outline-danger", "Remove from " + i.namespace + " " + short(i.production)));
+    body.appendChild(top);
+    var row = div("wb-arow");
+    row.appendChild(chip(1, a.name, "model " + (a.model || "none") + " · the agent itself", function () { openDrawer(a, groupOf("agent")); }, "agent"));
+    row.appendChild(sign("="));
+    row.appendChild(chip(sets.length, "Tools", plural(nTools, "tool") + " · what it can call", function () { goTo("tool"); }));
+    row.appendChild(sign("+"));
+    row.appendChild(chip(w.skills.length, "Skills", "know-how it loads when needed", function () { goTo("skill"); }));
+    row.appendChild(sign("+"));
+    row.appendChild(chip(w.policies.length, "Policies", "rules checked on every call", function () { goTo("policy"); }));
+    row.appendChild(sign("+"));
+    row.appendChild(chip(w.knowledge.length, "Knowledge", "what it can search", function () { goTo("knowledge"); }));
+    body.appendChild(row);
+    var checks = itemsOf(groupOf("check"));
+    if (checks.length) {
+      var plain = div("wb-aplain"); plain.appendChild(document.createTextNode("Plain IRIS checks around the agent (not AI Hub):"));
+      checks.forEach(function (c) {
+        var b = el("button", c.name, "wb-achk"); b.type = "button";
+        b.addEventListener("click", function () { openDrawer(c, groupOf("check")); });
+        plain.appendChild(b);
       });
+      body.appendChild(plain);
     }
-    ac.appendChild(box); tr.appendChild(ac);
-    tr.addEventListener("click", openSrc);
-    return tr;
+    anat.appendChild(body);
   }
 
-  var COLS = [["name", "Name"], ["class", "Class"], ["model", "Model"], ["uses", "Uses"], ["source", "Source"], ["prod", "In production"], ["", "Actions"]];
-  var COLW = ["12%", "25%", "9%", "9%", "9%", "10%", "26%"];
-  function libTable(items, g) {
-    var t = el("table", null, "table table-vcenter card-table wb-table");
-    var cg = el("colgroup"); COLW.forEach(function (w) { var c = el("col"); c.style.width = w; cg.appendChild(c); }); t.appendChild(cg);
-    var tr = el("tr");
-    COLS.forEach(function (c) {
-      var th = el("th", c[1]);
-      if (c[0] && c[0] !== "uses") {
-        th.className = "sortable"; th.setAttribute("aria-sort", libSort.key === c[0] ? (libSort.dir === "asc" ? "ascending" : "descending") : "none");
-        if (libSort.key === c[0]) th.appendChild(icon("arrow-" + (libSort.dir === "asc" ? "up" : "down")));
-        th.addEventListener("click", function () {
-          libSort = { key: c[0], dir: libSort.key === c[0] && libSort.dir === "asc" ? "desc" : "asc" };
-          renderLib();
-        });
-      }
-      tr.appendChild(th);
-    });
-    var hd = el("thead"); hd.appendChild(tr); t.appendChild(hd);
-    var tb = el("tbody");
-    if (libSort.key) {
-      var sign = libSort.dir === "asc" ? 1 : -1;
-      items = items.map(function (i, n) { return { i: i, n: n, v: sortKey(i, g, libSort.key) }; }).sort(function (a, b) {
-        var ea = a.v === "", eb = b.v === "";
-        if (ea !== eb) return ea ? 1 : -1;
-        return a.v === b.v ? a.n - b.n : (a.v < b.v ? -1 : 1) * sign;
-      }).map(function (x) { return x.i; });
-    }
-    items.forEach(function (i) { tb.appendChild(libRow(i, g)); });
-    t.appendChild(tb);
-    return t;
+  // ---------- tabs, filters and the cards
+  function matches(item, g) {
+    if (libSource && (libSource === "yours") !== isYours(item)) return false;
+    if (!libQuery) return true;
+    return (String(item.name) + " " + titleOf(item, g) + " " + item["class"] + " " + descOf(item, g)).toLowerCase().indexOf(libQuery) >= 0;
   }
+
+  function tabGroups() { return GROUPS.filter(function (g) { return g.tab !== false; }); }
 
   function renderTabs() {
     clear(libTabs);
     var total = 0;
-    GROUPS.forEach(function (g) { total += (lib && lib[g.key] || []).length; });
-    [["all", "All", total]].concat(GROUPS.map(function (g) { return [g.type, g.title, (lib && lib[g.key] || []).length]; })).forEach(function (f) {
+    tabGroups().forEach(function (g) { total += itemsOf(g).length; });
+    [["all", "All", total]].concat(tabGroups().map(function (g) { return [g.type, g.title, itemsOf(g).length]; })).forEach(function (f) {
       var b = el("button", null, "wb-tab" + (f[0] === libType ? " active" : "")); b.type = "button";
       b.appendChild(document.createTextNode(f[1] + " "));
       b.appendChild(el("span", String(f[2]), "wb-tabn"));
@@ -182,28 +251,72 @@
     });
   }
 
+  function badge(text, cls) { return el("span", text, "wb-l-badge " + cls); }
+  function sourceBadge(item) { return isYours(item) ? badge("Created in Workbench", "mine") : badge("Ships with the app", "ship"); }
+
+  function btn(label, ic, fn, cls) {
+    var b = el("button", null, "btn btn-sm " + (cls || "")); b.type = "button";
+    if (ic) b.appendChild(icon(ic, label ? "me-1" : ""));
+    if (label) b.appendChild(document.createTextNode(label));
+    b.addEventListener("click", function (e) { e.stopPropagation(); fn(b); });
+    return b;
+  }
+
+  function card(item, g) {
+    var c = div("card wb-l-card"); c.tabIndex = 0; c.setAttribute("role", "button");
+    c.setAttribute("aria-label", "Open " + titleOf(item, g));
+    var h = div("wb-l-ch"); h.appendChild(el("b", titleOf(item, g), "wb-l-name"));
+    var badges = div("wb-l-badges");
+    if (g.type === "policy") badges.appendChild(badge(item.kind === "audit" ? "Audit" : "Authorization", "kind"));
+    if (g.type !== "check") badges.appendChild(sourceBadge(item));
+    h.appendChild(badges); c.appendChild(h);
+    c.appendChild(div("wb-l-desc", descOf(item, g)));
+    c.appendChild(metaOf(item, g));
+    var acts = div("wb-l-acts");
+    acts.appendChild(btn("Open", "", function () { openDrawer(item, g); }));
+    if (g.test) acts.appendChild(btn("Test · $0", "", function () { openDrawer(item, g, "test"); }));
+    if (isYours(item) && window.wbBuilder && window.wbBuilder.editable(item["class"]) && g.type !== "knowledge" && g.type !== "check") {
+      acts.appendChild(btn("", "pencil", function () { window.wbBuilder.edit(item["class"], function () { openDrawer(item, g); }); }, "btn-icon"));
+      acts.lastChild.title = "Edit"; acts.lastChild.setAttribute("aria-label", "Edit " + titleOf(item, g));
+    }
+    c.appendChild(acts);
+    c.addEventListener("click", function () { openDrawer(item, g); });
+    c.addEventListener("keydown", function (e) { if (e.key === "Enter" && e.target === c) openDrawer(item, g); });
+    return c;
+  }
+
+  function emptyHint(g, raw) {
+    var word = g.title.toLowerCase();
+    if (libQuery) return "Nothing in " + word + " matches the search.";
+    if (libSource === "yours") return "No " + word + " of your own yet. Create one from a template.";
+    if (!raw) return "No " + word + " found in this namespace.";
+    return "Nothing in " + word + " matches the filter.";
+  }
+
   function renderLib() {
     clear(libBody);
     if (!lib) return;
-    renderTabs();
+    renderAnat(); renderTabs();
     var shown = 0;
-    GROUPS.forEach(function (g) {
-      var items = (lib[g.key] || []).filter(function (i) { return matches(i, g); });
-      if (!items.length) return;
+    tabGroups().forEach(function (g) {
+      if (libType !== "all" && libType !== g.type) return;
+      var raw = itemsOf(g), items = raw.filter(function (i) { return matches(i, g); });
+      // With a search running, an empty section is noise in the All view
+      if (!items.length && libType === "all" && libQuery) return;
       shown += items.length;
-      var box = div("card wb-sec");
-      var h = div("wb-sec-h"); h.appendChild(icon(g.icon));
-      h.appendChild(el("b", g.title)); h.appendChild(el("span", String(items.length), "wb-tabn")); h.appendChild(el("span", g.sub, "wb-ex"));
-      box.appendChild(h);
-      box.appendChild(libTable(items, g));
-      libBody.appendChild(box);
+      var sec = div("wb-l-sec"); sec.dataset.type = g.type;
+      var h = div("wb-l-sh"); h.appendChild(icon(g.icon)); h.appendChild(el("h2", g.title, "wb-l-h2"));
+      h.appendChild(el("span", g.base ? g.base + " · " + g.sub : g.sub, "wb-l-ex")); sec.appendChild(h);
+      if (items.length) {
+        var grid = div("wb-l-grid"); items.forEach(function (i) { grid.appendChild(card(i, g)); }); sec.appendChild(grid);
+      } else sec.appendChild(div("wb-note", emptyHint(g, raw.length)));
+      libBody.appendChild(sec);
     });
-    if (!shown) libBody.appendChild(div("wb-note", "Nothing matches."));
   }
 
   function resetLibFilters() {
-    libType = "all"; libQuery = ""; libSource = ""; libUsed = "";
-    search.value = ""; sourceBox.value = ""; usedBox.value = "";
+    libType = "all"; libQuery = ""; libSource = "";
+    search.value = ""; sourceBox.value = "";
   }
 
   function kv(label, value) {
@@ -218,32 +331,176 @@
     return w;
   }
 
+  // ---------- drawer: Overview, Source, Test
+  var drawer = div("wb-drawer hidden"); drawer.setAttribute("role", "dialog"); drawer.setAttribute("aria-label", "Part details");
+  document.body.appendChild(drawer);
   function closeDrawer() { drawer.classList.add("hidden"); }
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== "Escape") return;
+    if (!drawer.classList.contains("hidden")) closeDrawer();
+    closeNew();
+  });
 
-  function openDrawer(item, g) {
+  function section(title) { return el("h4", title, "wb-l-h4"); }
+  function listItem(head, sub, mono) {
+    var li = div("wb-l-li"); li.appendChild(el(mono ? "code" : "span", head, mono ? "wb-l-code" : "wb-l-lih"));
+    if (sub) li.appendChild(el("small", sub));
+    return li;
+  }
+
+  function overviewPane(item, g) {
+    var b = div("wb-l-pane");
+    var d = descOf(item, g);
+    if (d) b.appendChild(div("wb-l-desc", d));
+    if (g.type === "tool") {
+      b.appendChild(section("Tools in this set"));
+      (item.tools || []).forEach(function (name, i) { b.appendChild(listItem(name, (item.toolDescriptions || [])[i] || "", true)); });
+    } else if (g.type === "skill") {
+      if ((item.tools || []).length) { b.appendChild(section("Adds tools")); b.appendChild(chips(item.tools)); }
+      if (item.toolsets) b.appendChild(kv("Uses toolset", item.toolsets));
+      b.appendChild(kv("Loaded by the model as", item.name));
+    } else if (g.type === "agent") {
+      var w = wiringOf(item);
+      b.appendChild(kv("Model", item.model || "none"));
+      b.appendChild(section("Built from"));
+      reachableToolsets(item).forEach(function (c) { var t = byClass("toolsets", c); if (t) b.appendChild(partButton(t, groupOf("tool"), plural((t.tools || []).length, "tool"))); });
+      w.skills.forEach(function (c) { var s = byClass("skills", c); if (s) b.appendChild(partButton(s, groupOf("skill"), "skill")); });
+      w.policies.forEach(function (c) { var p = byClass("policies", c); if (p) b.appendChild(partButton(p, groupOf("policy"), p.kind || "policy")); });
+      w.knowledge.forEach(function (c) { var k = byClass("knowledge", c); if (k) b.appendChild(partButton(k, groupOf("knowledge"), "knowledge")); });
+      if (item.hostedBy) b.appendChild(kv("Runs in", item.hostedBy));
+      var acts = div("wb-l-dacts");
+      if (window.wbAddProd && window.wbAddProd.canAdd(item["class"])) acts.appendChild(btn("Add to production", "", function () { window.wbAddProd.openFor(item, loadLib); }, "btn-outline-primary"));
+      if (isYours(item) && window.wbBuilder && window.wbBuilder.editable(item["class"])) acts.appendChild(btn("Edit", "pencil", function () { window.wbBuilder.edit(item["class"], function () {}); }));
+      (item.installs || []).forEach(function (i) {
+        acts.appendChild(btn("Remove from " + i.namespace + " " + short(i.production), "arrow-back-up", function (x) { window.wbAddProd.removeInstall(i, x, loadLib); }, "btn-outline-danger"));
+      });
+      if (acts.firstChild) b.appendChild(acts);
+    } else if (g.type === "knowledge") {
+      b.appendChild(div("wb-note", "Built by Setup from the LOINC subset; the search runs on local vectors."));
+    }
+    if (g.type !== "agent") {
+      b.appendChild(section("Used by"));
+      var users = usedBy(item, g);
+      if (users.length) users.forEach(function (u) { b.appendChild(listItem(u.agent, u.via ? "via " + u.via : "")); });
+      else b.appendChild(div("wb-note", g.type === "check" ? (item.usedBy || "Runs in the Triage process.") : "No agent uses it yet."));
+    }
+    return b;
+  }
+  // An agent's part, as a row that opens that part
+  function partButton(item, g, kind) {
+    var li = el("button", null, "wb-l-li wb-l-partbtn"); li.type = "button";
+    li.appendChild(el("span", titleOf(item, g), "wb-l-lih")); li.appendChild(el("small", kind));
+    li.addEventListener("click", function () { openDrawer(item, g); });
+    return li;
+  }
+
+  function sourcePane(item) {
+    var b = div("wb-l-pane");
+    if (item["class"] === "search_loinc") { b.appendChild(div("wb-note", "The knowledge base is built by Setup from the LOINC subset; it has no class source.")); return b; }
+    var src = el("pre", "Loading the source…", "wb-src"); b.appendChild(src);
+    get("api/workbench/source?class=" + encodeURIComponent(item["class"])).then(function (d) { src.textContent = d.source || "(no source)"; })
+      .catch(function () { src.textContent = "The source is not available."; });
+    return b;
+  }
+
+  // The no-LLM test is the builder's: it runs a scratch copy built from the saved form values,
+  // so it exists for the parts created in Workbench, and for administrators.
+  function testPane(item, g) {
+    var b = div("wb-l-pane");
+    var note = div("wb-l-testnote");
+    note.appendChild(el("b", "Test · no LLM call, $0. "));
+    note.appendChild(document.createTextNode(g.type === "tool" ? "Runs the tool with the arguments you give and shows the result." : "Simulates a tool call and shows whether the policy allows it."));
+    b.appendChild(note);
+    if (!isYours(item) || !window.wbBuilder || !window.wbBuilder.editable(item["class"])) {
+      b.appendChild(div("wb-note", "This part ships with the app, and its tests run in the unit suite. Here you can test the parts you create in Workbench."));
+      return b;
+    }
+    var box = div("wb-l-testbox"), out = div("wb-tout");
+    b.appendChild(box); b.appendChild(out);
+    box.textContent = "Loading the form…";
+    get("api/workbench/builder/open?class=" + encodeURIComponent(item["class"])).then(function (d) {
+      var spec = d.spec; clear(box);
+      if (g.type === "tool") toolForm(spec, box, out); else policyForm(spec, box, out);
+    }).catch(function () { box.textContent = "This class was not written by a builder, so there is no test form for it."; });
+    return b;
+  }
+  function field(label, node) { var f = div("wb-f"); f.appendChild(el("label", label, "form-label")); f.appendChild(node); return f; }
+  function errList(list) { var u = el("ul", null, "wb-errl"); list.forEach(function (t) { u.appendChild(el("li", t)); }); return u; }
+  function toolForm(spec, box, out) {
+    var inputs = {}, row = div("wb-targs");
+    (spec.args || []).forEach(function (a) {
+      if (!a.name) return;
+      var i = el("input", null, "form-control wb-mono-in"); i.placeholder = a.type; inputs[a.name] = [i, a.type]; row.appendChild(field(a.name, i));
+    });
+    if (!(spec.args || []).length) row.appendChild(div("wb-help", "This tool has no arguments."));
+    box.appendChild(row);
+    box.appendChild(btn("Run", "player-play", function () {
+      var args = {};
+      Object.keys(inputs).forEach(function (n) {
+        var v = inputs[n][0].value.trim(); if (v === "") return;
+        var t = inputs[n][1]; args[n] = (t === "%Integer" || t === "%Numeric") ? Number(v) : (t === "%Boolean" ? (v === "1" || v === "true" ? 1 : 0) : v);
+      });
+      clear(out); out.textContent = "Running…";
+      send("POST", "api/workbench/builder/test-tool", { kind: "tool", spec: spec, args: args }).then(function (r) {
+        clear(out);
+        if (r.errors && r.errors.length) { out.appendChild(errList(r.errors)); return; }
+        out.appendChild(window.wbTable(r.result));
+        out.appendChild(div("wb-help", r.elapsedMs + " ms · ran as you; the agent itself runs with SELECT only."));
+      }).catch(function (e) { out.textContent = e.message; });
+    }, "btn-primary mt-2"));
+  }
+  function policyForm(spec, box, out) {
+    var tool = el("input", null, "form-control wb-mono-in"); tool.value = (spec.tools && spec.tools[0]) || "";
+    var args = el("input", null, "form-control wb-mono-in"), sample = {}, r0 = (spec.rules || [])[0];
+    if (r0 && r0.arg) sample[r0.arg] = r0.value || "";
+    args.value = JSON.stringify(sample);
+    var two = div("wb-two"); two.appendChild(field("Tool", tool)); two.appendChild(field("Arguments (JSON)", args));
+    box.appendChild(two);
+    box.appendChild(btn("Check", "player-play", function () {
+      var a;
+      try { a = JSON.parse(args.value || "{}"); } catch (e) { out.textContent = "Arguments must be valid JSON."; return; }
+      clear(out); out.textContent = "Checking…";
+      send("POST", "api/workbench/builder/test-policy", { kind: "policy", spec: spec, tool: tool.value.trim(), args: a }).then(function (r) {
+        clear(out);
+        if (r.errors && r.errors.length) { out.appendChild(errList(r.errors)); return; }
+        var d = div("wb-verdict " + (r.allowed ? "ok" : "no")); d.appendChild(el("b", r.allowed ? "ALLOWED" : "DENIED"));
+        if (!r.allowed) d.appendChild(div("wb-mono", r.message));
+        out.appendChild(d);
+      }).catch(function (e) { out.textContent = e.message; });
+    }, "btn-primary mt-2"));
+  }
+
+  function baseOf(item, g) {
+    if (g.type === "policy") return item.kind === "audit" ? "%AI.Policy.Audit" : "%AI.Policy.Authorization";
+    return g.base;
+  }
+
+  function openDrawer(item, g, tab) {
     clear(drawer); drawer.classList.remove("hidden");
     var top = div("wb-drawer-h");
-    var t = div(); t.appendChild(div("wb-n", item.name)); t.appendChild(div("wb-c", item["class"]));
+    var t = div(); t.appendChild(el("h3", titleOf(item, g), "wb-l-dname")); t.appendChild(div("wb-c", item["class"] + " · " + baseOf(item, g)));
     var x = el("button", null, "btn btn-icon btn-ghost-secondary"); x.type = "button"; x.setAttribute("aria-label", "Close");
     x.appendChild(icon("x")); x.addEventListener("click", closeDrawer);
     top.appendChild(t); top.appendChild(x); drawer.appendChild(top);
-    var body = div("wb-drawer-b");
-    if (item.description) body.appendChild(div("wb-d", tidy(item.description)));
-    if (item.toolDescriptions) {
-      item.tools.forEach(function (name, i) {
-        var r = div("wb-tool"); r.appendChild(el("b", name)); r.appendChild(div("wb-d", item.toolDescriptions[i] || ""));
-        body.appendChild(r);
-      });
-    } else if (item.tools && item.tools.length) body.appendChild(kv("Adds tools", chips(item.tools)));
-    if (item.usedBy) body.appendChild(kv("Used by", item.usedBy.replace(/^used by /, "")));
-    if (g.type === "knowledge") {
-      body.appendChild(div("wb-note", "Built by Setup from the LOINC subset; the search runs on local vectors."));
-    } else {
-      var src = el("pre", "Loading the source…", "wb-src"); body.appendChild(src);
-      get("api/workbench/source?class=" + encodeURIComponent(item["class"])).then(function (d) { src.textContent = d.source || "(no source)"; })
-        .catch(function () { src.textContent = "The source is not available."; });
+    var tags = div("wb-l-dtags");
+    if (g.type === "policy") tags.appendChild(badge(item.kind === "audit" ? "Audit" : "Authorization", "kind"));
+    if (g.type !== "check") tags.appendChild(sourceBadge(item));
+    if (tags.firstChild) drawer.appendChild(tags);
+    var names = [["overview", "Overview"], ["source", "Source"]];
+    if (g.test) names.push(["test", "Test"]);
+    var bar = div("wb-l-dtabs"), body = div("wb-drawer-b"), buttons = {};
+    function show(which) {
+      Object.keys(buttons).forEach(function (k) { buttons[k].classList.toggle("active", k === which); });
+      clear(body);
+      body.appendChild(which === "source" ? sourcePane(item) : which === "test" ? testPane(item, g) : overviewPane(item, g));
     }
-    drawer.appendChild(body);
+    names.forEach(function (n) {
+      var b = el("button", n[1], "wb-l-dtab"); b.type = "button"; buttons[n[0]] = b;
+      b.addEventListener("click", function () { show(n[0]); });
+      bar.appendChild(b);
+    });
+    drawer.appendChild(bar); drawer.appendChild(body);
+    show(tab || "overview");
   }
 
   var prodBar = div("wb-bar"), pick = el("select", null, "form-select wb-pick");

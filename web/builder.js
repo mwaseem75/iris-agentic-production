@@ -346,6 +346,8 @@
 
   window.wbBuilder = {
     templates: function () { withOpts(picker); },
+    // Straight into one builder: tool, skill, policy or agent-blank (the Library's Create new menu)
+    create: function (id) { startNew(id); },
     // MyAI classes written by a builder reopen in it; others fall back to the read-only drawer
     edit: function (cls, fallback) {
       get("api/workbench/builder/open?class=" + encodeURIComponent(cls)).then(function (d) {
