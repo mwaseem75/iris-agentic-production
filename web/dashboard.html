@@ -443,6 +443,7 @@ td.go { white-space: nowrap; }
             <label>Mode <select id="burst-mode"><option value="replay">Replay ($0)</option><option value="live">Live (LLM, max 10)</option></select></label>
             <button type="button" id="burst-go" class="btn btn-primary btn-sm">Send a burst</button>
             <button type="button" id="burst-confirm" class="btn btn-sm hidden">Confirm and send</button>
+            <p class="muted mt-1 mb-0" style="font-size:12px">Replay messages are tagged as eval runs: switch on "Include eval runs" above to see them in the list below.</p>
             <p class="msg" id="burst-msg"></p>
           </div></div>
         </div>
@@ -757,8 +758,11 @@ var decRows = [], decPage = 1, decSize = 25;
 var decSort = { key: "time", dir: "desc" };
 // Options for charts whose box was hidden (other tab, closed details): drawn once it is shown
 var pending = {};
-var includeEval = false;
-try { includeEval = localStorage.getItem("agenticprod.includeEval") === "1"; } catch (e) {}
+var includeEval = true;
+try {
+  var storedIncludeEval = localStorage.getItem("agenticprod.includeEval");
+  if (storedIncludeEval !== null) includeEval = storedIncludeEval === "1";
+} catch (e) {}
 
 function el(tag, text, cls) {
   var e = document.createElement(tag);
