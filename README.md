@@ -125,7 +125,7 @@ Verify PASSED: 6 of 6 steps
 
 The two replay steps use the recorded runs that setup loads from `eval/recordings/recordings.json` (see [Recorded runs](#evaluation)). Where there is no recording for the case they print `SKIP` with the reason, and `./verify.sh --strict` counts that as a failure. The exit code is 0 when no step failed.
 
-Unit tests, no LLM call (a unit-test run blocks live calls): 225 test methods in 33 classes.
+Unit tests, no LLM call (a unit-test run blocks live calls): 234 test methods in 34 classes.
 
 ```objectscript
 do ##class(%UnitTest.Manager).RunTest("AgenticProd", "/noload/nodelete")
