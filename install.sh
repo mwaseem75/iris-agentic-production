@@ -2,7 +2,7 @@
 # One-command install: checks Docker and the image, creates .env, builds and starts, waits for healthy.
 # Usage: ./install.sh [path-to-the-tar-file-from-the-portal]   (or set IRIS_IMAGE_TAR; not needed when the image is already loaded)
 set -u
-URL="http://localhost:52773/agenticprod/dashboard.html"
+URL="http://localhost:52773/agenticprod/AgenticProd.UI.Home.cls"
 TAR="${1:-${IRIS_IMAGE_TAR:-}}"
 
 die() { echo "ERROR: $*" >&2; exit 1; }

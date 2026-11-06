@@ -18,7 +18,7 @@ Built for the InterSystems Programming Contest "AI Agents in Interoperability Wo
 
 No API key and no OpenAI account are needed. The sample cases are answered from recorded runs that ship with the repo.
 
-1. Run the [installer](#install) and open **http://localhost:52773/agenticprod/dashboard.html** (`SuperUser` / `SYS`, or the read-only `reviewer` / `Review-Demo-2026`).
+1. Run the [installer](#install) and open **http://localhost:52773/agenticprod/AgenticProd.UI.Home.cls** — it shows the IRIS login form, then goes to the dashboard (`SuperUser` / `SYS`, or the read-only `reviewer` / `Review-Demo-2026`).
 2. Open **Trust & evaluation**: the 60-case results are already there.
 3. Open **AI Hub Library**, then **AI Hub in Production**, to see the agent, its tools and skills, and where it sits in the production.
 4. Send a broken message and watch it handled: `docker compose exec iris iris session iris -U IRISAPP`, then `do ##class(AgenticProd.Demo).SendCase("05")`. Open it in **Messages** to read its story.
@@ -100,7 +100,7 @@ The path is only needed if the image is not loaded yet. On Windows use `.\instal
 
 | What | Where | Login |
 |---|---|---|
-| Dashboard | http://localhost:52773/agenticprod/dashboard.html | `SuperUser` / `SYS` (admin), or `reviewer` / `Review-Demo-2026` (read-only) |
+| Dashboard | http://localhost:52773/agenticprod/AgenticProd.UI.Home.cls | `SuperUser` / `SYS` (admin), or `reviewer` / `Review-Demo-2026` (read-only) |
 | Management Portal | http://localhost:52773/csp/sys/UtilHome.csp | `SuperUser` / `SYS` |
 | Production | Interoperability → IRISAPP → `AgenticProd.Production` | |
 | Workflow inbox | Interoperability → Workflow Inbox | `reviewer` / `Review-Demo-2026` |
