@@ -1,4 +1,4 @@
-ARG IMAGE=irishealth-community:2026.3.0AI.154.0
+ARG IMAGE=irishealth-community:2027.1.0AI.109.0
 FROM $IMAGE
 
 WORKDIR /home/irisowner/dev
