@@ -307,7 +307,7 @@
   }
 
   var NW = 210, NH = 92, HW = 340, HH = 100, GAPX = 90, GAPY = 36, CW = 122;
-  var stage = null, scale = 1, stageW = 0, stageH = 0, PAD = 48, MINSCALE = 0.85;
+  var stage = null, scale = 1, stageW = 0, stageH = 0, PAD = 48, FITPAD = 24, LEGENDH = 22, CANVASMIN = 520;
 
   function nodeBox(it, host, small) {
     var n = div("wb-n-node" + (host ? " wb-host" : it.ai ? " wb-ainode" : it.checks ? " wb-chk" : " wb-plain") + (small ? " wb-small" : ""));
@@ -485,21 +485,34 @@
     stage.style.width = W + "px"; stage.style.height = H + "px";
     svg.setAttribute("width", W); svg.setAttribute("height", H); svg.style.width = W + "px";
     fit();
+    // The banners above the page can appear after the data loads and move the canvas down
+    setTimeout(fit, 500);
+  }
+
+  // Canvas height: what is left of the window below the controls, never under CANVASMIN
+  function sizeCanvas() {
+    var top = wrap.getBoundingClientRect().top;
+    cv.style.height = Math.max(CANVASMIN, Math.floor(window.innerHeight - top - 20)) + "px";
   }
 
   function applyScale() {
     if (!stage) return;
     stage.style.transform = "scale(" + scale + ")";
-    // Top pad keeps the zoom buttons clear of the nodes
+    // Top pad keeps the zoom buttons clear of the nodes; a graph narrower than the canvas is centred
     stage.style.top = PAD + "px";
-    cv.style.height = (Math.ceil(stageH * scale) + PAD) + "px";
+    stage.style.left = Math.max(0, Math.floor((cv.clientWidth - stageW * scale) / 2)) + "px";
   }
 
-  // Width decides the scale and the page scrolls for height. Never below 0.85: labels stop being readable.
+  // Whole graph in view with a little padding, so nothing is cut at the right or bottom. On a narrow
+  // screen the floor stops labels shrinking to nothing; the canvas scrolls instead.
   function fit() {
     if (!stage) return;
-    scale = Math.max(MINSCALE, Math.min(1, (cv.clientWidth || stageW) / stageW));
+    sizeCanvas();
+    var floor = window.innerWidth < 768 ? 0.45 : 0.3;
+    var w = (cv.clientWidth - 2 * FITPAD) / stageW, h = (cv.clientHeight - PAD - FITPAD - LEGENDH) / stageH;
+    scale = Math.max(floor, Math.min(1, w, h));
     applyScale();
+    cv.scrollLeft = 0; cv.scrollTop = 0;
   }
 
   function zoom(f) { scale = Math.max(0.3, Math.min(1.6, scale * f)); applyScale(); }

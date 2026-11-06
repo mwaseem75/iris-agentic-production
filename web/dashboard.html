@@ -15,8 +15,8 @@
 </script>
 <link rel="stylesheet" href="vendor/tabler/tabler.min.css">
 <link rel="stylesheet" href="vendor/tabler/tabler-icons.min.css">
-<link rel="stylesheet" href="workbench.css?v=8.20.36">
-<link rel="stylesheet" href="layout.css?v=8.20.36">
+<link rel="stylesheet" href="workbench.css?v=8.20.38">
+<link rel="stylesheet" href="layout.css?v=8.20.38">
 <style>
 :root {
   --tblr-font-sans-serif: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -71,6 +71,8 @@ body { background: var(--bg); font-size: 15px; }
 /* page */
 .page-header { margin: 0 !important; padding: 16px 0 8px; }
 .page-title { font-size: 24px; }
+/* One-line description under every page title; same spacing on every page */
+.page-sub { color: var(--muted); font-size: 13px; line-height: 1.45; margin-top: 4px; max-width: 90ch; }
 .card { border-radius: 12px; border: 1px solid var(--line); box-shadow: 0 1px 2px rgba(16,24,40,.04); }
 .card-title { font-size: 17px; font-weight: 600; }
 .card-header { border-bottom: 1px solid var(--line-soft); }
@@ -350,7 +352,7 @@ td.go { white-space: nowrap; }
           <div class="col">
             <div class="text-secondary" style="font-size:13px" id="crumb">Agentic Production</div>
             <div class="d-flex align-items-center gap-2"><button type="button" id="side-open" class="side-btn side-open" aria-label="Open menu" aria-expanded="false" aria-controls="nav"><i class="ti ti-menu-2"></i></button><h2 class="page-title" id="ptitle">Overview</h2><button type="button" class="title-info hidden" id="ptitle-info" title="About this page" aria-label="About this page"><i class="ti ti-info-circle"></i></button></div>
-            <div class="text-secondary hidden" style="font-size:14px" id="psub"></div>
+            <div class="page-sub hidden" id="psub"></div>
           </div>
           <div class="col-auto d-flex flex-wrap align-items-center gap-3" id="hdr-ctl">
             <span id="hdr-eval-slot"><label class="form-check form-switch m-0" id="eval-toggle"><input class="form-check-input" type="checkbox" id="incl-eval"><span class="form-check-label">Include eval runs</span></label></span>
@@ -2091,7 +2093,17 @@ document.getElementById("kill-btn").addEventListener("click", function () {
 });
 
 var TITLES = { overview: "Overview", wbnew: "Create an agent", wblib: "Library", wbprod: "Production map", messages: "Messages", trust: "Trust & evaluation", cost: "Cost", settings: "Settings" };
-var SUBS = { messages: "Every message the agent handled. Click a row to see its story." };
+// One description per page; a page with sub-tabs or several views keeps the same text
+var SUBS = {
+  overview: "Live view of the agent at work: how many failed messages came in, what was decided, what it cost and how fast.",
+  messages: "Every failed message the agent handled. Filter, sort, open the story of one message, or view its flow.",
+  trust: "Proof that the agent is safe: scored test runs, unsafe outcomes, grounding failures and the checks around the model.",
+  cost: "What the agent costs: spend per model and per day against the daily budget.",
+  wbnew: "Build an AI Hub agent step by step: pick its tools and skills, write its instructions, test it for $0, then add it to a production.",
+  wblib: "The AI Hub parts found in this namespace: agents, tools, skills and policies, and where each one is used.",
+  wbprod: "A read-only picture of a production. Items that host an AI Hub agent carry the AI HUB badge.",
+  settings: "Providers and keys, agent limits, guardrails, budgets, prices, learned mappings and the change log."
+};
 var PAGE_INFO = { wblib: "Library" };
 document.getElementById("ptitle-info").addEventListener("click", function () { openHelp(this.dataset.help); });
 function showTab(name) {
@@ -2295,10 +2307,10 @@ setInterval(load, 30000);
     <details id="story-msg-box"><summary>Message (patient name, birth date, address and phone masked)</summary><pre id="story-msg"></pre></details>
   </div>
 </aside>
-<script src="flow.js?v=8.20.36"></script>
-<script src="workbench.js?v=8.20.36"></script>
-<script src="builder.js?v=8.20.36"></script>
-<script src="wizard.js?v=8.20.36"></script>
-<script src="addprod.js?v=8.20.36"></script>
+<script src="flow.js?v=8.20.38"></script>
+<script src="workbench.js?v=8.20.38"></script>
+<script src="builder.js?v=8.20.38"></script>
+<script src="wizard.js?v=8.20.38"></script>
+<script src="addprod.js?v=8.20.38"></script>
 </body>
 </html>
