@@ -416,9 +416,9 @@ The Settings page never returns a key, only "set" or "not set", and every change
 
 Everything so far built a production around an agent. Most people have it the other way round: a production that already runs, and a wish to add AI Hub to it without rewriting anything. The **AI Hub Workbench** (a group in the dashboard sidebar) does this in four steps, and every step is plain IRIS code you can read.
 
-**1. See what you have.** The **Library** lists the AI Hub parts in a namespace by reading the real classes: agents (`%AI.Agent`), toolsets (`%AI.ToolSet`), skills (`%AI.Agent.Skill`) and policies. Nothing is stored apart from the classes, so the list is always what is installed.
+**1. See what you have.** The **AI Hub Library** lists the AI Hub parts in a namespace by reading the real classes: toolsets (`%AI.ToolSet`), skills (`%AI.Agent.Skill`), policies and the knowledge base. Its top card, *How the TriageAgent is built*, shows an agent as its tools, skills, policies and knowledge, each with its real count, and below it the plain IRIS checks around the agent. Open a part to read what it does, where it is used and its source, or to test it for $0 when you created it in Workbench. Nothing is stored apart from the classes, so the list is always what is installed.
 
-![The Library](images/workbench-library.png)
+![The AI Hub Library](images/workbench-library.png)
 
 **2. Create from a template.** The builders write ordinary classes in a package called `MyAI`: a tool (a SELECT-only SQL query with a description the model reads), a skill, a policy, or a whole agent. The agent wizard adds a fixed `## Output` section to the instructions, so the agent always answers with the decision JSON of section 3. Without it, Triage could not read the answer. Generated SQL tools are SELECT-only and the builders are for administrators only.
 
@@ -462,16 +462,16 @@ Some details that matter in a real production:
 
 **Safe to add and remove.** Plan refuses any item name that already exists, and `Apply` never changes or restarts an existing item. Every added item is written to `Data.PluginItem` with an owner, so `Remove` takes out exactly those. If the agent's package is not visible in the target namespace, the plan includes a package mapping and applies it. The Workflow role and its tasks stay after a remove, as the record of what humans decided.
 
-**The production map.** A read-only picture of a production: services, processes and operations in lanes, with links built from item targets, routing-rule targets and the real message pairs. Items that host an agent carry an AI HUB badge.
+**AI Hub in Production.** A read-only picture of a production: services, processes and operations in lanes, with links built from item targets, routing-rule targets and the real message pairs. Items that host an agent carry an AI HUB badge.
 
-![The production map](images/production-map.png)
+![AI Hub in Production](images/production-map.png)
 
 **Try it:**
 
 1. In the dashboard, open **Workbench → Create an agent** and build an agent from the "Explain failures" template.
 2. Send the failing samples in `legacy/samples` to the LEGACY namespace (see the [README](README.md#legacy-demo-production)).
-3. Open **Library**, click **Add to production**, choose `LEGACY` and **When a message fails**, mode `observe`, apply.
-4. Send the samples again and watch **Messages**. Then **Remove** and check the production map.
+3. Open **AI Hub Library**, open your agent from the top card, click **Add to production**, choose `LEGACY` and **When a message fails**, mode `observe`, apply.
+4. Send the samples again and watch **Messages**. Then **Remove** and check **AI Hub in Production**.
 
 ## 13. Build 154 and 109 notes
 
