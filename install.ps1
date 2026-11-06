@@ -21,7 +21,7 @@ if (-not $Image -and (Test-Path .env)) {
     $line = Select-String -Path .env -Pattern '^IRIS_IMAGE=(.+)$' | Select-Object -Last 1
     if ($line) { $Image = $line.Matches[0].Groups[1].Value.Trim().Trim('"') }
 }
-if (-not $Image) { $Image = 'irishealth-community:2026.3.0AI.154.0' }
+if (-not $Image) { $Image = 'irishealth-community:2027.1.0AI.109.0' }
 $env:IRIS_IMAGE = $Image
 
 # 1. Docker and compose
@@ -48,14 +48,14 @@ if (-not (Test-Image)) {
 ERROR: the image $Image is missing.
 
 This app needs $Image (InterSystems IRIS for Health with AI Hub, early access
-build 154). The plain iris-community image of the same build does not work: it has no
+build 109, built on build 154). The plain iris-community image of the same build does not work: it has no
 EnsLib.HL7 classes, and setup stops with a message saying so. The image is not public.
 Load it from the tar file you received and tag it:
 
-  docker load -i irishealth-community-2026.3.0AI.154.0-docker.tar.gz
+  docker load -i irishealth-community-2027.1.0AI.109.0-docker.tar.gz
   docker tag <loaded image name> $Image
 
-Or run: .\install.ps1 -ImageTar path\to\irishealth-community-2026.3.0AI.154.0-docker.tar.gz
+Or run: .\install.ps1 -ImageTar path\to\irishealth-community-2027.1.0AI.109.0-docker.tar.gz
 "@ -ForegroundColor Red
     exit 1
 }

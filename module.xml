@@ -4,7 +4,7 @@
     <Module>
       <Name>iris-agentic-production</Name>
       <Version>1.0.0</Version>
-      <Description>Agentic Production: build, test and govern AI Hub agents in any IRIS interoperability production. An IRIS for Health 2026.3 AI Hub agent triages failed messages and proposes a repair or code mapping; Triage checks it and applies it, asks a person (Workflow) or rejects it. Includes the HL7 lab demo production, the LEGACY demo namespace, a dashboard web app and an eval set.</Description>
+      <Description>Agentic Production: build, test and govern AI Hub agents in any IRIS interoperability production. An IRIS for Health AI Hub agent (2026.3 or later) triages failed messages and proposes a repair or code mapping; Triage checks it and applies it, asks a person (Workflow) or rejects it. Includes the HL7 lab demo production, the LEGACY demo namespace, a dashboard web app and an eval set.</Description>
       <Keywords>AI Hub agent interoperability HL7 triage governance</Keywords>
       <SystemRequirements Version="&gt;=2026.3" Interoperability="enabled"/>
       <Packaging>module</Packaging>

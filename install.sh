@@ -14,7 +14,7 @@ IMAGE="${IRIS_IMAGE:-}"
 if [ -z "$IMAGE" ] && [ -f .env ]; then
   IMAGE="$(sed -n 's/^IRIS_IMAGE=//p' .env | tail -n 1 | tr -d '"')"
 fi
-IMAGE="${IMAGE:-irishealth-community:2026.3.0AI.154.0}"
+IMAGE="${IMAGE:-irishealth-community:2027.1.0AI.109.0}"
 export IRIS_IMAGE="$IMAGE"
 
 # 1. Docker and compose
@@ -39,14 +39,14 @@ if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
 ERROR: the image $IMAGE is missing.
 
 This app needs $IMAGE (InterSystems IRIS for Health with AI Hub, early access
-build 154). The plain iris-community image of the same build does not work: it has no
+build 109, built on build 154). The plain iris-community image of the same build does not work: it has no
 EnsLib.HL7 classes, and setup stops with a message saying so. The image is not public.
 Load it from the tar file you received and tag it:
 
-  docker load -i irishealth-community-2026.3.0AI.154.0-docker.tar.gz
+  docker load -i irishealth-community-2027.1.0AI.109.0-docker.tar.gz
   docker tag <loaded image name> $IMAGE
 
-Or run: ./install.sh path/to/irishealth-community-2026.3.0AI.154.0-docker.tar.gz
+Or run: ./install.sh path/to/irishealth-community-2027.1.0AI.109.0-docker.tar.gz
 MSG
   exit 1
 fi
