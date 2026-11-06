@@ -382,10 +382,15 @@
   function fitCanvas() {
     var wrap = $("fl-wrap"), root = $("fl-canvas");
     if (!wrap || !root || !wrap.clientWidth) return;
-    var sc = Math.min(1.2, wrap.clientWidth / CW);
+    // stacked (narrow) layout: the wrap takes the height of the scaled canvas; side by side: it fills the column
+    var stacked = window.matchMedia("(max-width: 900px)").matches;
+    if (!stacked) wrap.style.height = "";
+    var sc = Math.min(2, wrap.clientWidth / CW, stacked ? 2 : wrap.clientHeight / CH);
+    if (stacked) wrap.style.height = Math.round(CH * sc) + "px";
     root.style.width = CW + "px"; root.style.height = CH + "px";
     root.style.transform = "scale(" + sc + ")";
-    wrap.style.height = Math.round(CH * sc) + "px";
+    root.style.left = Math.max(0, Math.round((wrap.clientWidth - CW * sc) / 2)) + "px";
+    root.style.top = Math.max(0, Math.round((wrap.clientHeight - CH * sc) / 2)) + "px";
   }
 
   // Everything the canvas shows at step cur; prog (0..1) is how far that step has run while playing
@@ -497,14 +502,21 @@
   }
   window.addEventListener("resize", fitCanvas);
 
+  // The one place that posts a burst: the panel below and the one-click buttons on Overview both come here
+  function sendBurst(n, mode, confirm) {
+    return send("POST", "api/burst", { n: n, mode: mode, ns: ns, confirm: !!confirm }).then(function (r) {
+      lastTop = "";
+      poll();
+      return r;
+    });
+  }
+  window.flowSendBurst = sendBurst;
   function burst(confirm) {
     var n = +$("burst-n").value, mode = $("burst-mode").value, msg = $("burst-msg");
     msg.className = "msg"; msg.textContent = "";
     $("burst-confirm").classList.add("hidden");
-    send("POST", "api/burst", { n: n, mode: mode, ns: ns, confirm: !!confirm }).then(function (r) {
+    sendBurst(n, mode, confirm).then(function (r) {
       msg.className = "msg ok"; msg.textContent = "Sent " + r.sent.length + " " + r.mode + " messages" + (r.estimatedCostUsd ? ", about " + money(r.estimatedCostUsd, 4) : ", no LLM cost") + ".";
-      lastTop = "";
-      poll();
     }).catch(function (e) {
       msg.className = "msg bad"; msg.textContent = e.message;
       if (/costs about/.test(e.message)) $("burst-confirm").classList.remove("hidden");

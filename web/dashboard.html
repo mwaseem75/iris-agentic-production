@@ -285,7 +285,7 @@ section.panel { background: var(--panel); border: 1px solid var(--line); border-
 .fl-steps .m { color: var(--muted); font-size: 12px; }
 .fl-steps .x { margin: 2px 0; }
 #mp-back { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 1050; }
-#msg-panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(980px, 96vw); background: var(--bg); border-left: 1px solid var(--line); box-shadow: -4px 0 18px rgba(0,0,0,.25); z-index: 1051; overflow-y: auto; padding: 14px 16px; }
+#msg-panel { position: fixed; top: 0; right: 0; bottom: 0; width: 92vw; background: var(--bg); border-left: 1px solid var(--line); box-shadow: -4px 0 18px rgba(0,0,0,.25); z-index: 1051; overflow-y: auto; padding: 14px 16px; }
 .mp-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-bottom: 12px; }
 .mp-head h2 { margin: 0; font-size: 20px; font-family: ui-monospace, Consolas, monospace; }
 .mp-ico { width: 36px; height: 36px; border-radius: 50%; background: var(--info-bg); color: var(--accent); display: inline-flex; align-items: center; justify-content: center; font-size: 18px; }
@@ -312,20 +312,41 @@ section.panel { background: var(--panel); border: 1px solid var(--line); border-
 .mp-bar > div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
 td.go { white-space: nowrap; }
 #msg-panel:not(.hidden) { display: flex; flex-direction: column; }
-#mp-journey:not(.hidden) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+/* Journey: controls and steps in a 340px column, the diagram fills the rest. Stacked on narrow screens. */
+#mp-journey:not(.hidden) { flex: 1; min-height: 0; display: grid; grid-template-columns: 340px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "player map" "steps map"; gap: 0 16px; }
+#mp-journey .mp-player { grid-area: player; gap: 8px 10px; }
+#mp-journey .mp-player .btn-group:first-child { order: 1; }
+#mp-journey .mp-player #fj-speeds { order: 2; }
+#mp-journey .mp-player #fj-replay { order: 3; }
+#mp-journey .mp-player .mp-pos { order: 4; flex: 1 1 100%; white-space: normal; }
+#mp-journey .mp-player .mp-bar { order: 5; flex: 1 1 100%; }
+#mp-journey .fl-mapbox { grid-area: map; display: flex; min-height: 0; }
+#mp-journey .fl-canvas-wrap { flex: 1; min-width: 0; }
+#mp-journey .fl-steps { grid-area: steps; margin: 0; min-height: 0; padding-right: 4px; }
+@media (max-width: 900px) {
+  #mp-journey:not(.hidden) { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-auto-rows: auto; grid-template-areas: "map" "player" "steps"; align-content: start; overflow-y: auto; }
+  #mp-journey .fl-mapbox { display: block; margin-bottom: 4px; }
+  #mp-journey .fl-canvas-wrap { flex: none; }
+  #mp-journey .fl-steps { overflow: visible; }
+}
 #mp-details:not(.hidden) { flex: 1; min-height: 0; overflow-y: auto; }
-#mp-journey .fl-mapbox { margin: 0 0 8px; padding: 0; }
+#mp-journey .fl-mapbox { margin: 0; padding: 0; }
 @media (max-width: 1100px) { .charts { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 600px) {
   #burst-wrap { display: none; }
   #msg-panel { width: 100vw; }
   .fl-list { max-height: 260px; }
-  .fl-canvas-wrap { display: none; }
   .opt { display: none; }
   .kpi .value { font-size: 26px; }
   .chart { height: 220px; }
   .mini { gap: 12px 0; }
 }
+#toast { position: fixed; right: 16px; bottom: 16px; z-index: 1100; max-width: min(420px, calc(100vw - 32px)); padding: 10px 14px; border-radius: 8px; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-left: 4px solid var(--good); box-shadow: 0 6px 20px rgba(0,0,0,.25); font-size: 14px; }
+#toast.bad { border-left-color: var(--bad); }
+#burst-pop { position: fixed; z-index: 1100; width: 280px; max-width: calc(100vw - 16px); padding: 12px; border-radius: 8px; background: var(--panel); color: var(--text); border: 1px solid var(--line); box-shadow: 0 6px 20px rgba(0,0,0,.25); font-size: 14px; }
+#burst-pop .bp-btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
+#decisions tr.row-new > td { background: var(--info-bg); }
+#decisions tr.row-new > td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 </style>
 </head>
 <body>
@@ -1075,20 +1096,72 @@ function startSteps() {
   var inbox = document.getElementById("inbox-link");
   var gs3 = document.getElementById("gs-3");
   new MutationObserver(function () { gs3.href = inbox.href; }).observe(inbox, { attributes: true });
-  document.getElementById("gs-4").addEventListener("click", function () {
-    openBurst();
-  });
+  document.getElementById("gs-4").addEventListener("click", function () { quickBurst(document.getElementById("gs-4")); });
   document.getElementById("help-close").addEventListener("click", closeHelp);
   document.getElementById("help-back").addEventListener("click", closeHelp);
   document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeHelp(); });
 }
-// The burst form sits on the Messages tab, folded away until asked for
+// The burst form sits on the Messages tab, folded away until asked for. It holds the settings
+// (cases, mode) that the one-click buttons use.
 function openBurst() {
   showTab("messages");
   var w = document.getElementById("burst-wrap");
   w.classList.remove("hidden");
   w.scrollIntoView({ behavior: "smooth", block: "start" });
 }
+
+var toastTimer = null;
+function toast(text, bad) {
+  var t = document.getElementById("toast");
+  t.textContent = text;
+  t.className = bad ? "bad" : "";
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () { t.className = "hidden"; }, bad ? 7000 : 4000);
+}
+
+// Rows above this ID are the ones a one-click burst just added; they stay tinted for a minute
+var burstMark = null;
+function markNewRows() {
+  if (!burstMark) return;
+  if (Date.now() > burstMark.until) burstMark = null;
+  Array.prototype.forEach.call(document.querySelectorAll("#decisions tr[data-id]"), function (tr) {
+    tr.classList.toggle("row-new", !!burstMark && +tr.dataset.id > burstMark.above);
+  });
+}
+
+// Send a burst with the panel's settings and open Messages. Live costs money, so it asks once first.
+function quickBurst(anchor) {
+  var n = +document.getElementById("burst-n").value || 8, mode = document.getElementById("burst-mode").value;
+  var above = decRows.reduce(function (m, d) { return Math.max(m, +d.ID || 0); }, 0);
+  closeBurstPop();
+  function go(confirm) {
+    return window.flowSendBurst(n, mode, confirm).then(function (r) {
+      burstMark = { above: above, until: Date.now() + 60000 };
+      showTab("messages");
+      toast("Sending " + r.sent.length + " cases (" + r.mode + ")...");
+    });
+  }
+  if (mode !== "live") { go(false).catch(function (e) { toast(e.message, true); }); return; }
+  // a live request without confirm sends nothing and answers with the estimate
+  go(false).catch(function (e) {
+    if (!e.data || !e.data.needsConfirm) { toast(e.message, true); return; }
+    askLiveBurst(anchor, e.data.n, e.data.estimatedCostUsd, function () { go(true).catch(function (e2) { toast(e2.message, true); }); });
+  });
+}
+function closeBurstPop() { document.getElementById("burst-pop").classList.add("hidden"); }
+function askLiveBurst(anchor, n, cost, onSend) {
+  var pop = document.getElementById("burst-pop");
+  document.getElementById("bp-text").textContent = "Send " + n + " live cases? Estimated cost " + (cost ? "about " + money(cost, 4) : "unknown, no price on file") + ".";
+  var r = anchor.getBoundingClientRect();
+  pop.classList.remove("hidden");
+  pop.style.top = Math.round(r.bottom + 6) + "px";
+  pop.style.left = Math.max(8, Math.min(innerWidth - pop.offsetWidth - 8, r.right - pop.offsetWidth)) + "px";
+  document.getElementById("bp-send").onclick = function () { closeBurstPop(); onSend(); };
+  document.getElementById("bp-send").focus();
+}
+// the popover markup comes after this script, so listen on the document
+document.addEventListener("click", function (e) { if (e.target.id === "bp-cancel") closeBurstPop(); });
+document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeBurstPop(); });
 cardify();
 startSteps();
 
@@ -1209,6 +1282,7 @@ function renderMessages() {
     body.appendChild(tr);
   });
   if (window.flowDecorate) window.flowDecorate();
+  markNewRows();
   if (!rows.length) { var e = el("tr"); cell(e, "No messages match.", "muted").colSpan = 9; body.appendChild(e); }
 }
 
@@ -1717,7 +1791,7 @@ function send(method, path, body) {
   }).then(function (r) {
     if (r.status === 401) { location.reload(); throw new Error("login expired"); }
     return r.json().catch(function () { return {}; }).then(function (j) {
-      if (!r.ok) throw new Error(j.error || (path + ": HTTP " + r.status));
+      if (!r.ok) { var err = new Error(j.error || (path + ": HTTP " + r.status)); err.data = j; throw err; }
       return j;
     });
   });
@@ -2294,7 +2368,7 @@ document.getElementById("dec-ns").addEventListener("change", function (ev) {
   decPage = 1;
   refreshDecisions();
 });
-document.getElementById("hdr-burst").addEventListener("click", openBurst);
+document.getElementById("hdr-burst").addEventListener("click", function () { quickBurst(document.getElementById("hdr-burst")); });
 document.getElementById("runs-test").addEventListener("click", function () {
   showTestRuns = !showTestRuns;
   renderRuns(lastRuns);
@@ -2316,6 +2390,11 @@ load();
 if (lastTab !== "settings") loadSettings();
 setInterval(load, 30000);
 </script>
+<div id="toast" class="hidden" role="status" aria-live="polite"></div>
+<div id="burst-pop" class="hidden" role="dialog" aria-label="Confirm live burst">
+  <div id="bp-text"></div>
+  <div class="bp-btns"><button type="button" class="btn btn-sm" id="bp-cancel">Cancel</button><button type="button" class="btn btn-sm btn-primary" id="bp-send">Send</button></div>
+</div>
 <div id="mp-back" class="hidden"></div>
 <aside id="msg-panel" class="hidden" role="dialog" aria-modal="true" aria-labelledby="mp-title">
   <div class="mp-head">
@@ -2360,7 +2439,7 @@ setInterval(load, 30000);
     <details id="story-msg-box"><summary>Message (patient name, birth date, address and phone masked)</summary><pre id="story-msg"></pre></details>
   </div>
 </aside>
-<script src="flow.js?v=8.20.44"></script>
+<script src="flow.js?v=8.20.45"></script>
 <script src="workbench.js?v=8.20.44"></script>
 <script src="builder.js?v=8.20.44"></script>
 <script src="wizard.js?v=8.20.44"></script>
