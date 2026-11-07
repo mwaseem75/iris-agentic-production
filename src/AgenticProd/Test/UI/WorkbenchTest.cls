@@ -29,6 +29,8 @@ Method TestProductionMap()
 	While tIter.%GetNext(, .tItem) {
 		Do $$$AssertTrue(tItem.%IsDefined("errors24h") && tItem.%IsDefined("in24h") && tItem.%IsDefined("suspended"), tItem.name_" has 24 h numbers")
 		Set:tItem.type="operation" tHasOp = 1
+		Set tSI = tItem.settings.%GetIterator()
+		While tSI.%GetNext(, .tS) { Do $$$AssertTrue(##class(AgenticProd.UI.Workbench).SafeSetting(tS.name), tItem.name_" shows only listed settings: "_tS.name) }
 		Set:tItem.checks tTriage = tTriage + 1
 	}
 	Do $$$AssertTrue(tHasOp, "an operation is typed as operation")
@@ -45,6 +47,14 @@ Method TestProductionMap()
 	Do $$$AssertTrue(tHost.components.%Get(0).sub [ "key:", "model circle says where the key comes from")
 	Do $$$AssertTrue(tProd.usage24h.%IsDefined("runs") && tProd.usage24h.%IsDefined("denied") && tProd.usage24h.%IsDefined("costUsd"), "24 h totals")
 	Do $$$AssertEquals(##class(AgenticProd.UI.Workbench).Production($NAMESPACE, "No.Such.Production"), "", "unknown production")
+}
+
+Method TestSafeSettingsOnly()
+{
+	Do $$$AssertTrue(##class(AgenticProd.UI.Workbench).SafeSetting("TargetConfigName") && ##class(AgenticProd.UI.Workbench).SafeSetting("TriageTarget") && ##class(AgenticProd.UI.Workbench).SafeSetting("ActionMode"))
+	For tName = "APIKey", "Password", "Credentials", "Token", "SSLConfig" {
+		Do $$$AssertEquals(##class(AgenticProd.UI.Workbench).SafeSetting(tName), 0, tName_" is never shown")
+	}
 }
 
 Method TestLibrary()

@@ -124,12 +124,14 @@ ClassMethod Production(pNs As %String, pName As %String) As %DynamicObject
 		Do tRow.%Set("checks", ''(tClass = "AgenticProd.Process.Triage"), "boolean")
 		Set tAiCount = tAiCount + tIsAI
 		Set tHealth = ..ItemHealth(tItem.Name, tSince)
+		Set tRow.settings = []
 		Set tRow.errors24h = tHealth.errors24h, tRow.suspended = tHealth.suspended, tRow.lastError = tHealth.lastError, tRow.in24h = tHealth.in24h, tRow.sent24h = tHealth.sent24h
 		Do tOut.items.%Push(tRow)
 		Do:tHost tOut.hosts.%Push(..Host(tItem, tUsage, tSince, tHome, pNs))
 		Set tNames(tItem.Name) = ""
 		For j = 1:1:tItem.Settings.Count() {
 			Set tSet = tItem.Settings.GetAt(j)
+			Do:..SafeSetting(tSet.Name) tRow.settings.%Push({"name":(tSet.Name), "value":($EXTRACT(tSet.Value, 1, 160))})
 			Set:(tSet.Name = "WatchItems") tRow.watches = tSet.Value
 			// TargetConfigName(s) plus the named targets of our hosts (TriageTarget, FHIRTarget, AgentTarget)
 			If (tSet.Name = "TargetConfigName") || (tSet.Name = "TargetConfigNames") || ($EXTRACT(tSet.Name, *-5, *) = "Target") {
@@ -154,6 +156,14 @@ ClassMethod Production(pNs As %String, pName As %String) As %DynamicObject
 	}
 	Set tOut.aiItems = tAiCount, tOut.totalItems = tProd.Items.Count()
 	Quit tOut
+}
+
+/// Item settings the page may show. A fixed list of routing and mode names, so a credential
+/// or key setting never reaches the browser.
+ClassMethod SafeSetting(pName As %String) As %Boolean [ Internal ]
+{
+	Quit:($EXTRACT(pName, *-5, *) = "Target") 1
+	Quit ($LISTFIND($LISTBUILD("TargetConfigName", "TargetConfigNames", "BusinessRuleName", "WatchItems", "ActionMode", "AgentClass", "Model", "ProviderConfig", "FilePath", "FileSpec", "ArchivePath", "PollInterval"), pName) > 0)
 }
 
 /// Adds the comma-separated targets of one item to the link set.
