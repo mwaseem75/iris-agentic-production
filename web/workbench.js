@@ -748,11 +748,11 @@
       var b = el("button", null, "wb-sc"); b.type = "button"; b.dataset.group = g.id;
       var on = sel.kind === "group" && sel.key === g.id;
       b.classList.toggle("sel", on); b.setAttribute("aria-pressed", on ? "true" : "false");
-      var top = div("wb-sc-t"); top.appendChild(icon(g.icon)); top.appendChild(el("span", g.label)); b.appendChild(top);
-      b.appendChild(div("wb-sc-n", String(n)));
-      if (sub) b.appendChild(div("wb-sc-s", sub));
+      var top = div("wb-sc-t"); top.appendChild(icon(g.icon)); top.appendChild(el("span", g.label)); top.appendChild(div("wb-sc-n", String(n))); b.appendChild(top);
       var names = uniq(m.map(function (x) { return x.title; }));
-      var nm = div("wb-sc-names", names.length ? names.join(", ") : "none"); nm.title = names.join(", "); b.appendChild(nm);
+      // Tools shows its tool set count on the same line as the names
+      var line = (sub ? sub + ": " : "") + (names.length ? names.join(", ") : "none");
+      var nm = div("wb-sc-names", line); nm.title = line; b.appendChild(nm);
       b.addEventListener("click", function () { select("group", g.id); });
       cardsRow.appendChild(b);
     });
