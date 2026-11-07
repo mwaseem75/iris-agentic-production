@@ -2,11 +2,7 @@
 
 **A failed HL7 message does not have to wait for a person with the right skills. An AI Hub agent reads the error and proposes a fix. A plain IRIS business process decides what is allowed to happen. When the agent is unsure, a human decides.**
 
-Built for the InterSystems Programming Contest "AI Agents in Interoperability Workflows". It implements the Ideas Portal idea [DPI-I-627: AI assisted debug](https://ideas.intersystems.com/ideas/DPI-I-627), with parts of [DPI-I-863](https://ideas.intersystems.com/ideas/DPI-I-863) (errors to a Workflow task list) and [DPI-I-574](https://ideas.intersystems.com/ideas/DPI-I-574) (AI analysis of errors).
-
-<!-- TODO before submitting: add the links row below once they exist
-**[Online demo](URL)** · **[Video](URL)** · **[Article: the story](URL)** · **[Article: AI Hub tutorial](URL)** · **[Step-by-step tutorial](TUTORIAL.md)**
--->
+The agent only proposes. Triage checks the proposal and applies it, sends it to a person through Workflow, or rejects it. Approved mappings go into a lookup table, so the next identical error is fixed with no LLM call.
 
 <img width="1917" alt="Dashboard overview" src="https://github.com/user-attachments/assets/b5b51459-a90d-4112-a817-28a91037c32a" />
 
