@@ -344,6 +344,13 @@ td.go { white-space: nowrap; }
 #toast { position: fixed; right: 16px; bottom: 16px; z-index: 1100; max-width: min(420px, calc(100vw - 32px)); padding: 10px 14px; border-radius: 8px; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-left: 4px solid var(--good); box-shadow: 0 6px 20px rgba(0,0,0,.25); font-size: 14px; }
 #toast.bad { border-left-color: var(--bad); }
 #burst-pop { position: fixed; z-index: 1100; width: 280px; max-width: calc(100vw - 16px); padding: 12px; border-radius: 8px; background: var(--panel); color: var(--text); border: 1px solid var(--line); box-shadow: 0 6px 20px rgba(0,0,0,.25); font-size: 14px; }
+#burst-choice { position: fixed; z-index: 1100; width: 300px; max-width: calc(100vw - 16px); padding: 12px; border-radius: 8px; background: var(--panel); color: var(--text); border: 1px solid var(--line); box-shadow: 0 6px 20px rgba(0,0,0,.25); font-size: 14px; }
+#burst-choice .bc-n { display: block; margin-bottom: 8px; }
+#burst-choice .bc-n input { width: 64px; margin-left: 6px; }
+#burst-choice .bc-opt { display: block; width: 100%; text-align: left; margin-bottom: 8px; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--line); background: transparent; color: var(--text); cursor: pointer; }
+#burst-choice .bc-opt:hover { border-color: var(--accent); }
+#burst-choice .bc-opt b, #burst-choice .bc-opt span { display: block; }
+#burst-choice .bc-opt span { font-size: 12px; opacity: .75; }
 #burst-pop .bp-btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
 #decisions tr.row-new > td { background: var(--info-bg); }
 #decisions tr.row-new > td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
@@ -1096,7 +1103,7 @@ function startSteps() {
   var inbox = document.getElementById("inbox-link");
   var gs3 = document.getElementById("gs-3");
   new MutationObserver(function () { gs3.href = inbox.href; }).observe(inbox, { attributes: true });
-  document.getElementById("gs-4").addEventListener("click", function () { quickBurst(document.getElementById("gs-4")); });
+  document.getElementById("gs-4").addEventListener("click", function () { openBurstChoice(document.getElementById("gs-4")); });
   document.getElementById("help-close").addEventListener("click", closeHelp);
   document.getElementById("help-back").addEventListener("click", closeHelp);
   document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeHelp(); });
@@ -1148,6 +1155,27 @@ function quickBurst(anchor) {
     askLiveBurst(anchor, e.data.n, e.data.estimatedCostUsd, function () { go(true).catch(function (e2) { toast(e2.message, true); }); });
   });
 }
+// The burst button asks first: free replay or a live run. The choice feeds quickBurst through the panel's fields.
+var burstAnchor = null;
+function openBurstChoice(anchor) {
+  var pop = document.getElementById("burst-choice");
+  burstAnchor = anchor;
+  closeBurstPop();
+  document.getElementById("bc-n").value = document.getElementById("burst-n").value || 8;
+  var r = anchor.getBoundingClientRect();
+  pop.classList.remove("hidden");
+  pop.style.top = Math.round(r.bottom + 6) + "px";
+  pop.style.left = Math.max(8, Math.min(innerWidth - pop.offsetWidth - 8, r.right - pop.offsetWidth)) + "px";
+}
+function closeBurstChoice() { document.getElementById("burst-choice").classList.add("hidden"); }
+function chooseBurst(mode) {
+  var n = Math.max(1, Math.min(30, +document.getElementById("bc-n").value || 8));
+  if (mode === "live") n = Math.min(n, 10);
+  document.getElementById("burst-n").value = n;
+  document.getElementById("burst-mode").value = mode;
+  closeBurstChoice();
+  quickBurst(burstAnchor);
+}
 function closeBurstPop() { document.getElementById("burst-pop").classList.add("hidden"); }
 function askLiveBurst(anchor, n, cost, onSend) {
   var pop = document.getElementById("burst-pop");
@@ -1160,8 +1188,16 @@ function askLiveBurst(anchor, n, cost, onSend) {
   document.getElementById("bp-send").focus();
 }
 // the popover markup comes after this script, so listen on the document
-document.addEventListener("click", function (e) { if (e.target.id === "bp-cancel") closeBurstPop(); });
-document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeBurstPop(); });
+document.addEventListener("click", function (e) {
+  if (e.target.id === "bp-cancel") closeBurstPop();
+  var t = e.target.closest ? e.target : null;
+  if (!t) return;
+  if (t.closest("#bc-replay")) chooseBurst("replay");
+  else if (t.closest("#bc-live")) chooseBurst("live");
+  else if (t.closest("#bc-cancel")) closeBurstChoice();
+  else if (!t.closest("#burst-choice") && !t.closest("#hdr-burst") && !t.closest("#gs-4")) closeBurstChoice();
+});
+document.addEventListener("keydown", function (e) { if (e.key === "Escape") { closeBurstPop(); closeBurstChoice(); } });
 cardify();
 startSteps();
 
@@ -2368,7 +2404,7 @@ document.getElementById("dec-ns").addEventListener("change", function (ev) {
   decPage = 1;
   refreshDecisions();
 });
-document.getElementById("hdr-burst").addEventListener("click", function () { quickBurst(document.getElementById("hdr-burst")); });
+document.getElementById("hdr-burst").addEventListener("click", function () { openBurstChoice(document.getElementById("hdr-burst")); });
 document.getElementById("runs-test").addEventListener("click", function () {
   showTestRuns = !showTestRuns;
   renderRuns(lastRuns);
@@ -2394,6 +2430,13 @@ setInterval(load, 30000);
 <div id="burst-pop" class="hidden" role="dialog" aria-label="Confirm live burst">
   <div id="bp-text"></div>
   <div class="bp-btns"><button type="button" class="btn btn-sm" id="bp-cancel">Cancel</button><button type="button" class="btn btn-sm btn-primary" id="bp-send">Send</button></div>
+</div>
+<div id="burst-choice" class="hidden" role="dialog" aria-label="Send a burst">
+  <div class="fw-semibold mb-2">Send a burst</div>
+  <label class="bc-n">Cases <input type="number" id="bc-n" min="1" max="30" value="8"></label>
+  <button type="button" class="bc-opt" id="bc-replay"><b>Replay, $0</b><span>Plays back recorded agent answers. No API call.</span></button>
+  <button type="button" class="bc-opt" id="bc-live"><b>Live, costs money</b><span>Calls the model (max 10 cases). Shows the estimate and asks you to confirm.</span></button>
+  <div class="bp-btns"><button type="button" class="btn btn-sm" id="bc-cancel">Cancel</button></div>
 </div>
 <div id="mp-back" class="hidden"></div>
 <aside id="msg-panel" class="hidden" role="dialog" aria-modal="true" aria-labelledby="mp-title">

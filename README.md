@@ -171,6 +171,8 @@ do ##class(AgenticProd.Demo).SendCase("01", "MSG90001")
 do ##class(AgenticProd.Eval.Runner).Run("gpt-4o-mini", "replay demo", "all", "replay")
 ```
 
+**Send a burst** in the dashboard header (admin login) sends random evaluation cases as new messages. It is replay by default, so it costs nothing. To run the agent for real, click the adjust icon next to it, set **Mode** to **Live**, choose a small number of cases and confirm. Live needs `OPENAI_API_KEY` in `.env`, and the dashboard's Cost tab then shows the tokens and cost of each run.
+
 Click a flow button in **Messages** to open its story: the steps in plain words, a timeline, and the masked message. Each decision also links to Visual Trace in the Management Portal.
 
 ![Demo](images/flow.gif)
