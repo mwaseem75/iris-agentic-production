@@ -462,7 +462,7 @@ Some details that matter in a real production:
 
 **Safe to add and remove.** Plan refuses any item name that already exists, and `Apply` never changes or restarts an existing item. Every added item is written to `Data.PluginItem` with an owner, so `Remove` takes out exactly those. If the agent's package is not visible in the target namespace, the plan includes a package mapping and applies it. The Workflow role and its tasks stay after a remove, as the record of what humans decided.
 
-**AI Hub in Production.** A read-only picture of a production: services, processes and operations in lanes, with links built from item targets, routing-rule targets and the real message pairs. Items that host an agent carry an AI HUB badge.
+**AI Hub in Production.** Six cards count the agent, model, tools, skills, knowledge base and policies the production uses; click one to see its members and highlight them on the map. **Components and map** has a table of every item, a detail panel for whatever you select (item, AI Hub part or card) and the production map with links built from item targets, routing-rule targets and the real message pairs. Items that host an agent carry an AI HUB badge. **Full screen** opens the map with the details in a side panel. **Added by plug-in** lists what Add AI Hub agent put in the production, with its mode, and Remove.
 
 ![AI Hub in Production](images/production-map.png)
 

@@ -167,7 +167,7 @@
 
   function loadLib() {
     libNote.textContent = "Loading…";
-    get("api/workbench/library").then(function (d) { lib = d; libNote.textContent = ""; renderLib(); })
+    get("api/workbench/library").then(function (d) { lib = d; libNote.textContent = ""; renderLib(); if (mapData) renderAll(); })
       .catch(function (e) { libNote.textContent = "Could not load the AI Hub Library: " + e.message; });
   }
 
@@ -503,21 +503,128 @@
     show(tab || "overview");
   }
 
-  var prodBar = div("wb-bar"), pick = el("select", null, "form-select wb-pick");
-  var runBadge = el("span", null, "badge"), statAi = el("span", null, "wb-stat"), stat24 = el("span", null, "wb-stat");
-  var prodNote = div("wb-note"), grid = div("wb-mapgrid"), cv = div("wb-cv"), side = div("wb-side");
-  prodBar.appendChild(el("span", "Production", "text-secondary")); prodBar.appendChild(pick); prodBar.appendChild(runBadge);
-  prodBar.appendChild(statAi); prodBar.appendChild(stat24);
-  prodBar.appendChild(div("wb-hint", "Read-only map · change components in the AI Hub Library"));
-  var wrap = div("wb-cvwrap"), zoomBar = div("wb-zoom");
+
+  // ---------- AI Hub in Production
+  var GROUPDEF = [
+    { id: "agent", label: "Agent", icon: "robot", one: "agent", many: "agents" },
+    { id: "model", label: "Model", icon: "cpu", one: "model", many: "models" },
+    { id: "toolset", label: "Tools", icon: "tool", one: "tool set", many: "tool sets" },
+    { id: "skill", label: "Skills", icon: "puzzle", one: "skill", many: "skills" },
+    { id: "knowledge", label: "Knowledge base", icon: "database-search", one: "knowledge base", many: "knowledge bases" },
+    { id: "policy", label: "Policies", icon: "lock", one: "policy", many: "policies" }
+  ];
+  var WAYNAME = { failure: "When a message fails", process: "From my own process", rule: "From a routing rule" };
+  var sel = { kind: "", key: "" }, curTab = "map", fsOn = false, fsPanelOpen = false;
+
+  var prodBar = div("wb-bar wb-pbar"), pick = el("select", null, "form-select wb-pick");
+  var runBadge = el("span", null, "badge"), stat24 = el("span", null, "wb-stat");
+  var prodNote = div("wb-note");
+  pick.setAttribute("aria-label", "Production");
+  prodBar.appendChild(el("span", "Production", "text-secondary")); prodBar.appendChild(pick); prodBar.appendChild(runBadge); prodBar.appendChild(stat24);
+  var addWrap = div("wb-newwrap ms-auto"), addMenu = div("wb-newmenu hidden");
+  var addBtn = el("button", null, "btn btn-primary btn-sm"); addBtn.type = "button"; addBtn.setAttribute("aria-haspopup", "true"); addBtn.setAttribute("aria-expanded", "false");
+  addBtn.appendChild(icon("plus", "me-1")); addBtn.appendChild(document.createTextNode("Add AI Hub agent"));
+  addWrap.appendChild(addBtn); addWrap.appendChild(addMenu); prodBar.appendChild(addWrap);
+  function closeAdd() { addMenu.classList.add("hidden"); addBtn.setAttribute("aria-expanded", "false"); }
+  document.addEventListener("click", closeAdd);
+
+  function addable() { return ((lib && lib.agents) || []).filter(function (a) { return window.wbAddProd && window.wbAddProd.canAdd(a["class"]); }); }
+  // Same name the Library card passes to the add flow
+  function idOf(name) { return String(name || "").split(/[^A-Za-z0-9]+/).filter(Boolean).map(function (w) { return w.charAt(0).toUpperCase() + w.slice(1); }).join(""); }
+  function startAdd(a) {
+    window.wbAddProd.open({ agentClass: a["class"], name: idOf(short(a["class"])), done: function () { if (mapData) openProduction(mapData.namespace, mapData.name); } });
+  }
+  function fillAddMenu() {
+    var list = addable();
+    if (list.length === 1) { startAdd(list[0]); return; }
+    clear(addMenu);
+    if (!list.length) {
+      var c = el("button", null, "wb-newitem"); c.type = "button"; c.appendChild(icon("robot"));
+      var t0 = div(); t0.appendChild(el("b", "Create an agent first")); t0.appendChild(div("wb-d", "None of your agents can be added yet")); c.appendChild(t0);
+      c.addEventListener("click", function () { closeAdd(); if (window.showTab) window.showTab("wbnew"); });
+      addMenu.appendChild(c);
+    }
+    list.forEach(function (a) {
+      var b = el("button", null, "wb-newitem"); b.type = "button"; b.appendChild(icon("robot"));
+      var t = div(); t.appendChild(el("b", a.name || short(a["class"]))); t.appendChild(div("wb-d", firstLine(a.description))); b.appendChild(t);
+      b.addEventListener("click", function () { closeAdd(); startAdd(a); });
+      addMenu.appendChild(b);
+    });
+    addMenu.classList.remove("hidden"); addBtn.setAttribute("aria-expanded", "true");
+  }
+  addBtn.addEventListener("click", function (e) {
+    e.stopPropagation();
+    if (!window.wbAddProd) return;
+    if (lib) fillAddMenu(); else get("api/workbench/library").then(function (d) { lib = d; fillAddMenu(); });
+  });
+
+  var cardsRow = div("wb-sc-row"), emptyBox = div("wb-p-empty hidden");
+  var tabBar = div("wb-ptabs"), tabBtns = {}, paneMap = div("wb-ptab-pane"), panePlug = div("wb-ptab-pane hidden");
+  tabBar.setAttribute("role", "tablist");
+  [["map", "Components and map"], ["plug", "Added by plug-in"]].forEach(function (t) {
+    var b = el("button", t[1], "wb-ptab"); b.type = "button"; b.id = "wb-ptab-" + t[0];
+    b.setAttribute("role", "tab"); b.setAttribute("aria-controls", "wb-ppane-" + t[0]);
+    b.addEventListener("click", function () { setTab(t[0]); });
+    b.addEventListener("keydown", function (e) {
+      if (e.key !== "ArrowRight" && e.key !== "ArrowLeft" && e.key !== "Home" && e.key !== "End") return;
+      e.preventDefault(); var next = e.key === "ArrowLeft" || e.key === "Home" ? "map" : "plug"; setTab(next); tabBtns[next].focus();
+    });
+    tabBtns[t[0]] = b; tabBar.appendChild(b);
+  });
+  paneMap.id = "wb-ppane-map"; panePlug.id = "wb-ppane-plug";
+  paneMap.setAttribute("role", "tabpanel"); panePlug.setAttribute("role", "tabpanel");
+  paneMap.setAttribute("aria-labelledby", "wb-ptab-map"); panePlug.setAttribute("aria-labelledby", "wb-ptab-plug");
+  function setTab(t) {
+    curTab = t;
+    Object.keys(tabBtns).forEach(function (k) {
+      var on = k === t; tabBtns[k].classList.toggle("active", on); tabBtns[k].setAttribute("aria-selected", on ? "true" : "false"); tabBtns[k].tabIndex = on ? 0 : -1;
+    });
+    paneMap.classList.toggle("hidden", t !== "map"); panePlug.classList.toggle("hidden", t !== "plug");
+    if (t === "map") setTimeout(fit, 0);
+  }
+
+  // Two columns: table and detail on the left, the map card on the right
+  var pcols = div("wb-pcols"), left = div("wb-pleft"), tblCard = div("card"), detailCard = div("card wb-detail"), detailBody = div("card-body");
+  var tblHead = div("wb-pcard-h"), tblWrap = div("wb-ptblwrap");
+  tblCard.appendChild(tblHead); tblCard.appendChild(tblWrap);
+  detailCard.appendChild(detailBody);
+  left.appendChild(tblCard); left.appendChild(detailCard);
+
+  var mapCard = div("card wb-mapcard"), mapHead = div("wb-mapcard-h"), cv = div("wb-cv"), wrap = div("wb-cvwrap"), zoomBar = div("wb-zoom");
+  var fsPanel = div("wb-fspanel"), fsBody = div("wb-fsbody");
+  var mh = div("wb-mh-t"); mh.appendChild(el("h3", "Production map: components and AI Hub parts", "wb-l-h3")); mh.appendChild(div("wb-l-sub", "Every item in this production. AI Hub items are highlighted in purple, with the parts they use shown below them."));
+  var legend = div("wb-legend2");
+  [["wb-sw hub", "AI Hub item"], ["wb-sw plain", "Production item"], ["wb-sw dash", "AI Hub part"]].forEach(function (l) { var s = el("span", null, "wb-lg"); s.appendChild(el("i", null, l[0])); s.appendChild(document.createTextNode(l[1])); legend.appendChild(s); });
+  var fsBtn = el("button", null, "btn btn-sm wb-fsbtn"); fsBtn.type = "button"; fsBtn.title = "Full screen"; fsBtn.setAttribute("aria-label", "Full screen");
+  fsBtn.appendChild(icon("arrows-maximize", "me-1")); fsBtn.appendChild(document.createTextNode("Full screen"));
+  var fsClose = el("button", null, "btn btn-sm btn-icon wb-fsclose"); fsClose.type = "button"; fsClose.title = "Close full screen"; fsClose.setAttribute("aria-label", "Close full screen"); fsClose.appendChild(icon("x"));
+  var mhr = div("wb-mh-r"); mhr.appendChild(legend); mhr.appendChild(fsBtn); mhr.appendChild(fsClose);
+  mapHead.appendChild(mh); mapHead.appendChild(mhr);
   [["zoom-in", function () { zoom(1.2); }, "Zoom in"], ["zoom-out", function () { zoom(1 / 1.2); }, "Zoom out"], ["arrows-maximize", function () { fit(); }, "Fit to screen"]].forEach(function (z) {
     var b = el("button", null, "btn btn-sm btn-icon"); b.type = "button"; b.title = z[2]; b.setAttribute("aria-label", z[2]); b.appendChild(icon(z[0]));
     b.addEventListener("click", z[1]); zoomBar.appendChild(b);
   });
   wrap.appendChild(cv); wrap.appendChild(zoomBar);
-  wrap.appendChild(div("wb-legend", "Solid line: message path · dashed: AI Hub part used by the agent · green: back to the router"));
-  grid.appendChild(wrap); grid.appendChild(side);
-  panels.prod.appendChild(prodBar); panels.prod.appendChild(prodNote); panels.prod.appendChild(grid);
+  var fsHead = div("wb-fsh"), fsX = el("button", null, "btn btn-sm btn-icon btn-ghost-secondary"); fsX.type = "button"; fsX.setAttribute("aria-label", "Hide details"); fsX.appendChild(icon("x"));
+  fsX.addEventListener("click", function () { fsPanelOpen = false; syncFsPanel(); });
+  fsHead.appendChild(el("b", "Details")); fsHead.appendChild(fsX);
+  fsPanel.appendChild(fsHead); fsPanel.appendChild(fsBody);
+  mapCard.appendChild(mapHead); mapCard.appendChild(wrap); mapCard.appendChild(fsPanel);
+  pcols.appendChild(left); pcols.appendChild(mapCard);
+  paneMap.appendChild(pcols);
+  panels.prod.appendChild(prodBar); panels.prod.appendChild(prodNote); panels.prod.appendChild(cardsRow); panels.prod.appendChild(emptyBox);
+  panels.prod.appendChild(tabBar); panels.prod.appendChild(paneMap); panels.prod.appendChild(panePlug);
+  (function () {
+    emptyBox.appendChild(icon("robot", "wb-p-empty-ic"));
+    var t = div(); t.appendChild(div("fw-semibold", "No AI Hub agent in this production yet"));
+    t.appendChild(div("wb-d", "The items below still show how messages move. Add an agent to see the model, tools and policies it uses."));
+    emptyBox.appendChild(t);
+    var b = el("button", null, "btn btn-primary btn-sm ms-auto"); b.type = "button"; b.appendChild(icon("plus", "me-1")); b.appendChild(document.createTextNode("Add AI Hub agent"));
+    b.addEventListener("click", function (e) { e.stopPropagation(); addBtn.click(); });
+    emptyBox.appendChild(b);
+  })();
+  setTab("map");
+
   pick.addEventListener("change", function () {
     var v = pick.value.split("|"); openProduction(v[0], v.slice(1).join("|"));
   });
@@ -525,6 +632,33 @@
     if (panels.prod.classList.contains("hidden") || mapRes) return;
     mapRes = setTimeout(function () { mapRes = null; fit(); }, 150);
   });
+
+  // Full screen: the browser's Fullscreen API when it allows it, else the fixed overlay alone
+  function enterFs() {
+    if (fsOn) return;
+    fsOn = true; mapCard.classList.add("wb-fs"); document.body.classList.add("wb-fs-on");
+    // On a phone the panel would hide the whole map; it opens when a node is picked
+    fsPanelOpen = !!sel.key && window.innerWidth >= 768; syncFsPanel();
+    try { if (mapCard.requestFullscreen) { var p = mapCard.requestFullscreen(); if (p && p.catch) p.catch(function () {}); } } catch (e) {}
+    setTimeout(fit, 60);
+  }
+  function exitFs() {
+    if (!fsOn) return;
+    fsOn = false; mapCard.classList.remove("wb-fs"); document.body.classList.remove("wb-fs-on"); syncFsPanel();
+    try { if (document.fullscreenElement && document.exitFullscreen) { var p = document.exitFullscreen(); if (p && p.catch) p.catch(function () {}); } } catch (e) {}
+    setTimeout(fit, 60);
+  }
+  fsBtn.addEventListener("click", enterFs);
+  fsClose.addEventListener("click", exitFs);
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && fsOn) exitFs(); });
+  // The browser's own Esc leaves real full screen without a keydown for the page
+  document.addEventListener("fullscreenchange", function () { if (fsOn && !document.fullscreenElement) exitFs(); else if (fsOn) setTimeout(fit, 60); });
+  // The open panel takes its own strip, so no node sits under it
+  function syncFsPanel() {
+    var open = fsOn && fsPanelOpen, was = mapCard.classList.contains("pan");
+    fsPanel.classList.toggle("open", open); mapCard.classList.toggle("pan", open);
+    if (open !== was) setTimeout(fit, 230);
+  }
 
   function loadProductions() {
     prodNote.textContent = "Loading…";
@@ -545,31 +679,259 @@
   }
 
   function openProduction(ns, name) {
-    prodNote.textContent = "Loading…"; clear(cv); mapSel = "";
+    prodNote.textContent = "Loading…"; clear(cv);
     get("api/workbench/production?ns=" + encodeURIComponent(ns) + "&name=" + encodeURIComponent(name)).then(function (d) {
       mapData = d; prodNote.textContent = "";
       var crumb = document.getElementById("crumb"); if (crumb) crumb.textContent = d.namespace + " · " + d.name;
       runBadge.textContent = d.running ? "running" : "stopped";
       runBadge.className = "badge " + (d.running ? "bg-green-lt" : "bg-secondary-lt");
-      clear(statAi);
-      statAi.appendChild(el("b", d.aiItems)); statAi.appendChild(document.createTextNode(" of " + d.totalItems + " items use AI Hub"));
       var u = d.usage24h; clear(stat24);
       stat24.appendChild(document.createTextNode("Last 24 h: "));
       [[u.runs, " agent runs"], [u.toolCalls, " tool calls"], [u.denied, " denied"]].forEach(function (p) {
         stat24.appendChild(el("b", num(p[0]))); stat24.appendChild(document.createTextNode(p[1] + " · "));
       });
       stat24.appendChild(el("b", usd(u.costUsd)));
-      drawMap(d);
+      var first = sortedItems().filter(function (i) { return i.ai; })[0];
+      sel = first ? { kind: "item", key: first.name } : { kind: "", key: "" };
+      drawMap(d); renderAll();
     }).catch(function (e) { prodNote.textContent = "Could not load the production: " + e.message; });
+  }
+
+  // ---- what the production is made of
+  function sortedItems() {
+    var l = (mapData && mapData.items) || [];
+    return l.filter(function (i) { return i.ai; }).concat(l.filter(function (i) { return !i.ai; }));
+  }
+  function itemByName(n) { var l = (mapData && mapData.items) || []; for (var i = 0; i < l.length; i++) if (l[i].name === n) return l[i]; return null; }
+  function hostOfItem(n) { var l = (mapData && mapData.hosts) || []; for (var i = 0; i < l.length; i++) if (l[i].item === n) return l[i]; return null; }
+  function allParts() {
+    var out = [];
+    ((mapData && mapData.hosts) || []).forEach(function (h) { h.components.forEach(function (c) { out.push({ host: h, c: c, key: "part:" + h.item + "|" + c.id }); }); });
+    return out;
+  }
+  function partByKey(k) { var l = allParts(); for (var i = 0; i < l.length; i++) if (l[i].key === k) return l[i]; return null; }
+  function uniq(list) { var s = {}, o = []; list.forEach(function (x) { if (x && !s[x]) { s[x] = 1; o.push(x); } }); return o; }
+  // Members of one summary card: [{key, title, host|part}]
+  function membersOf(id) {
+    var hosts = (mapData && mapData.hosts) || [];
+    if (id === "agent") return hosts.map(function (h) { return { key: "item:" + h.item, title: short(h.agentClass), host: h }; });
+    return allParts().filter(function (p) { return p.c.kind === id; }).map(function (p) { return { key: p.key, title: p.c.title, part: p }; });
+  }
+  function selectedKeys() {
+    if (sel.kind === "group") return membersOf(sel.key).map(function (m) { return m.key; });
+    if (!sel.key) return [];
+    // Part keys already carry their "part:" prefix
+    return [sel.kind === "item" ? "item:" + sel.key : sel.key];
+  }
+
+  function select(kind, key) {
+    // A second click on the same card clears the group
+    if (kind === "group" && sel.kind === "group" && sel.key === key) sel = { kind: "", key: "" };
+    else sel = { kind: kind, key: key };
+    if (fsOn) fsPanelOpen = !!sel.key;
+    renderAll();
+  }
+
+  function renderAll() {
+    renderCards(); renderTable(); renderDetail(detailBody); renderDetail(fsBody); syncFsPanel(); markMap(); renderPlug();
+    emptyBox.classList.toggle("hidden", !!mapData && mapData.hosts.length > 0);
+  }
+
+  function renderCards() {
+    clear(cardsRow);
+    GROUPDEF.forEach(function (g) {
+      var m = membersOf(g.id), n = m.length, sub = "";
+      if (g.id === "toolset") {
+        n = m.reduce(function (a, x) { return a + ((x.part.c.tools || []).length); }, 0);
+        sub = plural(m.length, "tool set");
+      }
+      var b = el("button", null, "wb-sc"); b.type = "button"; b.dataset.group = g.id;
+      var on = sel.kind === "group" && sel.key === g.id;
+      b.classList.toggle("sel", on); b.setAttribute("aria-pressed", on ? "true" : "false");
+      var top = div("wb-sc-t"); top.appendChild(icon(g.icon)); top.appendChild(el("span", g.label)); b.appendChild(top);
+      b.appendChild(div("wb-sc-n", String(n)));
+      if (sub) b.appendChild(div("wb-sc-s", sub));
+      var names = uniq(m.map(function (x) { return x.title; }));
+      var nm = div("wb-sc-names", names.length ? names.join(", ") : "none"); nm.title = names.join(", "); b.appendChild(nm);
+      b.addEventListener("click", function () { select("group", g.id); });
+      cardsRow.appendChild(b);
+    });
+  }
+
+  function renderTable() {
+    clear(tblHead); clear(tblWrap);
+    var items = sortedItems();
+    tblHead.appendChild(el("b", "Production items")); tblHead.appendChild(el("span", String(items.length), "wb-tabn"));
+    var t = el("table", null, "table table-sm wb-ptbl"), hd = el("thead"), hr = el("tr");
+    ["Name", "Type", "AI Hub"].forEach(function (h) { hr.appendChild(el("th", h)); });
+    hd.appendChild(hr); t.appendChild(hd);
+    var tb = el("tbody"), keys = selectedKeys();
+    items.forEach(function (i) {
+      var r = el("tr", null, "wb-prow"); r.tabIndex = 0; r.dataset.name = i.name;
+      var on = keys.indexOf("item:" + i.name) >= 0; r.classList.toggle("sel", on); r.setAttribute("aria-selected", on ? "true" : "false");
+      var c1 = el("td"); c1.appendChild(icon(i.ai ? "robot" : (TYPE_ICON[i.type] || "box"), "me-2 wb-pti")); c1.appendChild(document.createTextNode(i.name)); c1.title = i.name; r.appendChild(c1);
+      r.appendChild(el("td", i.type));
+      var c3 = el("td"); if (i.ai) c3.appendChild(el("span", "AI HUB", "wb-tagpill hub wb-inline")); else if (i.added) c3.appendChild(el("span", "added by " + i.added, "wb-tagpill added wb-inline")); r.appendChild(c3);
+      r.addEventListener("click", function () { select("item", i.name); });
+      r.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select("item", i.name); } });
+      tb.appendChild(r);
+    });
+    t.appendChild(tb); tblWrap.appendChild(t);
+  }
+
+  // ---- detail panel
+  function firstLine(t) {
+    var s = tidy(String(t || "").replace(/\s+/g, " ").trim()), m = /^(.{20,150}?[.!?])(\s|$)/.exec(s);
+    return m ? m[1] : (s.length > 150 ? s.slice(0, 147) + "..." : s);
+  }
+  function toolDesc(toolsetClass, tool) {
+    var ts = byClass("toolsets", toolsetClass); if (!ts) return "";
+    var i = (ts.tools || []).indexOf(tool); return i >= 0 ? firstLine((ts.toolDescriptions || [])[i]) : "";
+  }
+  function libBtn(c) {
+    var b = el("button", null, "btn btn-sm"); b.type = "button"; b.appendChild(icon("books", "me-1")); b.appendChild(document.createTextNode("Open in AI Hub Library"));
+    b.addEventListener("click", function () { exitFs(); openInLibrary(c); }); return b;
+  }
+  function head(ic, color, title, subtitle) {
+    var hd = div("wb-sh"), av = div("wb-ic"); if (color) av.style.color = color; av.appendChild(icon(ic));
+    var t = div(); t.appendChild(div("fw-bold", title)); t.appendChild(div("wb-c", subtitle)); hd.appendChild(av); hd.appendChild(t); return hd;
+  }
+  // A clickable row that selects another node
+  function jump(kind, key, label, sub) {
+    var b = el("button", null, "wb-l-li wb-l-partbtn"); b.type = "button";
+    b.appendChild(el("span", label)); if (sub) b.appendChild(el("small", sub));
+    b.addEventListener("click", function () { select(kind, key); }); return b;
+  }
+  function toolRows(box, setClass, tools) {
+    tools.forEach(function (t) {
+      var row = div("wb-tl"); row.appendChild(el("code", t, "wb-l-code")); var d = toolDesc(setClass, t); if (d) row.appendChild(div("wb-d", d)); box.appendChild(row);
+    });
+  }
+
+  function hostDetail(h, compact) {
+    var box = div("wb-dbox");
+    box.appendChild(head("robot", "#a78bfa", short(h.item), "AI Hub agent · " + h.agentClass));
+    var byKind = {}; h.components.forEach(function (c) { (byKind[c.kind] = byKind[c.kind] || []).push(c); });
+    var pk = function (c) { return "part:" + h.item + "|" + c.id; };
+    var sect = function (t) { box.appendChild(el("h4", t, "wb-l-h4")); };
+    (byKind.model || []).forEach(function (c) { sect("Model"); box.appendChild(jump("part", pk(c), c.title, firstLine(c.detail))); });
+    if ((byKind.toolset || []).length) {
+      sect("Tool sets");
+      byKind.toolset.forEach(function (c) {
+        box.appendChild(jump("part", pk(c), c.title, plural((c.tools || []).length, "tool") + " · " + firstLine(c.detail)));
+        if (!compact) toolRows(box, c["class"], c.tools || []);
+      });
+    }
+    [["skill", "Skills"], ["knowledge", "Knowledge base"], ["policy", "Policies"]].forEach(function (k) {
+      if (!(byKind[k[0]] || []).length) return;
+      sect(k[1]); byKind[k[0]].forEach(function (c) { box.appendChild(jump("part", pk(c), c.title, firstLine(c.detail))); });
+    });
+    var row = div("wb-l-dacts"); row.appendChild(libBtn({ "class": h.agentClass })); box.appendChild(row);
+    return box;
+  }
+
+  function partDetail(p, compact) {
+    var c = p.c, k = KIND[c.kind], box = div("wb-dbox");
+    box.appendChild(head(k[1], k[2], c.title, "AI Hub " + k[0]));
+    box.appendChild(div("wb-d", firstLine(c.detail) || "No description."));
+    box.appendChild(kv("Used by", (c.usedBy || []).join(", ") || short(p.host.agentClass)));
+    box.appendChild(kv("Class", el("span", c["class"], "wb-mono")));
+    if (!compact) {
+      if (c.kind === "toolset") toolRows(box, c["class"], c.tools || []);
+      else if ((c.tools || []).length) { box.appendChild(el("h4", c.kind === "skill" ? "Adds tools" : "Tools", "wb-l-h4")); box.appendChild(chips(c.tools)); }
+      box.appendChild(kv(c.kind === "model" ? "Agent runs, last 24 h" : "Tool calls, last 24 h", String(c.calls24h || 0)));
+    }
+    var row = div("wb-l-dacts"); row.appendChild(libBtn(c)); box.appendChild(row);
+    return box;
+  }
+
+  function plainDetail(it) {
+    var box = div("wb-dbox");
+    box.appendChild(head(TYPE_ICON[it.type] || "box", "", it.name, it.type + " · " + short(it["class"])));
+    box.appendChild(kv("Class", el("span", it["class"], "wb-mono")));
+    box.appendChild(kv("Status", it.enabled ? "Enabled" : "Disabled"));
+    var svc = it.type === "service";
+    [[svc ? "Sent, last 24 h" : "In, last 24 h", svc ? it.sent24h : it.in24h], ["Errors, last 24 h", it.errors24h], ["Suspended", it.suspended]].forEach(function (p) { box.appendChild(kv(p[0], num(p[1]))); });
+    if ((it.settings || []).length) {
+      box.appendChild(el("h4", "Settings", "wb-l-h4"));
+      it.settings.forEach(function (s) { box.appendChild(kv(s.name, el("span", s.value || "(empty)", "wb-mono"))); });
+    }
+    var cn = (mapData && mapData.connections) || [];
+    var feeds = uniq(cn.filter(function (c) { return c.from === it.name; }).map(function (c) { return c.to; }));
+    var fed = uniq(cn.filter(function (c) { return c.to === it.name; }).map(function (c) { return c.from; }));
+    [["Fed by", fed, "Nothing sends to this item."], ["Feeds", feeds, "This item sends nowhere."]].forEach(function (g) {
+      box.appendChild(el("h4", g[0], "wb-l-h4"));
+      if (g[1].length) g[1].forEach(function (n) { box.appendChild(jump("item", n, n, (itemByName(n) || {}).type || "")); });
+      else box.appendChild(div("wb-note", g[2]));
+    });
+    return box;
+  }
+
+  function renderDetail(host) {
+    clear(host);
+    if (!mapData) return;
+    if (sel.kind === "group") {
+      var g = GROUPDEF.filter(function (x) { return x.id === sel.key; })[0], m = membersOf(sel.key);
+      host.appendChild(div("fw-bold mb-1", g.label + " · " + (m.length === 1 ? "1 " + g.one : m.length + " " + g.many)));
+      if (!m.length) { host.appendChild(div("wb-note", "None in this production.")); return; }
+      m.forEach(function (x) { var b = x.host ? hostDetail(x.host, true) : partDetail(x.part, true); b.classList.add("wb-dgroup"); host.appendChild(b); });
+      return;
+    }
+    if (sel.kind === "item") {
+      var it = itemByName(sel.key), h = hostOfItem(sel.key);
+      if (h) host.appendChild(hostDetail(h)); else if (it) host.appendChild(plainDetail(it));
+      return;
+    }
+    if (sel.kind === "part") { var p = partByKey(sel.key); if (p) host.appendChild(partDetail(p)); return; }
+    host.appendChild(div("wb-note", "Pick an item in the table, a node on the map or one of the cards above to see its details here."));
+  }
+
+  // ---- added by plug-in
+  function renderPlug() {
+    clear(panePlug);
+    var inst = (mapData && mapData.installs) || [], added = ((mapData && mapData.items) || []).filter(function (i) { return i.added && !i.ai; });
+    tabBtns.plug.textContent = "Added by plug-in";
+    var cnt = inst.length + added.length; if (cnt) tabBtns.plug.appendChild(el("span", String(cnt), "wb-tabn ms-1"));
+    if (!inst.length && !added.length) panePlug.appendChild(div("wb-note", "Nothing was added to this production by the plug-in or by Add AI Hub agent."));
+    var reload = function () { openProduction(mapData.namespace, mapData.name); };
+    inst.forEach(function (i) {
+      var c = div("card mt-3"), b = div("card-body wb-inst");
+      var top = div("wb-inst-h"); top.appendChild(el("span", "AI HUB", "wb-tagpill hub wb-inline")); top.appendChild(el("b", i.owner));
+      top.appendChild(el("span", i.namespace + " · " + short(i.production), "wb-c"));
+      var rm = el("button", null, "btn btn-sm btn-outline-danger ms-auto"); rm.type = "button"; rm.appendChild(icon("arrow-back-up", "me-1")); rm.appendChild(document.createTextNode("Remove"));
+      rm.addEventListener("click", function () { window.wbAddProd.removeInstall(i, rm, reload); });
+      top.appendChild(rm); b.appendChild(top);
+      b.appendChild(kv("Added", WAYNAME[i.way] || i.way || "unknown"));
+      b.appendChild(kv("Mode", i.mode ? el("span", i.mode, "wb-l-badge kind") : el("span", "set by your own process or rule", "wb-c")));
+      b.appendChild(kv("Items", i.items.join(", ")));
+      c.appendChild(b); panePlug.appendChild(c);
+    });
+    if (added.length) {
+      var c2 = div("card mt-3"), b2 = div("card-body"); b2.appendChild(div("fw-semibold mb-2", "Other items the plug-in added"));
+      added.forEach(function (i) { var r = div("wb-inst-h"); r.appendChild(el("b", i.name)); r.appendChild(el("span", i.type + " · added by " + i.added, "wb-c")); b2.appendChild(r); });
+      c2.appendChild(b2); panePlug.appendChild(c2);
+    }
   }
 
   var NW = 210, NH = 92, HW = 340, HH = 100, GAPX = 90, GAPY = 36, CW = 122;
   var stage = null, scale = 1, stageW = 0, stageH = 0, PAD = 48, FITPAD = 24, LEGENDH = 22, CANVASMIN = 520;
 
+  // Every node is a button for the mouse and the keyboard
+  function wire(n, kind, key) {
+    n.tabIndex = 0; n.setAttribute("role", "button");
+    n.addEventListener("click", function () { select(kind, key); });
+    n.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(kind, key); } });
+  }
+  function markMap() {
+    var keys = selectedKeys();
+    Array.prototype.forEach.call(cv.querySelectorAll("[data-key]"), function (n) { n.classList.toggle("sel", keys.indexOf(n.dataset.key) >= 0); });
+  }
+
   function nodeBox(it, host, small) {
     var n = div("wb-n-node" + (host ? " wb-host" : it.ai ? " wb-ainode" : it.checks ? " wb-chk" : " wb-plain") + (small ? " wb-small" : ""));
     n.dataset.name = it.name;
-    n.title = it.name + " · " + it["class"];
+    n.title = it.name + " · " + (host ? "AI Hub agent" : it.type);
+    n.dataset.key = "item:" + it.name; wire(n, "item", it.name);
     if (!small) n.appendChild(el("span", host || it.ai ? "AI HUB" : it.added ? "added by " + it.added : it.checks ? "checks around the agent" : "no AI Hub", "wb-tagpill" + (host || it.ai ? " hub" : it.added ? " added" : "")));
     var h = div("wb-nh"); h.appendChild(icon(host ? "robot" : (it.checks ? "shield-half" : TYPE_ICON[it.type] || "box")));
     var t = div("wb-nx"); t.appendChild(div("wb-nt", short(it.name)));
@@ -632,7 +994,7 @@
   }
 
   function drawMap(d) {
-    clear(cv); showSide(null);
+    clear(cv);
     var pl = plan(d), pos = {}, hostOf = pl.hostOf, role = pl.role;
     stage = div("wb-stage"); cv.appendChild(stage);
     var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"); svg.setAttribute("class", "wb-svg");
@@ -727,12 +1089,11 @@
       stage.appendChild(el("span", "AI Hub parts of " + short(cg.h.item), "wb-strip-title")).style.top = (cg.y - 30) + "px";
       cg.h.components.forEach(function (c, idx) {
         var k = KIND[c.kind], cx = cg.sx + idx * cg.cw, ty = cg.y;
-        var comp = div("wb-comp"); comp.dataset.id = c.id; comp.title = c.title + " · " + c["class"];
+        var comp = div("wb-comp"); comp.dataset.key = "part:" + cg.h.item + "|" + c.id; comp.title = c.title + " · AI Hub " + k[0]; wire(comp, "part", comp.dataset.key);
         comp.style.left = cx + "px"; comp.style.top = ty + "px"; comp.style.width = (cg.cw - 6) + "px";
         var circle = div("wb-circle"); circle.style.color = k[2]; circle.appendChild(icon(k[1])); comp.appendChild(circle);
         var lab = div("wb-cl"); lab.appendChild(el("span", k[0], "wb-kind")); lab.appendChild(document.createElement("br")); lab.appendChild(document.createTextNode(c.title));
         comp.appendChild(lab); comp.appendChild(div("wb-cs", c.sub));
-        comp.addEventListener("click", function () { mapSel = c.id; Array.prototype.forEach.call(cv.querySelectorAll(".wb-comp"), function (e) { e.classList.toggle("sel", e === comp); }); showSide(c); });
         stage.appendChild(comp);
         var mid = cx + (cg.cw - 6) / 2, ax = Math.min(Math.max(mid, cg.hp.x + 30), cg.hp.x + cg.hp.w - 30);
         svg.appendChild(vpath(ax, cg.hp.y + cg.hp.h, mid, ty, "#7b8291", true));
@@ -748,6 +1109,8 @@
 
   // Canvas height: what is left of the window below the controls, never under CANVASMIN
   function sizeCanvas() {
+    mapCard.style.setProperty("--hh", mapHead.offsetHeight + "px");
+    if (fsOn) { cv.style.height = Math.max(300, mapCard.clientHeight - mapHead.offsetHeight) + "px"; return; }
     var top = wrap.getBoundingClientRect().top;
     cv.style.height = Math.max(CANVASMIN, Math.floor(window.innerHeight - top - 20)) + "px";
   }
@@ -763,7 +1126,7 @@
   // Whole graph in view with a little padding, so nothing is cut at the right or bottom. On a narrow
   // screen the floor stops labels shrinking to nothing; the canvas scrolls instead.
   function fit() {
-    if (!stage) return;
+    if (!stage || panels.prod.classList.contains("hidden") || paneMap.classList.contains("hidden")) return;
     sizeCanvas();
     var floor = window.innerWidth < 768 ? 0.45 : 0.3;
     var w = (cv.clientWidth - 2 * FITPAD) / stageW, h = (cv.clientHeight - PAD - FITPAD - LEGENDH) / stageH;
@@ -773,34 +1136,6 @@
   }
 
   function zoom(f) { scale = Math.max(0.3, Math.min(1.6, scale * f)); applyScale(); }
-
-  function showSide(c) {
-    clear(side);
-    if (!c) {
-      var how = div("card"); var b = div("card-body");
-      b.appendChild(div("fw-semibold mb-2", "How to read this map"));
-      b.appendChild(div("wb-d", "Grey items move messages and do not use AI Hub. The purple card hosts the AI Hub agent; the circles under it are the AI Hub parts it uses. Click a circle to see what it is. Triage is plain IRIS: it checks every agent answer before anything changes."));
-      how.appendChild(b); side.appendChild(how);
-      if (window.wbAddProd && mapData && mapData.installs && mapData.installs.length) side.appendChild(window.wbAddProd.installCards(mapData.installs, function () { openProduction(mapData.namespace, mapData.name); }));
-      return;
-    }
-    var k = KIND[c.kind];
-    var cardEl = div("card"), b2 = div("card-body");
-    var hd = div("wb-sh");
-    var av = div("wb-ic"); av.style.color = k[2]; av.appendChild(icon(k[1]));
-    var t = div(); t.appendChild(div("fw-bold", c.title)); t.appendChild(div("wb-c", "AI Hub " + k[0]));
-    hd.appendChild(av); hd.appendChild(t); b2.appendChild(hd);
-    b2.appendChild(kv("Class", el("span", c["class"], "wb-mono")));
-    b2.appendChild(kv(c.kind === "skill" ? "When the agent loads it" : "What it is", c.detail || ""));
-    if (c.tools && c.tools.length) { b2.appendChild(div("wb-d mt-2", c.kind === "skill" ? "Adds tools" : "Tools")); b2.appendChild(chips(c.tools)); }
-    b2.appendChild(kv("Used by", (c.usedBy || []).join(", ")));
-    b2.appendChild(kv(c.kind === "model" ? "Agent runs, last 24 h" : "Tool calls, last 24 h", String(c.calls24h || 0)));
-    var row = div("d-flex gap-2 mt-3");
-    var lb = el("button", null, "btn flex-fill"); lb.type = "button"; lb.appendChild(icon("books", "me-1")); lb.appendChild(document.createTextNode("Open in AI Hub Library"));
-    lb.addEventListener("click", function () { openInLibrary(c); });
-    row.appendChild(lb); b2.appendChild(row);
-    cardEl.appendChild(b2); side.appendChild(cardEl);
-  }
 
   function openInLibrary(c) {
     resetLibFilters();
@@ -825,7 +1160,7 @@
     if (view === "prod") { if (!mapData) loadProductions(); else fit(); }
   };
   // Read-only view for checks from the console
-  window.workbenchState = function () { return { library: lib && Object.keys(lib).map(function (k) { return k + ":" + lib[k].length; }), production: mapData && mapData.name, selected: mapSel, scale: scale }; };
+  window.workbenchState = function () { return { library: lib && Object.keys(lib).map(function (k) { return k + ":" + lib[k].length; }), production: mapData && mapData.name, selected: sel.kind + ":" + sel.key, tab: curTab, fullscreen: fsOn, scale: scale }; };
   var active = document.querySelector("#nav .nav-link.active");
   if (active) window.workbenchShow(active.dataset.tab);
 })();
