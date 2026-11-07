@@ -332,13 +332,14 @@ There is a light and a dark theme on every page. The reviewer login sees everyth
 
 This page answers one question. A banner at the top says whether the agent is safe to run in propose mode. It turns green only when the selected evaluation run had no unsafe outcome after Triage and no unsafe action was applied to a live message; otherwise it turns amber or red and shows the count. Under it are five numbers for that run: safe and correct after Triage, model alone, code mapping accuracy, unsafe actions applied and cost per message. A chart compares the model alone with the system after Triage across the 60 cases, and a list shows what the checks around the model did on live traffic: ungrounded claims caught, injection attempts flagged, proposals changed by Triage and mappings learned. The **Run** filter picks the run (the headline run is the default), and the table of eval runs stays below.
 
-<!-- IMAGE: add the Trust & evaluation screenshot here, for example images/trust.png -->
+<img width="1817" alt="image" src="https://github.com/user-attachments/assets/1ba748e5-59e8-4d68-be65-d486a4391bd6" />
+
 
 ### Cost: what does it cost, and what does it save?
 
 Three numbers sit at the top: the cost per message (from live traffic when there is any, otherwise from the measured evaluation run), what an engineer's time would cost for the same 1,000 failed messages, and the difference. The engineer figure rests on two assumptions, minutes per failure and an hourly rate (15 minutes at $40/h by default), so it is marked as an estimate. One chart puts both costs on the same scale and another shows spend per day. Below them are today's spend against the daily token budget, the prompt-cache savings and the LLM calls avoided by learned mappings. The **Period** (7, 30 or 90 days) and **Source** (live, or live plus eval) filters change every figure on the page.
 
-<!-- IMAGE: add the Cost screenshot here, for example images/cost.png -->
+<img width="1816" alt="image" src="https://github.com/user-attachments/assets/ffff974b-1210-4cd1-816b-d0bddcef8905" />
 
 ### Settings: control what the agent may use, do and spend
 
