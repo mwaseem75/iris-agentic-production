@@ -3,7 +3,7 @@
 param([string]$ImageTar = $env:IRIS_IMAGE_TAR)
 # Continue: with Stop, Windows PowerShell 5.1 throws when a native command writes to stderr
 $ErrorActionPreference = 'Continue'
-$Url = 'http://localhost:52773/agenticprod/dashboard.html'
+$Url = 'http://localhost:52773/agenticprod/AgenticProd.UI.Home.cls'
 
 function Fail($msg) { Write-Host "ERROR: $msg" -ForegroundColor Red; exit 1 }
 

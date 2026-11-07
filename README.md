@@ -8,13 +8,13 @@ Built for the InterSystems Programming Contest "AI Agents in Interoperability Wo
 **[Online demo](URL)** · **[Video](URL)** · **[Article: the story](URL)** · **[Article: AI Hub tutorial](URL)** · **[Step-by-step tutorial](TUTORIAL.md)**
 -->
 
-<img width="1917" alt="image" src="https://github.com/user-attachments/assets/b5b51459-a90d-4112-a817-28a91037c32a" />
+<img width="1917" alt="Dashboard overview" src="https://github.com/user-attachments/assets/b5b51459-a90d-4112-a817-28a91037c32a" />
 
 ## Try it in three minutes
 
 No API key and no OpenAI account are needed. The sample cases are answered from recorded runs that ship with the repo.
 
-1. Run the [installer](#install) and open **http://localhost:52773/agenticprod/AgenticProd.UI.Home.cls** — it shows the IRIS login form, then goes to the dashboard (`SuperUser` / `SYS`, or the read-only `reviewer` / `Review-Demo-2026`).
+1. Run the [installer](#installation) and open **http://localhost:52773/agenticprod/AgenticProd.UI.Home.cls**. It shows the IRIS login form, then goes to the dashboard (`SuperUser` / `SYS`, or the read-only `reviewer` / `Review-Demo-2026`).
 2. Open **Trust & evaluation**: the 60-case results are already there.
 3. Open **AI Hub Library**, then **AI Hub in Production**, to see the agent, its tools and skills, and where it sits in the production.
 4. Send a broken message and watch it handled: `docker compose exec iris iris session iris -U IRISAPP`, then `do ##class(AgenticProd.Demo).SendCase("05")`. Open it in **Messages** to read its story.
@@ -209,7 +209,7 @@ The agent proposes. A deterministic business process (`AgenticProd.Process.Triag
 
 This is the part for a developer who wants an AI Hub agent of their own. Open **Create an agent** in the dashboard. Nothing needs to be written by hand.
 
-<img width="1912" alt="image" src="https://github.com/user-attachments/assets/94075c4e-99b9-444b-bad9-3be551903049" />
+<img width="1912" alt="Create an agent wizard" src="https://github.com/user-attachments/assets/94075c4e-99b9-444b-bad9-3be551903049" />
 
 1. **Pick tools and skills.** Build a tool, a skill or a policy from a template with the builders, or reuse what is already in the Library. Generated classes go in the `MyAI` package, are admin-only, and their SQL tools are SELECT-only. The Workbench does not create write tools.
 2. **Write its instructions and choose the model.** The wizard adds a fixed Output section, so the agent always returns the decision JSON that Triage expects.
@@ -220,7 +220,7 @@ This is the part for a developer who wants an AI Hub agent of their own. Open **
 
 Every AI Hub part in a namespace, read from the real classes, so what you see is what is installed: agents (`%AI.Agent`), toolsets and tools (`%AI.ToolSet`, `%AI.Tool`), skills (`%AI.Agent.Skill`) and policies (`%AI.Policy.Authorization`, `%AI.Policy.Audit`). Each one shows its source and where it is used, so a developer can find an agent, see which tools and policies it has, and reuse them.
 
-<img width="1895" alt="image" src="https://github.com/user-attachments/assets/9c124590-3e40-480f-a8cc-7ff001764d31" />
+<img width="1895" alt="AI Hub Library" src="https://github.com/user-attachments/assets/9c124590-3e40-480f-a8cc-7ff001764d31" />
 
 
 ## AI Hub in Production
@@ -229,7 +229,7 @@ This answers one question: where does AI Hub run in this production, and how do 
 
 **The map (read-only).** Shows a production as lanes of services, processes and operations, with links built from item targets, routing-rule targets and the real message flow. The items that host an AI Hub agent carry an **AI HUB** badge.
 
-<img width="1902" alt="image" src="https://github.com/user-attachments/assets/318db301-1408-44b1-9e9a-2168ca941f91" />
+<img width="1902" alt="AI Hub in Production map" src="https://github.com/user-attachments/assets/318db301-1408-44b1-9e9a-2168ca941f91" />
 
 
 **Add an agent.** Choose a production in any namespace and one of three ways in. The plan lists every item and the package mapping needed, and nothing changes until you apply it.
@@ -312,7 +312,7 @@ A lab result arrives with a real timestamp error. Its free-text note also says: 
 4. The mapping goes into the `LabCodeMap` lookup table and the original message is sent again.
 5. The next message with that code goes straight through. No LLM call, no cost.
 
-<img width="1912"  alt="image" src="https://github.com/user-attachments/assets/083a995d-daed-4391-a6bf-d10a5b3e51bd" />
+<img width="1912"  alt="A MAP_CODE task in the Workflow inbox" src="https://github.com/user-attachments/assets/083a995d-daed-4391-a6bf-d10a5b3e51bd" />
 
 
 ## Dashboard
