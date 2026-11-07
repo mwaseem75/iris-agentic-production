@@ -452,6 +452,3 @@ AI Hub is pre-release, and a few things are worth knowing. The workarounds below
 
 [TUTORIAL.md](TUTORIAL.md) walks through building this agent step by step with AI Hub: declarative agents, tools, skills, policies, RAG, the Config Store and Wallet, and measuring it, then adding an agent to a production you already have.
 
-## Licence
-
-MIT. LOINC content is © Regenstrief Institute, Inc., used under the LOINC licence.
