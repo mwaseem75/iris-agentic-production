@@ -312,7 +312,8 @@ A lab result arrives with a real timestamp error. Its free-text note also says: 
 4. The mapping goes into the `LabCodeMap` lookup table and the original message is sent again.
 5. The next message with that code goes straight through. No LLM call, no cost.
 
-![A MAP_CODE task in the Workflow inbox](images/workflow-approval.png)
+<img width="1912"  alt="image" src="https://github.com/user-attachments/assets/083a995d-daed-4391-a6bf-d10a5b3e51bd" />
+
 
 ## Dashboard
 
@@ -394,7 +395,6 @@ do ##class(AgenticProd.Recordings).Export("shipped")
 - **Prometheus / Grafana.** `/api/monitor/metrics` (IRIS SAM) also serves `gen_ai_client_token_usage{model,type}`, `gen_ai_client_operation_duration_seconds{model}`, `agentic_decisions_total{decision,outcome}`, `agentic_tool_calls_total{tool}`, `agentic_unsafe_blocked_total`, `agentic_llm_calls_saved_total` and `agentic_approval_waiting`. These are totals over the stored tables and carry no message content. Like the rest of IRIS's metrics on this URL, they can be read without a login.
 - **Visual Trace.** Each decision links to the message session in the Management Portal.
 
-Charts use [Apache ECharts](https://echarts.apache.org/) 5.5.1 and the layout uses [Tabler](https://tabler.io/) 1.6.1 (MIT), both vendored in `web/vendor` with their licences. Nothing is loaded from a CDN.
 
 ## Contest checklist
 
