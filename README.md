@@ -17,7 +17,7 @@ No API key and no OpenAI account are needed. The sample cases are answered from 
 1. Run the [installer](#installation) and open **http://localhost:52773/agenticprod/AgenticProd.UI.Home.cls**. It shows the IRIS login form, then goes to the dashboard (`SuperUser` / `SYS`, or the read-only `reviewer` / `Review-Demo-2026`).
 2. Open **Trust & evaluation**: the 60-case results are already there.
 3. Open **AI Hub Library**, then **AI Hub in Production**, to see the agent, its tools and skills, and where it sits in the production.
-4. Send a broken message and watch it handled: `docker compose exec iris iris session iris -U IRISAPP`, then `do ##class(AgenticProd.Demo).SendCase("05")`. Open it in **Messages** to read its story.
+4. Send a broken message and watch it handled: `docker compose exec iris iris session iris -U IRISAPP`, then `do ##class(AgenticProd.Demo).SendCase("05")`. Open it in **Messages** to read its story. A code-mapping case (`SendCase("01")`) creates a task for a human: approve it in the Workflow inbox as `reviewer` / `Review-Demo-2026`.
 5. Run `./verify.sh` (Windows: `.\verify.ps1`). It should end with `Verify PASSED: 6 of 6 steps`.
 
 ## What makes this different
@@ -58,7 +58,7 @@ The core is format-neutral: error classes, decisions, Triage and the stores do n
 | 👤 | **Human in the loop** | Workflow inbox for mappings and escalations; approved mappings are learned and revocable |
 | 🧰 | **Create an agent** | Wizard, tool, skill and policy builders; $0 tests; the agent comes back in the Library |
 | 📚 | **AI Hub Library** | Every agent, toolset, skill and policy in a namespace, with its source and where it is used |
-| 🗺️ | **AI Hub in Production** | A read-only map of a production with AI Hub items badged; add an agent three ways, remove it cleanly |
+| 🗺️ | **AI Hub in Production** | Counts and details of the AI Hub parts a production uses, a clickable full-screen map, add an agent three ways, remove it cleanly |
 | 📊 | **Dashboard** | Overview, Messages with a story view per message, Trust and evaluation, Cost, Settings |
 | 🧪 | **Evaluation** | 60 synthetic cases, live or replayed at $0, scored for unsafe outcomes first |
 | 🔭 | **Observability** | Traces in IRIS, Visual Trace links, Prometheus and Grafana metrics, optional OTLP and Jaeger |
@@ -153,7 +153,7 @@ PASS  Replay scores: 3 of 3 cases match the recorded run
 Verify PASSED: 6 of 6 steps
 ```
 
-`./verify.sh --strict` counts a skipped step as a failure. Unit tests, no LLM call: 238 test methods in 34 classes.
+`./verify.sh --strict` counts a skipped step as a failure. The unit tests also run with no LLM call:
 
 ```objectscript
 do ##class(%UnitTest.Manager).RunTest("AgenticProd", "/noload/nodelete")
@@ -167,7 +167,7 @@ Open a terminal in the container: `docker compose exec iris iris session iris -U
 // one broken message: bad timestamp, fixed automatically
 do ##class(AgenticProd.Demo).SendCase("05")
 
-// unmapped glucose code: approve it in the Workflow inbox, then send it again
+// unmapped glucose code: approve it in the Workflow inbox (log in there as reviewer / Review-Demo-2026), then send it again
 do ##class(AgenticProd.Demo).SendCase("01")
 do ##class(AgenticProd.Demo).SendCase("01", "MSG90001")
 
@@ -225,14 +225,16 @@ Every AI Hub part in a namespace, read from the real classes, so what you see is
 
 ## AI Hub in Production
 
-This answers one question: where does AI Hub run in this production, and how do I add it to one I already have?
+This answers one question: where does AI Hub run in this production, and what does it contain? Pick any production in any namespace.
 
-**The map (read-only).** Shows a production as lanes of services, processes and operations, with links built from item targets, routing-rule targets and the real message flow. The items that host an AI Hub agent carry an **AI HUB** badge.
+**Summary cards.** Six cards count the AI Hub parts the production uses: agents, models, tools, skills, knowledge bases and policies. Click a card to see its members in the detail panel and highlighted on the map.
+
+**Components and map.** On the left, a table of every production item (the AI Hub ones first, with an **AI HUB** badge) and a detail panel for whatever you select: an agent with its model, tool sets, skills, knowledge base and policies; a single part with what it is and who uses it; or a plain item with its type, safe settings and neighbours. On the right, a read-only map of the production, with links built from item targets, routing-rule targets and the real message flow. AI Hub items are purple and the parts they use hang below them. Every node is clickable and opens its details, and the map has a **Full screen** button.
 
 <img width="1902" alt="AI Hub in Production map" src="https://github.com/user-attachments/assets/318db301-1408-44b1-9e9a-2168ca941f91" />
 
 
-**Add an agent.** Choose a production in any namespace and one of three ways in. The plan lists every item and the package mapping needed, and nothing changes until you apply it.
+**Add an agent.** Click **+ Add AI Hub agent**, pick one of your agents and one of three ways in. The plan lists every item and the package mapping needed, and nothing changes until you apply it.
 
 ![Add an agent to a production you already have](images/workbench-flow.png)
 
@@ -246,7 +248,7 @@ The agent host is `AgenticProd.Operation.Agent` with its `AgentClass` setting po
 
 **Modes.** `observe` (the agent runs and the outcome is logged, nothing is sent), `propose` (the check runs and tasks go to the Workflow inbox) or `act` (the checked decision is carried out).
 
-**Remove.** Every item is tracked, so **Remove** deletes exactly what was added. The Workflow role and its tasks stay, as the record of what humans decided.
+**Remove.** Every item is tracked in the **Added by plug-in** tab, so **Remove** deletes exactly what was added. The Workflow role and its tasks stay, as the record of what humans decided.
 
 ### Legacy demo production
 
@@ -308,7 +310,7 @@ A lab result arrives with a real timestamp error. Its free-text note also says: 
 
 1. A result arrives with a local code nobody has mapped.
 2. The agent searches a LOINC knowledge base (IRIS vector search with local FastEmbed embeddings, through `%AI.RAG`), checks specimen, units and method, and proposes a code.
-3. A reviewer approves it, or corrects it, in the Workflow inbox. The LOINC check digit is verified.
+3. A reviewer approves it, or corrects it, in the Workflow inbox (Interoperability → Workflow Inbox; the demo reviewer is `reviewer` / `Review-Demo-2026`, a different person from the admin on purpose). The LOINC check digit is verified.
 4. The mapping goes into the `LabCodeMap` lookup table and the original message is sent again.
 5. The next message with that code goes straight through. No LLM call, no cost.
 
