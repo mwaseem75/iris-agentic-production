@@ -281,7 +281,7 @@ ClassMethod Remove(pNamespace As %String, pProduction As %String, pOwner As %Str
 	Quit tOut
 }
 
-/// Installs made here: [{namespace, production, owner, agentClass, way, items:[names], addedAt}].
+/// Installs made here: [{namespace, production, owner, agentClass, way, mode (observe|propose|act, failure way only), items:[names], addedAt}].
 /// pAgentClass limits it to one agent class; pNamespace/pProduction to one production.
 ClassMethod Installs(pAgentClass As %String = "", pNamespace As %String = "", pProduction As %String = "") As %DynamicArray
 {
@@ -291,11 +291,15 @@ ClassMethod Installs(pAgentClass As %String = "", pNamespace As %String = "", pP
 		Continue:((pNamespace '= "") && ((tRS.Namespace '= pNamespace) || (tRS.Production '= pProduction)))
 		Set tKey = tRS.Namespace_"|"_tRS.Production_"|"_tRS.Owner
 		If '$DATA(tByKey(tKey)) {
-			Set tByKey(tKey) = {"namespace":(tRS.Namespace), "production":(tRS.Production), "owner":(tRS.Owner), "agentClass":"", "way":"", "items":[], "addedAt":(tRS.AddedAt)}
+			Set tByKey(tKey) = {"namespace":(tRS.Namespace), "production":(tRS.Production), "owner":(tRS.Owner), "agentClass":"", "way":"", "mode":"", "items":[], "addedAt":(tRS.AddedAt)}
 			Do tOut.%Push(tByKey(tKey))
 		}
 		Do tByKey(tKey).items.%Push(tRS.ItemName)
-		If tRS.ItemName = tRS.Owner Set tByKey(tKey).agentClass = tRS.AgentClass, tByKey(tKey).way = $SELECT($LISTFIND($LISTFROMSTRING(..#MODES), tRS.Mode): "failure", 1: tRS.Mode)
+		If tRS.ItemName = tRS.Owner {
+			Set tIsMode = $LISTFIND($LISTFROMSTRING(..#MODES), tRS.Mode)
+			// Mode is stored only for the failure way; the other ways keep the way in that column
+			Set tByKey(tKey).agentClass = tRS.AgentClass, tByKey(tKey).way = $SELECT(tIsMode: "failure", 1: tRS.Mode), tByKey(tKey).mode = $SELECT(tIsMode: tRS.Mode, 1: "")
+		}
 	}
 	If pAgentClass '= "" {
 		Set tAll = tOut, tOut = []
