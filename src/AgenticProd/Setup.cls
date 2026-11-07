@@ -39,7 +39,7 @@ Parameter DASHROLE = "AgenticProd_Dashboard";
 /// Read-only databases: the dashboard never writes. IRISTEMP is RW for SQL work globals.
 /// AgenticProd_AIRead: the Settings tab shows provider configs (secret:// references, no keys).
 /// LEGACY: the story view reads plug-in rows' headers and bodies in their own namespace.
-Parameter DASHRESOURCES = "AgenticProd_Dashboard:U,AgenticProd_AIRead:RU,%DB_IRISAPP_DATA:R,%DB_IRISAPP_CODE:R,%DB_LEGACY_DATA:R,%DB_LEGACY_CODE:R,%DB_ENSLIB:R,%DB_HSLIB:R,%DB_HSSYS:R,%DB_IRISLIB:R,%DB_IRISSYS:R,%DB_IRISTEMP:RW";
+Parameter DASHRESOURCES = "AgenticProd_Dashboard:U,AgenticProd_AIRead:RU,%DB_IRISAPP_DATA:R,%DB_IRISAPP_CODE:R,%DB_LEGACY_DATA:R,%DB_LEGACY_CODE:R,%DB_ENSLIB:R,%DB_HSLIB:R,%DB_HSSYS:R,%DB_HSCUSTOM:R,%DB_IRISLIB:R,%DB_IRISSYS:R,%DB_IRISTEMP:RW";
 
 /// Settings tab write access, on top of the dashboard role (granted role). Given to SuperUser
 /// and _SYSTEM; the reviewer stays read-only.

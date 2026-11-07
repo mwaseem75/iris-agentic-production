@@ -438,11 +438,12 @@ ClassMethod SkillInfo(pClass As %String) As %DynamicObject [ Internal ]
 }
 
 /// Source text of a class, "" when it cannot be read.
-ClassMethod SourceText(pClass As %String) As %String [ Internal ]
+ClassMethod SourceText(pClass As %String, Output pSC As %Status) As %String [ Internal ]
 {
-	Set tText = ""
+	Set tText = "", pSC = $$$OK
 	Try {
-		Do ##class(%Compiler.UDL.TextServices).GetTextAsArray($NAMESPACE, pClass, .tLines)
+		// A user without read on a mapped database gets a <PROTECT> status here; Source() reports it
+		Set pSC = ##class(%Compiler.UDL.TextServices).GetTextAsArray($NAMESPACE, pClass, .tLines)
 		Set i = ""
 		For {
 			Set i = $ORDER(tLines(i))
@@ -451,7 +452,9 @@ ClassMethod SourceText(pClass As %String) As %String [ Internal ]
 			Continue:i=0
 			Set tText = tText_tLines(i)_$CHAR(10)
 		}
-	} Catch {}
+	} Catch ex {
+		Set pSC = ex.AsStatus()
+	}
 	Quit tText
 }
 
@@ -642,7 +645,10 @@ ClassMethod Source(pClass As %String) As %DynamicObject
 		While tIter.%GetNext(, .tRow) { Set:tRow.class=pClass tOk = 1 }
 	}
 	Quit:'tOk ""
-	Quit {"class":(pClass), "source":(..WithoutSpec(..SourceText(pClass)))}
+	Set tText = ..SourceText(pClass, .tSC)
+	// An empty body with a 200 hid a missing database privilege once; fail instead
+	$$$ThrowOnError(tSC)
+	Quit {"class":(pClass), "source":(..WithoutSpec(tText))}
 }
 
 /// Drops the XData BuilderSpec block (and its doc line): it is the builder's own bookkeeping.
