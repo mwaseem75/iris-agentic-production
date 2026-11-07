@@ -209,7 +209,7 @@ The agent proposes. A deterministic business process (`AgenticProd.Process.Triag
 
 This is the part for a developer who wants an AI Hub agent of their own. Open **Create an agent** in the dashboard. Nothing needs to be written by hand.
 
-![Create an agent](images/workbench-wizard.png)
+<img width="1912" alt="image" src="https://github.com/user-attachments/assets/94075c4e-99b9-444b-bad9-3be551903049" />
 
 1. **Pick tools and skills.** Build a tool, a skill or a policy from a template with the builders, or reuse what is already in the Library. Generated classes go in the `MyAI` package, are admin-only, and their SQL tools are SELECT-only. The Workbench does not create write tools.
 2. **Write its instructions and choose the model.** The wizard adds a fixed Output section, so the agent always returns the decision JSON that Triage expects.
@@ -220,7 +220,8 @@ This is the part for a developer who wants an AI Hub agent of their own. Open **
 
 Every AI Hub part in a namespace, read from the real classes, so what you see is what is installed: agents (`%AI.Agent`), toolsets and tools (`%AI.ToolSet`, `%AI.Tool`), skills (`%AI.Agent.Skill`) and policies (`%AI.Policy.Authorization`, `%AI.Policy.Audit`). Each one shows its source and where it is used, so a developer can find an agent, see which tools and policies it has, and reuse them.
 
-![AI Hub Library](images/workbench-library.png)
+<img width="1895" alt="image" src="https://github.com/user-attachments/assets/9c124590-3e40-480f-a8cc-7ff001764d31" />
+
 
 ## AI Hub in Production
 
@@ -228,7 +229,8 @@ This answers one question: where does AI Hub run in this production, and how do 
 
 **The map (read-only).** Shows a production as lanes of services, processes and operations, with links built from item targets, routing-rule targets and the real message flow. The items that host an AI Hub agent carry an **AI HUB** badge.
 
-![AI Hub in Production](images/production-map.png)
+<img width="1902" alt="image" src="https://github.com/user-attachments/assets/318db301-1408-44b1-9e9a-2168ca941f91" />
+
 
 **Add an agent.** Choose a production in any namespace and one of three ways in. The plan lists every item and the package mapping needed, and nothing changes until you apply it.
 
