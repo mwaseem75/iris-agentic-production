@@ -125,7 +125,7 @@ On Windows, give WSL enough memory in `%UserProfile%\.wslconfig` (for example `m
 **Without Docker, with ZPM**, on an IRIS for Health instance that already has ZPM:
 
 ```objectscript
-zpm "load iris-agentic-production"
+zpm "install iris-agentic-production"
 ```
 
 Setup runs as part of the install. The files the code reads at run time are copied under the manager directory; pass `-Droot=/some/folder` to choose another place. For optional traces: `docker compose --profile observability up -d` (Jaeger at http://localhost:16686).
@@ -171,7 +171,7 @@ do ##class(AgenticProd.Demo).SendCase("01", "MSG90001")
 do ##class(AgenticProd.Eval.Runner).Run("gpt-4o-mini", "replay demo", "all", "replay")
 ```
 
-**Send a burst** in the dashboard header (admin login) sends random evaluation cases as new messages. It is replay by default, so it costs nothing. To run the agent for real, click the adjust icon next to it, set **Mode** to **Live**, choose a small number of cases and confirm. Live needs `OPENAI_API_KEY` in `.env`, and the dashboard's Cost tab then shows the tokens and cost of each run.
+**Send a burst** in the dashboard header (admin login) sends random evaluation cases as new messages. It is replay by default, so it costs nothing. It asks first: **Replay** plays back recorded agent answers, **Live** calls the model (up to 10 cases), shows an estimate and asks you to confirm. Live needs `OPENAI_API_KEY` in `.env`, and the dashboard's Cost tab then shows the tokens and cost of each run.
 
 Click a flow button in **Messages** to open its story: the steps in plain words, a timeline, and the masked message. Each decision also links to Visual Trace in the Management Portal.
 
@@ -229,7 +229,7 @@ This answers one question: where does AI Hub run in this production, and what do
 
 **Components and map.** On the left, a table of every production item (the AI Hub ones first, with an **AI HUB** badge) and a detail panel for whatever you select: an agent with its model, tool sets, skills, knowledge base and policies; a single part with what it is and who uses it; or a plain item with its type, safe settings and neighbours. On the right, a read-only map of the production, with links built from item targets, routing-rule targets and the real message flow. AI Hub items are purple and the parts they use hang below them. Every node is clickable and opens its details, and the map has a **Full screen** button.
 
-<img width="1792" alt="image" src="https://github.com/user-attachments/assets/b43f8bcf-4304-4cd9-a181-074b1f45617f" />
+<img width="1792" alt="AI Hub in Production: components and map" src="https://github.com/user-attachments/assets/b43f8bcf-4304-4cd9-a181-074b1f45617f" />
 
 
 **Add an agent.** Click **+ Add AI Hub agent**, pick one of your agents and one of three ways in. The plan lists every item and the package mapping needed, and nothing changes until you apply it.
@@ -321,12 +321,24 @@ A lab result arrives with a real timestamp error. Its free-text note also says: 
 |---|---|
 | Overview | Clickable KPI tiles and charts: decisions, tokens by type per model, latency p50/p95, step durations (router, agent, Triage), tool calls per tool, `validate_fix` results, approval wait time, LLM calls saved by learned mappings |
 | Messages | Recent decisions with filters and sorting; click one for its story view, or **View flow** |
-| Trust & evaluation | Eval runs and the headline numbers, unsafe outcomes, grounding failures |
-| Cost | Spend per model and per day against the daily budget |
+| Trust & evaluation | A verdict on whether the agent is safe, the headline numbers for a chosen eval run, what the checks around the model did, and the eval runs |
+| Cost | Cost per message against engineer time, the saving, spend per day against the daily budget, filters for period and source |
 | Settings | Providers and keys, agents, guardrails, budgets and mode, prices, memory, change log |
 | Create an agent, AI Hub Library, AI Hub in Production | The three AI Hub pages above |
 
 There is a light and a dark theme on every page. The reviewer login sees everything read-only. Live traffic is shown by default; tick "Include eval runs" to add eval messages. The same numbers are at `/agenticprod/api/metrics/summary`.
+
+### Trust & evaluation: can I trust this agent?
+
+This page answers one question. A banner at the top says whether the agent is safe to run in propose mode. It turns green only when the selected evaluation run had no unsafe outcome after Triage and no unsafe action was applied to a live message; otherwise it turns amber or red and shows the count. Under it are five numbers for that run: safe and correct after Triage, model alone, code mapping accuracy, unsafe actions applied and cost per message. A chart compares the model alone with the system after Triage across the 60 cases, and a list shows what the checks around the model did on live traffic: ungrounded claims caught, injection attempts flagged, proposals changed by Triage and mappings learned. The **Run** filter picks the run (the headline run is the default), and the table of eval runs stays below.
+
+<!-- IMAGE: add the Trust & evaluation screenshot here, for example images/trust.png -->
+
+### Cost: what does it cost, and what does it save?
+
+Three numbers sit at the top: the cost per message (from live traffic when there is any, otherwise from the measured evaluation run), what an engineer's time would cost for the same 1,000 failed messages, and the difference. The engineer figure rests on two assumptions, minutes per failure and an hourly rate (15 minutes at $40/h by default), so it is marked as an estimate. One chart puts both costs on the same scale and another shows spend per day. Below them are today's spend against the daily token budget, the prompt-cache savings and the LLM calls avoided by learned mappings. The **Period** (7, 30 or 90 days) and **Source** (live, or live plus eval) filters change every figure on the page.
+
+<!-- IMAGE: add the Cost screenshot here, for example images/cost.png -->
 
 ### Settings: control what the agent may use, do and spend
 
@@ -407,7 +419,7 @@ do ##class(AgenticProd.Recordings).Export("shipped")
 | Reusable by others | [Create an agent](#create-an-agent), [AI Hub in Production](#ai-hub-in-production), `Plugin.Installer` |
 | Easy to try | One-command installer; the sample cases work with no API key (recorded runs) |
 
-Bonus features, each used for a reason: **Workflow** (human approvals), **vector search** (LOINC knowledge base), **Docker** (installer), a **custom inbound adapter** (`Plugin.SentinelAdapter`), **Embedded Python** (label printer in the LEGACY demo), **ZPM** (`module.xml`, install above) and the Ideas Portal idea above.
+Bonus features, each used for a reason: **Workflow** (human approvals), **vector search** (LOINC knowledge base), **Docker** (installer), a **custom inbound adapter** (`Plugin.SentinelAdapter`), **Embedded Python** (label printer in the LEGACY demo), and **ZPM** (`module.xml`, install above).
 
 ## Notes on AI Hub builds 154 and 109
 
