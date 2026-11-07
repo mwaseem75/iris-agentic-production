@@ -177,7 +177,7 @@ do ##class(AgenticProd.Eval.Runner).Run("gpt-4o-mini", "replay demo", "all", "re
 
 Click a flow button in **Messages** to open its story: the steps in plain words, a timeline, and the masked message. Each decision also links to Visual Trace in the Management Portal.
 
-[Watch the demo](images/flow.mp4)
+![Demo](images/flow.gif)
 
 To start a demo or a recording from a clean state: `do ##class(AgenticProd.Demo).Reset()`. It deletes all live (non-eval) decisions, usage, tool calls, spans and Workflow tasks, purges every production message, resets `LabCodeMap` to the seed codes and empties the `data/` folders. It does not ask first. Eval runs and the recorded runs that replay uses are kept.
 
