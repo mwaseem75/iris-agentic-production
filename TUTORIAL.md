@@ -4,20 +4,20 @@ This tutorial is for you if you know some ObjectScript and IRIS interoperability
 
 The app: a lab sends HL7 v2 results. When a message fails, an AI Hub agent reads the error with read-only tools and proposes a decision as JSON. A normal business process, `AgenticProd.Process.Triage`, decides what really happens. See the [README](README.md) for the full picture.
 
-The AI Hub facts below were found on the early access **build 154**, and the workarounds in section 13 were checked again on **build 109**. AI Hub is pre-release, so names may change. Class names in this text drop the `AgenticProd.` prefix where it is clear (`Tools.Base` = `AgenticProd.Tools.Base`).
+All facts about AI Hub below were checked on the early access **build 154**. AI Hub is pre-release, so names may change. Class names in this text drop the `AgenticProd.` prefix where it is clear (`Tools.Base` = `AgenticProd.Tools.Base`).
 
 **What you will learn**
 
 | Section | Topic |
 |---|---|
-| 1-2 | What AI Hub gives you, and your first agent call |
-| 3-5 | A declarative agent, tools, skills |
+| 1–2 | What AI Hub gives you, and your first agent call |
+| 3–5 | A declarative agent, tools, skills |
 | 6 | Running the agent inside a business operation |
 | 7 | Safety: policies, a restricted user, a deterministic decision-maker, grounding, memory |
-| 8-9 | RAG knowledge base, human in the loop, a learning loop |
-| 10-11 | Measuring it, Config Store and Wallet |
+| 8–9 | RAG knowledge base, human in the loop, a learning loop |
+| 10–11 | Measuring it, Config Store and Wallet |
 | 12 | Adding an agent to a production you already have (the Workbench) |
-| 13 | Build 154 and 109 notes |
+| 13 | Build 154 notes |
 | 14 | Where to go next |
 
 ## 1. What AI Hub gives you
@@ -38,14 +38,14 @@ The AI Hub facts below were found on the early access **build 154**, and the wor
 
 ## 2. Setup
 
-You need Docker and the AI Hub early access image, build 109 (the app was built on build 154 and verified on 109). Use the **IRIS for Health** image (`irishealth-community`), not plain `iris-community`: this app needs the HL7 classes (`EnsLib.HL7`), and setup stops with a clear message if they are missing. Download the tar file from the AI Hub early-access portal. `docker load` prints the internal name `docker.iscinternal.com/docker-intersystems/intersystems/irishealth-community:2027.1.0AI.109.0`; give it the tag the [`Dockerfile`](Dockerfile) expects (the install scripts do this for you), and never push the image to a public registry:
+You need Docker and the AI Hub early access image, build 154. Use the **IRIS for Health** image (`irishealth-community`), not plain `iris-community`: this app needs the HL7 classes (`EnsLib.HL7`), and setup stops with a clear message if they are missing. Load it and give it the tag the [`Dockerfile`](Dockerfile) expects:
 
 ```bash
-docker load -i <the tar file from the portal>
-docker tag docker.iscinternal.com/docker-intersystems/intersystems/irishealth-community:2027.1.0AI.109.0 irishealth-community:2027.1.0AI.109.0
+docker load -i irishealth-community-2026.3.0AI.154.0-docker.tar.gz
+docker tag <loaded image name> irishealth-community:2026.3.0AI.154.0
 ```
 
-To use the build 154 image instead, set `IRIS_IMAGE=irishealth-community:2026.3.0AI.154.0` in `.env`. The API key goes in `.env`, which git ignores. [`.env.example`](.env.example) has the names only:
+The API key goes in `.env`, which git ignores. [`.env.example`](.env.example) has the names only:
 
 ```bash
 cp .env.example .env     # set OPENAI_API_KEY=...
@@ -367,9 +367,9 @@ do ##class(AgenticProd.Demo).SendCase("01", "MSG90001")
 
 `Eval.Runner.Run()` sends each case through the real production and scores the agent's proposal and Triage's final outcome separately. The key number is `unsafe_final`: how often the system *carried out* a `must_not` decision. Results go to `Data.EvalRun` and `Data.EvalResult`.
 
-The final run of this repo, with `gpt-4o-mini` on all 60 cases: the agent's proposal was acceptable in 98%, the system's final outcome in 100%, 88% matched the expected decision exactly, and **no unsafe decision was carried out**. It cost $0.08 in total (build 109). The point of the two scores is visible here: one case where the model proposed something questionable (a prompt-injection attempt) was still caught by Triage, so the final outcome was safe.
+The final run of this repo, with `gpt-4o-mini` on all 60 cases: the agent's proposal was acceptable in 98%, the system's final outcome in 100%, 87% matched the expected decision exactly, and **no unsafe decision was carried out**. It cost $0.08 in total. The point of the two scores is visible here: one case where the model proposed something questionable (a prompt-injection attempt) was still caught by Triage, so the final outcome was safe.
 
-**Replay mode.** Every live run stores its decision in `Data.Usage`. With the agent operation's `Mode` setting on `replay`, it returns the recorded decision for the same case and model instead of calling the LLM. Demos and tests cost nothing and need no key. Setup loads the repo's recorded run from `eval/recordings/recordings.json` (`AgenticProd.Recordings`), and in live mode with no key a message that has a recording is replayed too; its story says "Replayed from a recorded run, no API key". To record again, run the evaluation live and call `Recordings.Export`.
+**Replay mode.** Every live run stores its decision in `Data.Usage`. With the agent operation's `Mode` setting on `replay`, it returns the recorded decision for the same case and model instead of calling the LLM. Demos and tests cost nothing and need no key.
 
 **Tokens and cost.** One `Data.Usage` row per agent run, from `GetStats()`, priced from `Data.PriceTable`.
 
@@ -416,9 +416,9 @@ The Settings page never returns a key, only "set" or "not set", and every change
 
 Everything so far built a production around an agent. Most people have it the other way round: a production that already runs, and a wish to add AI Hub to it without rewriting anything. The **AI Hub Workbench** (a group in the dashboard sidebar) does this in four steps, and every step is plain IRIS code you can read.
 
-**1. See what you have.** The **AI Hub Library** lists the AI Hub parts in a namespace by reading the real classes: toolsets (`%AI.ToolSet`), skills (`%AI.Agent.Skill`), policies and the knowledge base. Its top card, *How the TriageAgent is built*, shows an agent as its tools, skills, policies and knowledge, each with its real count, and below it the plain IRIS checks around the agent. Open a part to read what it does, where it is used and its source, or to test it for $0 when you created it in Workbench. Nothing is stored apart from the classes, so the list is always what is installed.
+**1. See what you have.** The **Library** lists the AI Hub parts in a namespace by reading the real classes: agents (`%AI.Agent`), toolsets (`%AI.ToolSet`), skills (`%AI.Agent.Skill`) and policies. Nothing is stored apart from the classes, so the list is always what is installed.
 
-![The AI Hub Library](images/workbench-library.png)
+![The Library](images/workbench-library.png)
 
 **2. Create from a template.** The builders write ordinary classes in a package called `MyAI`: a tool (a SELECT-only SQL query with a description the model reads), a skill, a policy, or a whole agent. The agent wizard adds a fixed `## Output` section to the instructions, so the agent always answers with the decision JSON of section 3. Without it, Triage could not read the answer. Generated SQL tools are SELECT-only and the builders are for administrators only.
 
@@ -462,40 +462,38 @@ Some details that matter in a real production:
 
 **Safe to add and remove.** Plan refuses any item name that already exists, and `Apply` never changes or restarts an existing item. Every added item is written to `Data.PluginItem` with an owner, so `Remove` takes out exactly those. If the agent's package is not visible in the target namespace, the plan includes a package mapping and applies it. The Workflow role and its tasks stay after a remove, as the record of what humans decided.
 
-**AI Hub in Production.** Six cards count the agent, model, tools, skills, knowledge base and policies the production uses; click one to see its members and highlight them on the map. **Components and map** has a table of every item, a detail panel for whatever you select (item, AI Hub part or card) and the production map with links built from item targets, routing-rule targets and the real message pairs. Items that host an agent carry an AI HUB badge. **Full screen** opens the map with the details in a side panel. **Added by plug-in** lists what Add AI Hub agent put in the production, with its mode, and Remove.
+**The production map.** A read-only picture of a production: services, processes and operations in lanes, with links built from item targets, routing-rule targets and the real message pairs. Items that host an agent carry an AI HUB badge.
 
-![AI Hub in Production](images/production-map.png)
+![The production map](images/production-map.png)
 
 **Try it:**
 
 1. In the dashboard, open **Workbench → Create an agent** and build an agent from the "Explain failures" template.
 2. Send the failing samples in `legacy/samples` to the LEGACY namespace (see the [README](README.md#legacy-demo-production)).
-3. Open **AI Hub Library**, open your agent from the top card, click **Add to production**, choose `LEGACY` and **When a message fails**, mode `observe`, apply.
-4. Send the samples again and watch **Messages**. Then **Remove** and check **AI Hub in Production**.
+3. Open **Library**, click **Add to production**, choose `LEGACY` and **When a message fails**, mode `observe`, apply.
+4. Send the samples again and watch **Messages**. Then **Remove** and check the production map.
 
-## 13. Build 154 and 109 notes
+## 13. Build 154 notes
 
-These are facts and workarounds found while building this app on build 154. Each line ends with what was seen on build 109. **Works** means a unit test or a direct check passed there; **unverified** means it needs a live LLM call or a service that was not run; **changed** means the behaviour differs. Check them again on newer builds.
+These are facts and workarounds found while building this app, **as of build 154**. Check them again on newer builds.
 
-- **`Run()` has no per-step hook.** `Run(session, goal, callback)` is a single `Chat()`. It only calls `OnRunStart` and `OnRunComplete` on the callback. Limit tool rounds with `agent.MaxIterations`, and check budgets after the run. *109: unverified, the code still works this way.*
-- **`MaxIterations` needs about 8 for multi-tool work.** At 3 the agent often ran out before `validate_fix`. Plan one more turn for the final answer (see `Converse()` in `Operation.Agent`). *109: unverified, needs live calls.*
-- **The tool manager class is `%AI.ToolMgr`**, not `%AI.ToolManager`. You reach it as `agent.ToolManager`. *109: works.*
-- **Skill tools are listed from the start**, not only after `load_skill`. *109: works, the tool-list test passes.*
-- **The built-in `load_skill` is not seen by audit policies.** `total_tool_calls` in `GetStats()` counts it; your audit rows do not. Expect `total_tool_calls` = audit rows + one per `load_skill`. *109: unverified, needs a live call.*
-- **`%CanExecute` takes three arguments**: `(toolref, call, metadata)`. An audit policy also has `%LogDenial(call, metadata, status)` for denied calls. *109: works.*
-- **No reasoning-effort option.** `max_tokens` cannot be set through `%AI.Agent` either; only `Provider.ChatComplete` takes it. *109: unverified.*
-- **`GetStats()` needs an attached session.** A session reopened with `%OpenId()` alone throws `SessionNotAttached`. *109: a session from `CreateSession` returns the same 11 fields; the reopened case is unverified.*
-- **`VectorStore.Build()` always issues CREATE TABLE** (`IF NOT EXISTS`), and it never adds a new column to an existing table. A restricted user is refused. Build it once per process before switching to the restricted user, as `Tools.Mapping.Prepare()` does in `Operation.Agent.OnInit()`. *109: works (46 LOINC rows); whether `Build` now adds columns is unverified.*
-- **No ObjectScript search API on a knowledge base.** To search from your own code, attach the KB to a private `%AI.ToolMgr` and run its tool: `mgr.ExecuteTool("search_loinc", {"query": text})`. Keep the embedding, vector store, KB and manager objects referenced; closing one frees its native handle. *109: works.*
-- **A bare `<` in an XData `<Description>`** breaks the ToolSet generator. Write `&lt;`. *109: unverified; the escaped form compiles.*
-- **Skill classes are ToolSets.** Define no methods in them, or the methods become tools. *109: works.*
-- **The openai provider has no timeout option.** Use the caller's `SendRequestSync` timeout. *109: unverified.*
-- **Config Store's descriptor registry starts empty.** `Configuration.Create("AI","LLM",...)` fails with "No descriptor found" until `%ConfigStore.DescriptorManager.RebuildRegistry()` has run once (`Settings.Store.Prepare()` does it). *109: works, the descriptor is present and the check stays; not determined whether 109 ships it filled.*
-- **`PROVIDERCONFIG` is a class parameter.** To choose a Config Store entry at run time, override `%CreateProvider()` as `Agent.Base` does. *109: works.*
-- **`%AI.Provider.Create()` rejects unknown fields**, and knows openai, anthropic, openrouter and nim. Azure OpenAI and Ollama work as `openai` with a `base_url`. *109: works, the test that expects no azure provider passes.*
-- **Wallet and Config Store need resources.** Reading a config needs its read resource; resolving its `secret://` key needs the collection's use resource. Without them the agent gets an access error, and `%Wallet.KeyValue.Exists()` simply answers 0. *109: works; the `reviewer` (read-only) and `SuperUser` both listed a test config and its key status.*
-- **FastEmbed keeps its model per namespace.** The cache is `.fastembed_cache` under the process's working directory, which IRIS sets to the namespace's database folder, and `FastEmbed.Create()` downloads about 90 MB the first time. On a fresh build 109 container the first plug-in start in `LEGACY` did that download and the production update failed with `ErrJobNotStopped`. `Setup.WarmEmbeddingModel()` now loads the model once in `IRISAPP` and `LEGACY` at image build, so the cache is in the image. *109: changed.*
-- **`libirisotel` drops the first resource attribute** and sends the next one as `true`, so `Telemetry.Trace.Provider()` sets only `service.name`. *109: unverified, needs the observability profile.*
+- **`Run()` has no per-step hook.** `Run(session, goal, callback)` is a single `Chat()`. It only calls `OnRunStart` and `OnRunComplete` on the callback. Limit tool rounds with `agent.MaxIterations`, and check budgets after the run.
+- **`MaxIterations` needs about 8 for multi-tool work.** At 3 the agent often ran out before `validate_fix`. Plan one more turn for the final answer (see `Converse()` in `Operation.Agent`).
+- **The tool manager class is `%AI.ToolMgr`**, not `%AI.ToolManager`. You reach it as `agent.ToolManager`.
+- **Skill tools are listed from the start**, not only after `load_skill`.
+- **The built-in `load_skill` is not seen by audit policies.** `total_tool_calls` in `GetStats()` counts it; your audit rows do not. Expect `total_tool_calls` = audit rows + one per `load_skill`.
+- **`%CanExecute` takes three arguments**: `(toolref, call, metadata)`. An audit policy also has `%LogDenial(call, metadata, status)` for denied calls.
+- **No reasoning-effort option.** `max_tokens` cannot be set through `%AI.Agent` either; only `Provider.ChatComplete` takes it.
+- **`GetStats()` needs an attached session.** A session reopened with `%OpenId()` alone throws `SessionNotAttached`.
+- **`VectorStore.Build()` always issues CREATE TABLE** (`IF NOT EXISTS`), and it never adds a new column to an existing table. A restricted user is refused. Build it once per process before switching to the restricted user, as `Tools.Mapping.Prepare()` does in `Operation.Agent.OnInit()`.
+- **No ObjectScript search API on a knowledge base.** To search from your own code, attach the KB to a private `%AI.ToolMgr` and run its tool: `mgr.ExecuteTool("search_loinc", {"query": text})`. Keep the embedding, vector store, KB and manager objects referenced; closing one frees its native handle.
+- **A bare `<` in an XData `<Description>`** breaks the ToolSet generator. Write `&lt;`.
+- **Skill classes are ToolSets.** Define no methods in them, or the methods become tools.
+- **The openai provider has no timeout option.** Use the caller's `SendRequestSync` timeout.
+- **Config Store's descriptor registry starts empty.** `Configuration.Create("AI","LLM",...)` fails with "No descriptor found" until `%ConfigStore.DescriptorManager.RebuildRegistry()` has run once (`Settings.Store.Prepare()` does it).
+- **`PROVIDERCONFIG` is a class parameter.** To choose a Config Store entry at run time, override `%CreateProvider()` as `Agent.Base` does.
+- **`%AI.Provider.Create()` rejects unknown fields**, and knows openai, anthropic, openrouter and nim. Azure OpenAI and Ollama work as `openai` with a `base_url`.
+- **Wallet and Config Store need resources.** Reading a config needs its read resource; resolving its `secret://` key needs the collection's use resource. Without them the agent gets an access error, and `%Wallet.KeyValue.Exists()` simply answers 0.
 
 **Try it:** search the code for `build 154` to see each workaround where it is used.
 
