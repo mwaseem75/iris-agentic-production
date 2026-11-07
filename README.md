@@ -8,13 +8,9 @@ Built for the InterSystems Programming Contest "AI Agents in Interoperability Wo
 **[Online demo](URL)** · **[Video](URL)** · **[Article: the story](URL)** · **[Article: AI Hub tutorial](URL)** · **[Step-by-step tutorial](TUTORIAL.md)**
 -->
 
-![Dashboard overview](images/dashboard-overview.png)
+<img width="1917" alt="image" src="https://github.com/user-attachments/assets/b5b51459-a90d-4112-a817-28a91037c32a" />
 
-## Why I built this
-
-<!-- TODO: three or four sentences in your own words: the problem you have seen in interface work, and why you wanted the agent boxed in by plain code. -->
-
-## Try it in three minutes (for judges)
+## Try it in three minutes
 
 No API key and no OpenAI account are needed. The sample cases are answered from recorded runs that ship with the repo.
 
@@ -86,9 +82,9 @@ The core is format-neutral: error classes, decisions, Triage and the stores do n
 
 AI Hub gives the agent its tools and its limits. This project adds what a clinical interface needs on top: deterministic checks around the agent that are plain IRIS code, not AI Hub features. They are marked as such below.
 
-## Install
+## Installation
 
-You need Docker with about 4 GB of free memory and the AI Hub image (see [Which image do I need?](#which-image-do-i-need)).
+You need Docker and the AI Hub image (see [Which image do I need?](#which-image-do-i-need)).
 
 ```bash
 git clone https://github.com/mwaseem75/iris-agentic-production.git
@@ -121,7 +117,7 @@ docker tag docker.iscinternal.com/docker-intersystems/intersystems/irishealth-co
 
 `./install.sh` and `.\install.ps1` do this for you and print the `docker tag` command they ran. **Never push this image, or any image built from it, to a public registry.** To use another build, set `IRIS_IMAGE` in `.env` and run the installer again. Setup accepts IRIS for Health with AI Hub 2026.3 or later.
 
-### Install by hand, or with ZPM
+### Manual Installation, or with ZPM
 
 ```bash
 cp .env.example .env        # add OPENAI_API_KEY for live mode; the recorded sample cases need no key
@@ -133,7 +129,7 @@ On Windows, give WSL enough memory in `%UserProfile%\.wslconfig` (for example `m
 **Without Docker, with ZPM**, on an IRIS for Health instance that already has ZPM:
 
 ```objectscript
-zpm "load /path/to/iris-agentic-production"
+zpm "load iris-agentic-production"
 ```
 
 Setup runs as part of the install. The files the code reads at run time are copied under the manager directory; pass `-Droot=/some/folder` to choose another place. For optional traces: `docker compose --profile observability up -d` (Jaeger at http://localhost:16686).
@@ -179,9 +175,9 @@ do ##class(AgenticProd.Demo).SendCase("01", "MSG90001")
 do ##class(AgenticProd.Eval.Runner).Run("gpt-4o-mini", "replay demo", "all", "replay")
 ```
 
-Click a message in **Messages** to open its story: the steps in plain words, a timeline, and the masked message. Each decision also links to Visual Trace in the Management Portal.
+Click a flow button in **Messages** to open its story: the steps in plain words, a timeline, and the masked message. Each decision also links to Visual Trace in the Management Portal.
 
-![Story view of one message](images/story-view.png)
+![Demo](images/flow.gif)
 
 To start a demo or a recording from a clean state: `do ##class(AgenticProd.Demo).Reset()`. It deletes all live (non-eval) decisions, usage, tool calls, spans and Workflow tasks, purges every production message, resets `LabCodeMap` to the seed codes and empties the `data/` folders. It does not ask first. Eval runs and the recorded runs that replay uses are kept.
 
