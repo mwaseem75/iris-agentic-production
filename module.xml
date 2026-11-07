@@ -18,6 +18,10 @@
       <FileCopy Name="eval/" Target="${mgrdir}agenticprod/eval/"/>
       <FileCopy Name="web/" Target="${mgrdir}agenticprod/web/"/>
       <FileCopy Name="legacy/" Target="${mgrdir}agenticprod/legacy/"/>
+      <!-- Helper files shipped with the package: telemetry collector config and the install check scripts. -->
+      <FileCopy Name="otel-collector.yaml" Target="${mgrdir}agenticprod/otel-collector.yaml"/>
+      <FileCopy Name="verify.sh" Target="${mgrdir}agenticprod/verify.sh"/>
+      <FileCopy Name="verify.ps1" Target="${mgrdir}agenticprod/verify.ps1"/>
       <Invoke Class="AgenticProd.Setup" Method="Run" CheckStatus="true">
         <Arg>${root}</Arg>
       </Invoke>

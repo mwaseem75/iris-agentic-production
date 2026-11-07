@@ -86,7 +86,7 @@ if (-not (Select-String -Path .env -Pattern '^OPENAI_API_KEY=.+' -Quiet)) {
 }
 
 # 4. Build and start
-Write-Host 'Building and starting (first build takes about 6 minutes)...'
+Write-Host 'Building and starting (first build will take some time)...'
 docker compose up -d --build
 if ($LASTEXITCODE -ne 0) { Fail 'docker compose up failed' }
 

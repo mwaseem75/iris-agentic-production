@@ -12,7 +12,8 @@ cd "$(dirname "$0")" || die "cannot enter the repo folder"
 # Image name: environment first, then .env, then the tested build
 IMAGE="${IRIS_IMAGE:-}"
 if [ -z "$IMAGE" ] && [ -f .env ]; then
-  IMAGE="$(sed -n 's/^IRIS_IMAGE=//p' .env | tail -n 1 | tr -d '"')"
+  IMAGE="$(sed -n 's/^IRIS_IMAGE=//p' .env | tail -n 1 | tr -d '
+"')"
 fi
 IMAGE="${IMAGE:-irishealth-community:2027.1.0AI.109.0}"
 export IRIS_IMAGE="$IMAGE"
@@ -71,7 +72,7 @@ if ! grep -Eq '^OPENAI_API_KEY=.+' .env; then
 fi
 
 # 4. Build and start
-echo "Building and starting (first build takes about 6 minutes)..."
+echo "Building and starting (first build will take some time)..."
 docker compose up -d --build || die "docker compose up failed"
 
 # 5. Wait for the healthcheck: up to 20 minutes, one dot every 15 seconds
