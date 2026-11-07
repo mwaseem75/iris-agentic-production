@@ -231,7 +231,7 @@ This answers one question: where does AI Hub run in this production, and what do
 
 **Components and map.** On the left, a table of every production item (the AI Hub ones first, with an **AI HUB** badge) and a detail panel for whatever you select: an agent with its model, tool sets, skills, knowledge base and policies; a single part with what it is and who uses it; or a plain item with its type, safe settings and neighbours. On the right, a read-only map of the production, with links built from item targets, routing-rule targets and the real message flow. AI Hub items are purple and the parts they use hang below them. Every node is clickable and opens its details, and the map has a **Full screen** button.
 
-<img width="1902" alt="AI Hub in Production map" src="https://github.com/user-attachments/assets/318db301-1408-44b1-9e9a-2168ca941f91" />
+<img width="1792" alt="image" src="https://github.com/user-attachments/assets/b43f8bcf-4304-4cd9-a181-074b1f45617f" />
 
 
 **Add an agent.** Click **+ Add AI Hub agent**, pick one of your agents and one of three ways in. The plan lists every item and the package mapping needed, and nothing changes until you apply it.
