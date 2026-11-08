@@ -509,9 +509,4 @@ These are facts and workarounds found while building this app on build 154. Each
 
 **Try it:** read [`Process/Triage.cls`](src/AgenticProd/Process/Triage.cls) `CheckerFor()` and the `CHECKERS` parameter, and think about what a second format would need.
 
-## 14. Where to go next
 
-- Run the evaluation on your own errors: copy a case in [`eval/cases`](eval/cases), write its `.expected.json` and run `Eval.Runner.Run()`.
-- Read the stub-based tests in `Test/Process/TriageTest.cls` and add a case for a rule of your own.
-- Build an agent for your own production with the Workbench (section 12), start it in `observe` mode, and read what it would have done before you let it act.
-- If you hit a problem in AI Hub itself, report it on the [ai-hub-eap](https://github.com/intersystems-community/ai-hub-eap) repo with the steps to reproduce it.
