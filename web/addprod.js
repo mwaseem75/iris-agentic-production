@@ -81,13 +81,15 @@
     document.body.appendChild(root);
     root.appendChild(div("ap-shade"));
     root.firstChild.addEventListener("click", close);
-    get("api/workbench/productions").then(function (list) {
+    get("api/workbench/productions").then(function (res) {
       S.prods = [];
-      list.forEach(function (n) { n.productions.forEach(function (p) { S.prods.push({ ns: n.namespace, name: p.name, running: p.running }); }); });
-      if (!S.prods.length) { draw(); S.msg = "No production found."; return; }
+      // The endpoint answers {"productions":[{namespace, productions:[...]}]}
+      var list = Array.isArray(res) ? res : ((res && res.productions) || []);
+      list.forEach(function (n) { (n.productions || []).forEach(function (p) { S.prods.push({ ns: n.namespace, name: p.name, running: p.running }); }); });
+      if (!S.prods.length) { S.msg = "No production found."; draw(); return; }
       var first = S.prods[0]; S.ns = first.ns; S.prod = first.name;
       loadWatch(true);
-    }).catch(function (e) { draw(); S.msg = e.message; });
+    }).catch(function (e) { S.msg = "Could not load the productions: " + e.message; draw(); });
     draw();
   }
 

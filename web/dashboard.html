@@ -1904,7 +1904,7 @@ function showError(e) {
 function load() {
   document.getElementById("error").classList.add("hidden");
   var ev = includeEval ? "eval=1" : "eval=0";
-  if (!homeNs) get("api/settings/productions").then(function (r) { fillNsFilter(r.productions); }).catch(function () {});
+  if (!homeNs) get("api/settings/productions").then(function (r) { fillNsFilter(r.productions); }).catch(showError);
   var costUrl = "api/cost/summary?days=" + costDays + "&";
   // Live-only copies for the verdict and the cost per message when the eval switch is on
   var none = Promise.resolve(null);
@@ -2224,6 +2224,7 @@ function renderSettings(s) {
 
   var mb = document.getElementById("set-memory");
   mb.textContent = "";
+  if (!s.memory.length) { var tr1 = el("tr"); cell(tr1, "No learned mappings yet. One appears here after a person approves a proposed mapping.", "muted").colSpan = 7; mb.appendChild(tr1); }
   s.memory.forEach(function (m) {
     var tr = el("tr");
     var code = el("span", m.LocalCode);

@@ -399,7 +399,7 @@
     if (item["class"] === "search_loinc") { b.appendChild(div("wb-note", "The knowledge base is built by Setup from the LOINC subset; it has no class source.")); return b; }
     var src = el("pre", "Loading the source…", "wb-src"); b.appendChild(src);
     get("api/workbench/source?class=" + encodeURIComponent(item["class"])).then(function (d) { src.textContent = d.source || "(no source)"; })
-      .catch(function () { src.textContent = "The source is not available."; });
+      .catch(function (e) { src.textContent = "The source is not available: " + e.message; });
     return b;
   }
 
