@@ -424,7 +424,7 @@ Bonus features, each used for a reason: **Workflow** (human approvals), **vector
 
 ## Notes on AI Hub builds 154 and 109
 
-AI Hub is pre-release, and a few things are worth knowing. The workarounds below were written on build 154 and are still in the code; the last column is what was seen on build 109. "Works" means the unit tests or a direct check passed on 109. "Unverified" means it needs a service this check did not run. Details are in [TUTORIAL.md](TUTORIAL.md#13-build-154-and-109-notes), and the issues found are reported on the [ai-hub-eap](https://github.com/intersystems-community/ai-hub-eap) repo.
+AI Hub is pre-release, and a few things are worth knowing. The workarounds below were written on build 154 and are still in the code; the last column is what was seen on build 109. "Works" means the unit tests or a direct check passed on 109. "Unverified" means it needs a service this check did not run. Details are in [TUTORIAL.md](TUTORIAL.md#13-build-154-and-109-notes).
 
 | Workaround | Build 109 |
 |---|---|
