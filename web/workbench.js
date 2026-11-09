@@ -202,7 +202,11 @@
       lib.agents.forEach(function (x) { var o = el("option", x.name); o.value = x["class"]; sel.appendChild(o); });
       sel.value = a["class"];
       sel.addEventListener("change", function () { agentSel = sel.value; renderAnat(); });
-      top.appendChild(sel);
+      // A small label in front of the box, so it is clear this list switches the agent
+      var pickWrap = div("d-flex align-items-center gap-2");
+      pickWrap.appendChild(el("span", "Agent list", "text-secondary small"));
+      pickWrap.appendChild(sel);
+      top.appendChild(pickWrap);
     }
     body.appendChild(top);
     var row = div("wb-arow");
