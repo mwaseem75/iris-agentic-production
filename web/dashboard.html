@@ -2050,7 +2050,8 @@ function fillNsFilter(list) {
         document.getElementById("sf-dot").classList.toggle("off", String(p.health.state).toLowerCase() !== "running");
       }
     }
-    if (p.enabled) items.push([p.namespace, prodLabel(p)]);
+    // active also covers productions that got an agent through Add AI Hub agent or have decisions
+    if (p.enabled || p.active) items.push([p.namespace, prodLabel(p)]);
   });
   fillSelect(sel, items, decNs);
 }

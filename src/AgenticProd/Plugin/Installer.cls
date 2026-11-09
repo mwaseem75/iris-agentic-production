@@ -233,6 +233,7 @@ ClassMethod Productions() As %DynamicArray
 	}
 	Set tIter = tOut.%GetIterator()
 	While tIter.%GetNext(, .tRow) {
+		Do tRow.%Set("active", ..Active(tRow.namespace, tRow.enabled), "boolean")
 		Set tRow.health = ..Health(tRow.namespace, tRow.production, tSince)
 		Set tStats = ##class(AgenticProd.UI.REST).Rows("SELECT COUNT(*) AS Decisions FROM AgenticProd_Data.DecisionLog WHERE Namespace = ? AND CreatedAt >= ? AND EvalRunId IS NULL", tRow.namespace, tSince).%Get(0)
 		Set tCost = ##class(AgenticProd.UI.REST).Rows("SELECT COUNT(*) AS Runs, SUM(CostUsd) AS Cost FROM AgenticProd_Data.Usage WHERE Namespace = ? AND CreatedAt >= ? AND (Replay = 0 OR Replay IS NULL) AND EvalRunId IS NULL", tRow.namespace, tSince).%Get(0)
@@ -240,6 +241,16 @@ ClassMethod Productions() As %DynamicArray
 		Do tRow.%Set("native", ''tRow.native, "boolean"), tRow.%Set("enabled", ''tRow.enabled, "boolean")
 	}
 	Quit tOut
+}
+
+/// True when the Messages filter should list the namespace: the plug-in is enabled there, an agent
+/// was added through Add to production, or it has decisions of its own. Enabled alone missed the
+/// productions that only got an Add AI Hub agent install.
+ClassMethod Active(pNamespace As %String, pEnabled As %Boolean = 0) As %Boolean
+{
+	Quit:pEnabled 1
+	Quit:##class(AgenticProd.UI.REST).Rows("SELECT TOP 1 ID FROM AgenticProd_Data.PluginItem WHERE Namespace = ? AND Owner IS NOT NULL AND Owner <> ''", pNamespace).%Size() 1
+	Quit ''##class(AgenticProd.UI.REST).Rows("SELECT TOP 1 ID FROM AgenticProd_Data.DecisionLog WHERE Namespace = ?", pNamespace).%Size()
 }
 
 /// Running state, failed and suspended headers, event-log errors (last 24 h from pSince) and

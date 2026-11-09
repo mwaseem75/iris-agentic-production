@@ -166,6 +166,25 @@ Method TestMapLoadsAgentWithoutSkillsAndAfterRemove()
 	Do $$$AssertEquals(tAfter.installs.%Size(), 0)
 }
 
+/// The Messages filter lists a production that only got an Add to production install. Uses a
+/// made-up namespace with a tracking row, so no live production is touched.
+Method TestInstallMakesNamespaceActive()
+{
+	Set tNs = "ZZNOINSTALL"
+	Do $$$AssertNotTrue(##class(AgenticProd.Plugin.Installer).Active(tNs, 0), "nothing there yet")
+	Do $$$AssertTrue(##class(AgenticProd.Plugin.Installer).Active(tNs, 1), "enabled plug-in is active")
+	Set tRow = ##class(AgenticProd.Data.PluginItem).%New()
+	Set tRow.Namespace = tNs, tRow.Production = "Zz.Prod", tRow.ItemName = "WbTestAgent", tRow.Owner = "WbTestAgent", tRow.AgentClass = ..#AGENT, tRow.Mode = "process"
+	Do $$$AssertStatusOK(tRow.%Save())
+	Do $$$AssertTrue(##class(AgenticProd.Plugin.Installer).Active(tNs, 0), "an install makes it active")
+	Do ##class(AgenticProd.Data.PluginItem).%DeleteId(tRow.%Id())
+	Do $$$AssertNotTrue(##class(AgenticProd.Plugin.Installer).Active(tNs, 0), "gone again after the row is removed")
+	// Real list: every row carries the flag, and LEGACY (installs and decisions) is active
+	Set tIter = ##class(AgenticProd.Plugin.Installer).Productions().%GetIterator(), tHome = 0
+	While tIter.%GetNext(, .tP) { Do $$$AssertTrue(tP.%IsDefined("active"), "active on "_tP.namespace)  Set:tP.native tHome = tP.active }
+	Do $$$AssertTrue(tHome, "home production is active")
+}
+
 Method TestProcessWayAddsOnlyTheHost()
 {
 	Set tAdd = ##class(AgenticProd.Plugin.AddAgent).Apply(..Spec("WbTestAgent", "process"))
