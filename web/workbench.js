@@ -698,7 +698,12 @@
       var first = sortedItems().filter(function (i) { return i.ai; })[0];
       sel = first ? { kind: "item", key: first.name } : { kind: "", key: "" };
       drawMap(d); renderAll();
-    }).catch(function (e) { prodNote.textContent = "Could not load the production: " + e.message; });
+    }).catch(function (e) {
+      // Do not keep showing the previous production next to the error
+      mapData = null; sel = { kind: "", key: "" }; clear(stat24);
+      renderAll(); emptyBox.classList.add("hidden");
+      prodNote.textContent = "Could not load the production: " + e.message;
+    });
   }
 
   // ---- what the production is made of

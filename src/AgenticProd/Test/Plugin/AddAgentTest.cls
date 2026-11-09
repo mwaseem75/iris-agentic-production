@@ -142,6 +142,30 @@ Method TestFailureWayAddsFourItemsAndRemoveTakesThemOut()
 	Do $$$AssertNotTrue(##class(AgenticProd.Plugin.AddAgent).Remove($NAMESPACE, ..#PROD, "WbTestAgent").ok, "second Remove finds nothing")
 }
 
+/// An agent with no skills used to break the production map with <INVALID OREF>.
+Method TestMapLoadsAgentWithoutSkillsAndAfterRemove()
+{
+	Set tBefore = ##class(AgenticProd.UI.Workbench).Production($NAMESPACE, ..#PROD)
+	Set tSpec = ..Spec("WbNoSkill")
+	Set tSpec.agentClass = "AgenticProd.Test.Plugin.NoSkillAgent"
+	Set tAdd = ##class(AgenticProd.Plugin.AddAgent).Apply(tSpec)
+	Do $$$AssertTrue(tAdd.ok, tAdd.errors.%ToJSON())
+	Set tMap = ##class(AgenticProd.UI.Workbench).Production($NAMESPACE, ..#PROD)
+	Do $$$AssertEquals(tMap.items.%Size(), tBefore.items.%Size() + 4, "the four added items are listed")
+	Do $$$AssertEquals(tMap.hosts.%Size(), 1, "the new host is listed")
+	Do $$$AssertEquals(tMap.hosts.%Get(0).agentClass, "AgenticProd.Test.Plugin.NoSkillAgent")
+	Do $$$AssertEquals(tMap.installs.%Size(), 1, "the install is listed")
+	Set tIter = tMap.items.%GetIterator(), tNotes = 0
+	While tIter.%GetNext(, .tRow) { Set:tRow.note'="" tNotes = tNotes + 1 }
+	Do $$$AssertEquals(tNotes, 0, "no item is reported as unreadable")
+
+	Do $$$AssertTrue(##class(AgenticProd.Plugin.AddAgent).Remove($NAMESPACE, ..#PROD, "WbNoSkill").ok)
+	Set tAfter = ##class(AgenticProd.UI.Workbench).Production($NAMESPACE, ..#PROD)
+	Do $$$AssertEquals(tAfter.items.%Size(), tBefore.items.%Size(), "back to the original items")
+	Do $$$AssertEquals(tAfter.hosts.%Size(), tBefore.hosts.%Size())
+	Do $$$AssertEquals(tAfter.installs.%Size(), 0)
+}
+
 Method TestProcessWayAddsOnlyTheHost()
 {
 	Set tAdd = ##class(AgenticProd.Plugin.AddAgent).Apply(..Spec("WbTestAgent", "process"))

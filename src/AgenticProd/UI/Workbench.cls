@@ -114,31 +114,37 @@ ClassMethod Production(pNs As %String, pName As %String) As %DynamicObject
 	For i = 1:1:tProd.Items.Count() {
 		Set tItem = tProd.Items.GetAt(i)
 		Set tClass = tItem.ClassName
-		Set tRow = {"name":(tItem.Name), "class":(tClass), "type":(..TypeOf(tClass)), "category":(tItem.Category)}
-		Do tRow.%Set("enabled", ''tItem.Enabled, "boolean")
-		// Plug-in namespaces may not map our classes, so the host is also recognised by name
-		Set tHost = (tClass = ..#HOSTCLASS) || ..IsHost(tClass)
-		Set tIsAI = ''tHost
-		Do tRow.%Set("ai", tIsAI, "boolean")
-		Set tRow.added = $SELECT($DATA(tAI(tItem.Name)) && 'tHost: tAI(tItem.Name), 1: "")
-		Do tRow.%Set("checks", ''(tClass = "AgenticProd.Process.Triage"), "boolean")
-		Set tAiCount = tAiCount + tIsAI
-		Set tHealth = ..ItemHealth(tItem.Name, tSince)
-		Set tRow.settings = []
-		Set tRow.errors24h = tHealth.errors24h, tRow.suspended = tHealth.suspended, tRow.lastError = tHealth.lastError, tRow.in24h = tHealth.in24h, tRow.sent24h = tHealth.sent24h
+		// Plain defaults first: a row that fails below is still listed, with a note
+		Set tRow = {"name":(tItem.Name), "class":(tClass), "type":"", "category":(tItem.Category), "added":"", "settings":[], "errors24h":0, "suspended":0, "lastError":"", "in24h":0, "sent24h":0}
+		Do tRow.%Set("enabled", ''tItem.Enabled, "boolean"), tRow.%Set("ai", 0, "boolean"), tRow.%Set("checks", 0, "boolean")
 		Do tOut.items.%Push(tRow)
-		Do:tHost tOut.hosts.%Push(..Host(tItem, tUsage, tSince, tHome, pNs))
 		Set tNames(tItem.Name) = ""
-		For j = 1:1:tItem.Settings.Count() {
-			Set tSet = tItem.Settings.GetAt(j)
-			Do:..SafeSetting(tSet.Name) tRow.settings.%Push({"name":(tSet.Name), "value":($EXTRACT(tSet.Value, 1, 160))})
-			Set:(tSet.Name = "WatchItems") tRow.watches = tSet.Value
-			// TargetConfigName(s) plus the named targets of our hosts (TriageTarget, FHIRTarget, AgentTarget)
-			If (tSet.Name = "TargetConfigName") || (tSet.Name = "TargetConfigNames") || ($EXTRACT(tSet.Name, *-5, *) = "Target") {
-				Do ..AddLinks(tItem.Name, tSet.Value, .tLink)
-			} ElseIf (tSet.Name = "BusinessRuleName") && (tSet.Value '= "") {
-				Do ..AddLinks(tItem.Name, ..RuleTargets(tSet.Value), .tLink)
+		Try {
+			Set tRow.type = ..TypeOf(tClass)
+			// Plug-in namespaces may not map our classes, so the host is also recognised by name
+			Set tHost = (tClass = ..#HOSTCLASS) || ..IsHost(tClass)
+			Set tIsAI = ''tHost
+			Do tRow.%Set("ai", tIsAI, "boolean")
+			Set tRow.added = $SELECT($DATA(tAI(tItem.Name)) && 'tHost: tAI(tItem.Name), 1: "")
+			Do tRow.%Set("checks", ''(tClass = "AgenticProd.Process.Triage"), "boolean")
+			Set tAiCount = tAiCount + tIsAI
+			Set tHealth = ..ItemHealth(tItem.Name, tSince)
+			Set tRow.errors24h = tHealth.errors24h, tRow.suspended = tHealth.suspended, tRow.lastError = tHealth.lastError, tRow.in24h = tHealth.in24h, tRow.sent24h = tHealth.sent24h
+			Do:tHost tOut.hosts.%Push(..Host(tItem, tUsage, tSince, tHome, pNs))
+			For j = 1:1:tItem.Settings.Count() {
+				Set tSet = tItem.Settings.GetAt(j)
+				Do:..SafeSetting(tSet.Name) tRow.settings.%Push({"name":(tSet.Name), "value":($EXTRACT(tSet.Value, 1, 160))})
+				Set:(tSet.Name = "WatchItems") tRow.watches = tSet.Value
+				// TargetConfigName(s) plus the named targets of our hosts (TriageTarget, FHIRTarget, AgentTarget)
+				If (tSet.Name = "TargetConfigName") || (tSet.Name = "TargetConfigNames") || ($EXTRACT(tSet.Name, *-5, *) = "Target") {
+					Do ..AddLinks(tItem.Name, tSet.Value, .tLink)
+				} ElseIf (tSet.Name = "BusinessRuleName") && (tSet.Value '= "") {
+					Do ..AddLinks(tItem.Name, ..RuleTargets(tSet.Value), .tLink)
+				}
 			}
+		} Catch ex {
+			// One unreadable item must not hide the rest of the map
+			Set tRow.note = "Could not read this item: "_$EXTRACT(ex.DisplayString(), 1, 120)
 		}
 	}
 	Do ..ObservedLinks(.tNames, .tLink)
@@ -309,7 +315,8 @@ ClassMethod Host(pItem As Ens.Config.Item, pUsage As %DynamicObject, pSince As %
 	}
 	// Knowledge counts when a tool the agent really has (its tool sets, its skills' tool sets) searches it
 	Set tHasLoinc = 0, tSets = tToolsets
-	For i = 1:1:$LENGTH(tSkills, ",") { Set tSets = tSets_","_$PARAMETER($PIECE(tSkills, ",", i), "TOOLS") }
+	// A wizard agent can have no skills: $PARAMETER on an empty class name is an <INVALID OREF>
+	For i = 1:1:$LENGTH(tSkills, ",") { Set tSk1 = $PIECE(tSkills, ",", i)  Set:tSk1'="" tSets = tSets_","_$PARAMETER(tSk1, "TOOLS") }
 	For i = 1:1:$LENGTH(tSets, ",") {
 		Set tTs = $ZSTRIP($PIECE(tSets, ",", i), "<>W")
 		Set:((tTs'="") && (..SourceText(tTs) [ "search_loinc")) tHasLoinc = 1
